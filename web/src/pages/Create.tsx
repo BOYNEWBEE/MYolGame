@@ -8,16 +8,20 @@ import { useSession } from '../session.tsx';
 import { useMeta } from '../meta.ts';
 import Cover from '../components/Cover.tsx';
 import { GenerationBadge, SpecBadges } from '../components/Badges.tsx';
+import { MUSIC_PREVIEW_HTML } from '@shared/audio.ts';
 import { parsePrompt } from '@shared/prompt.ts';
 import {
   TEMPLATES,
   THEMES,
   DIFFICULTIES,
+  MUSIC_NAMES,
   defaultSpec,
+  getMusicPreset,
   type GameSpec,
   type TemplateId,
   type ThemeId,
   type Difficulty,
+  type MusicPreset,
 } from '@shared/spec.ts';
 import type { ProjectSummary, VersionSummary } from '../types.ts';
 
@@ -28,6 +32,12 @@ const SPEEDS = [
   { value: 1.8, label: '极速 1.8x' },
 ];
 
+const MUSIC_CHOICES: { value?: MusicPreset; label: string }[] = [
+  { label: '随玩法与主题' },
+  { value: 'none', label: MUSIC_NAMES.none },
+  { value: 'neon-arcade', label: MUSIC_NAMES['neon-arcade'] },
+];
+
 export default function Create(): ReactNode {
   const navigate = useNavigate();
   const session = useSession();
@@ -35,6 +45,7 @@ export default function Create(): ReactNode {
   const [prompt, setPrompt] = useState('');
   const [template, setTemplate] = useState<TemplateId>('breakout');
   const [theme, setTheme] = useState<ThemeId>('neon');
+  const [music, setMusic] = useState<MusicPreset>();
   const [speed, setSpeed] = useState(1.4);
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [options, setOptions] = useState<Record<string, boolean>>({ widePaddle: true });
@@ -45,14 +56,16 @@ export default function Create(): ReactNode {
   const baseSpec = useMemo<GameSpec>(
     () => ({
       ...defaultSpec(template, theme),
+      music,
       speed,
       difficulty,
       options,
     }),
-    [template, theme, speed, difficulty, options],
+    [template, theme, music, speed, difficulty, options],
   );
 
   const parsed = useMemo(() => parsePrompt(prompt, baseSpec), [prompt, baseSpec]);
+  const resolvedMusic = getMusicPreset(parsed.spec);
   const hasPrompt = Boolean(prompt.trim());
   const activeTemplate = TEMPLATES.find((t) => t.id === template)!;
   const promptOverridesSettings = hasPrompt && (
@@ -183,6 +196,36 @@ export default function Create(): ReactNode {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="field">
+            <span id="create-music-label" className="field-label">背景音乐</span>
+            <div className="segmented wrap" role="group" aria-labelledby="create-music-label">
+              {MUSIC_CHOICES.map(({ value, label }) => (
+                <button
+                  key={label}
+                  type="button"
+                  className={music === value ? 'active' : ''}
+                  aria-pressed={music === value}
+                  onClick={() => setMusic(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="panel-note music-note">
+              {resolvedMusic === 'none'
+                ? '当前游戏无配乐。选择「霓虹街机」即可试听。'
+                : '当前配乐为「霓虹街机」。点试听播放，再点一次停止。'}
+            </p>
+            {resolvedMusic === 'neon-arcade' && !submitting && (
+              <iframe
+                className="music-preview"
+                title="配乐试听"
+                sandbox="allow-scripts"
+                srcDoc={MUSIC_PREVIEW_HTML}
+              />
+            )}
           </div>
 
           <div className="field-row">

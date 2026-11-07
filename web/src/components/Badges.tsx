@@ -1,7 +1,7 @@
 // 规格与生成方式徽标。
 
 import type { ReactNode } from 'react';
-import { DIFFICULTIES, TEMPLATES, THEMES, type GameSpec, type GenerationMode } from '@shared/spec.ts';
+import { DIFFICULTIES, MUSIC_NAMES, TEMPLATES, THEMES, type GameSpec, type GenerationMode } from '@shared/spec.ts';
 
 export function templateName(id: GameSpec['template']): string {
   return TEMPLATES.find((t) => t.id === id)?.name ?? id;
@@ -25,6 +25,7 @@ export function SpecBadges({ spec }: { spec: GameSpec }): ReactNode {
       <span className="badge">{themeName(spec.theme)}</span>
       <span className="badge">{difficultyName(spec.difficulty)}</span>
       <span className="badge">{spec.speed}x 速度</span>
+      {spec.music && <span className="badge">{MUSIC_NAMES[spec.music]}</span>}
       {options.map((name) => (
         <span className="badge option" key={name}>{name}</span>
       ))}

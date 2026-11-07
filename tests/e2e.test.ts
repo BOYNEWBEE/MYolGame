@@ -256,11 +256,13 @@ describe('浏览器端到端测试', () => {
       await page.goto(server.url + '/create');
       await page.getByRole('heading', { name: '创作新游戏' }).waitFor();
       await page.getByLabel('需求提示词').fill('《糖果快打》：糖果主题打砖块，快速，宽挡板');
+      await page.getByRole('group', { name: '背景音乐' }).getByRole('button', { name: '霓虹街机' }).click();
       await page.getByRole('button', { name: '生成游戏并进入工作台' }).click();
       await page.waitForURL('**/projects/**');
       const projectUrl = page.url();
       projectId = projectUrl.split('/').pop() ?? '';
       await page.getByRole('heading').first().waitFor();
+      await page.frameLocator('.sandbox-frame iframe').getByRole('button', { name: '开启声音' }).waitFor();
 
       // 验证 v1 实际规格值
       const v1Spec = await page.locator('.preview-spec .badges').textContent();
@@ -276,6 +278,7 @@ describe('浏览器端到端测试', () => {
 
       // 验证 v2 实际规格值
       const v2Spec = await page.locator('.preview-spec').textContent();
+      assert.ok(v2Spec?.includes('霓虹街机'), '生成新版本应保留选定的配乐');
       assert.ok(v2Spec?.includes('额外生命') || v2Spec?.includes('宽挡板'), 'v2 应保留或新增玩法选项');
       const speedMatch = v2Spec?.match(/(\d+(?:\.\d+)?)x/);
       assert.ok(speedMatch, 'v2 应显示速度倍率');

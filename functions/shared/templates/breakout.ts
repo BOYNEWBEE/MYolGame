@@ -2,20 +2,18 @@
 
 import { gameShell } from '../html.ts';
 import { getTheme, type GameSpec } from '../spec.ts';
-import { BREAKOUT_AUDIO_SCRIPT } from './breakout-audio.ts';
 
-function script(neon: boolean): string {
+function script(): string {
   // 以下为固定的游戏运行时代码（不含任何用户输入）
   return `
 (function () {
-  ${neon ? BREAKOUT_AUDIO_SCRIPT : ''}
   var canvas = document.getElementById('game');
   var ctx = canvas.getContext('2d');
   var W = canvas.width, H = canvas.height;
   var P = CFG.palette, D = CFG.difficulty, SP = CFG.speed, OP = CFG.options || {};
   var neon = CFG.neon;
   var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-  var arcadeAudio = ${neon ? 'createArcadeAudio()' : 'null'};
+  var arcadeAudio = GAME_AUDIO;
   var playEffect = arcadeAudio ? arcadeAudio.playEffect : function () {};
   var backdrop = ctx.createLinearGradient(0, 0, 0, H);
   backdrop.addColorStop(0, P.bg2);
@@ -383,8 +381,8 @@ export function renderBreakout(spec: GameSpec): string {
   const neon = spec.theme === 'neon';
   return gameShell({
     spec,
-    gameScript: script(neon),
-    soundControls: neon,
+    gameScript: script(),
+    soundEffects: neon,
     config: {
       title: spec.title,
       palette,

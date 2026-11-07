@@ -42,6 +42,8 @@ const ID_RE = /^[0-9a-fA-F-]{8,64}$/;
 const MAX_BODY = 64 * 1024;
 const MAX_PROMPT = 2000;
 const MAX_DESCRIPTION = 500;
+const GAME_CSP =
+  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'";
 
 interface HttpError {
   status: number;
@@ -77,8 +79,7 @@ function gameHtmlResponse(html: string, downloadName?: string): Response {
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
     // 生成的游戏是自包含单文件：禁止一切网络加载，只允许内联脚本/样式
-    'content-security-policy':
-      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'",
+    'content-security-policy': GAME_CSP,
   };
   if (downloadName) {
     headers['content-disposition'] =
@@ -682,7 +683,10 @@ function buildRoutes(): Route[] {
         if (!version || version.projectId !== project.id) {
           throw httpError(404, 'version_not_found', '版本不存在');
         }
-        return gameHtmlResponse(version.html);
+        // 工作台鉴权获取 HTML 后用 srcdoc 运行，文档内也需要同样的网络限制。
+        const html = version.html.replace('<head>', '<head>\n<meta http-equiv="Content-Security-Policy" content="' + GAME_CSP + '">');
+        if (html === version.html) throw httpError(500, 'invalid_artifact', '游戏预览格式不正确');
+        return gameHtmlResponse(html);
       },
     },
     {

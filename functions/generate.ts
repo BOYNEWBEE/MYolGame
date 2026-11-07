@@ -46,7 +46,7 @@ export async function generateGame(input: GenerateInput): Promise<GenerateOutput
       if (result) {
         mode = 'model';
         modelName = result.modelName;
-        spec = sanitizeSpec(result.spec, spec);
+        spec = sanitizeSpec({ ...result.spec, music: spec.music }, spec);
         const parsed = parsePrompt(input.prompt, spec);
         matched = parsed.matched;
         notes.push('真实模型已参与规格调整，输出仍被限制在内置模板与规格白名单内。');

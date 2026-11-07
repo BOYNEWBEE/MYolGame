@@ -1,5 +1,25 @@
-// 霓虹打砖块的内置配乐和音效，生成后随单文件 HTML 一同运行。
-export const BREAKOUT_AUDIO_SCRIPT = `
+// 游戏和试听共用的内置配乐。霓虹打砖块还可启用独立音效。
+export const SOUND_CONTROLS_STYLE = `
+  .sound-controls { display: flex; flex: none; align-items: center; gap: 6px; }
+  .sound-controls button {
+    min-height: 44px; padding: 0 10px; border-radius: 8px; cursor: pointer;
+    font-family: inherit; font-size: 12px; font-weight: 600;
+    border: 1px solid var(--sound-border); color: var(--sound-text); background: var(--sound-panel);
+  }
+  .sound-controls button[aria-pressed="true"] { color: var(--sound-bg); background: var(--sound-accent); }
+  .sound-controls button:disabled { cursor: default; opacity: 0.65; }
+  .sound-controls button:focus-visible { outline: 2px solid var(--sound-accent); outline-offset: 2px; }
+`;
+
+export function soundControls(music: boolean, effects: boolean, preview = false): string {
+  return `<div class="sound-controls" role="group" aria-label="${preview ? '配乐试听' : '游戏声音'}">
+    <button type="button" id="sound-enable">${preview ? '试听配乐' : '开启声音'}</button>
+    ${music ? `<button type="button" id="sound-music" aria-pressed="false" hidden>${preview ? '试听配乐' : '音乐'}</button>` : ''}
+    ${effects ? '<button type="button" id="sound-effects" aria-pressed="false" hidden>音效</button>' : ''}
+  </div>`;
+}
+
+export const ARCADE_AUDIO_SCRIPT = `
   function createArcadeAudio() {
     const enable = document.getElementById('sound-enable');
     const musicButton = document.getElementById('sound-music');
@@ -106,29 +126,37 @@ export const BREAKOUT_AUDIO_SCRIPT = `
       try {
         if (!context) {
           context = new Audio();
-          effectsGain = context.createGain();
-          effectsGain.connect(context.destination);
-          musicAnalyser = context.createAnalyser();
-          musicAnalyser.fftSize = 2048;
-          musicAnalyser.minDecibels = -84;
-          musicAnalyser.maxDecibels = -33;
-          musicAnalyser.smoothingTimeConstant = 0.66;
-          musicAnalyser.connect(context.destination);
-          frequencyData = new Uint8Array(musicAnalyser.frequencyBinCount);
+          if (effectsButton) {
+            effectsGain = context.createGain();
+            effectsGain.connect(context.destination);
+          }
+          if (musicButton) {
+            musicAnalyser = context.createAnalyser();
+            musicAnalyser.fftSize = 2048;
+            musicAnalyser.minDecibels = -84;
+            musicAnalyser.maxDecibels = -33;
+            musicAnalyser.smoothingTimeConstant = 0.66;
+            musicAnalyser.connect(context.destination);
+            frequencyData = new Uint8Array(musicAnalyser.frequencyBinCount);
+          }
           context.addEventListener('statechange', syncMusic);
           document.addEventListener('visibilitychange', syncMusic);
         }
         await context.resume();
-        musicOn = Boolean(OfflineAudio);
-        effectsOn = true;
-        musicButton.disabled = !musicOn;
-        if (!musicOn) musicButton.textContent = '音乐不可用';
-        musicButton.setAttribute('aria-pressed', String(musicOn));
-        effectsButton.setAttribute('aria-pressed', 'true');
+        musicOn = Boolean(musicButton && OfflineAudio);
+        effectsOn = Boolean(effectsButton);
+        if (musicButton) {
+          musicButton.disabled = !musicOn;
+          if (!musicOn) musicButton.textContent = '音乐不可用';
+          musicButton.setAttribute('aria-pressed', String(musicOn));
+          musicButton.hidden = false;
+        }
+        if (effectsButton) {
+          effectsButton.setAttribute('aria-pressed', 'true');
+          effectsButton.hidden = false;
+        }
         enable.hidden = true;
-        musicButton.hidden = false;
-        effectsButton.hidden = false;
-        (musicOn ? musicButton : effectsButton).focus();
+        (musicOn ? musicButton : effectsButton)?.focus();
         syncMusic();
       } catch {
         enable.textContent = '重试开启声音';
@@ -140,12 +168,12 @@ export const BREAKOUT_AUDIO_SCRIPT = `
       enable.textContent = '声音不可用';
       enable.disabled = true;
     }
-    musicButton.addEventListener('click', function () {
+    musicButton?.addEventListener('click', function () {
       musicOn = !musicOn;
       musicButton.setAttribute('aria-pressed', String(musicOn));
       syncMusic();
     });
-    effectsButton.addEventListener('click', function () {
+    effectsButton?.addEventListener('click', function () {
       effectsOn = !effectsOn;
       effectsGain.gain.value = effectsOn ? 1 : 0;
       effectsButton.setAttribute('aria-pressed', String(effectsOn));
@@ -189,3 +217,45 @@ export const BREAKOUT_AUDIO_SCRIPT = `
     return { playEffect, readMusicBands, bandCount: bands.length };
   }
 `;
+
+export const MUSIC_PREVIEW_HTML = `<!doctype html>
+<html lang="zh-CN">
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'">
+<title>霓虹街机配乐试听</title>
+<style>
+  body {
+    --sound-bg: #0b1023; --sound-panel: #171d39; --sound-text: #eaf6ff;
+    --sound-accent: #6ee7ff; --sound-border: #6ee7ff66;
+    display: flex; align-items: center; gap: 12px;
+    height: 60px; margin: 0; padding: 0 8px;
+    background: var(--sound-bg); font-family: system-ui, sans-serif;
+  }
+  canvas { display: block; width: 100%; min-width: 0; height: 36px; }
+  ${SOUND_CONTROLS_STYLE}
+  #sound-music[aria-pressed="true"]::after { content: ' · 播放中'; }
+</style>
+<body>
+${soundControls(true, false, true)}
+<canvas width="260" height="36" aria-hidden="true"></canvas>
+<script>
+${ARCADE_AUDIO_SCRIPT}
+const preview = createArcadeAudio();
+const canvas = document.querySelector('canvas');
+const ctx = canvas.getContext('2d');
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+function draw() {
+  const levels = reduceMotion.matches ? null : preview.readMusicBands();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (let i = 0; i < preview.bandCount; i++) {
+    const level = levels ? levels[i] / 255 : 0;
+    const height = 3 + 33 * level * level;
+    ctx.fillStyle = i % 2 ? '#ff76db' : '#6ee7ff';
+    ctx.fillRect(i * 20, canvas.height - height, 14, height);
+  }
+  requestAnimationFrame(draw);
+}
+draw();
+</script>
+</body>
+</html>`;

@@ -305,6 +305,7 @@ export default function Workbench(): ReactNode {
             <SandboxFrame
               src={API_BASE + '/projects/' + project.id + '/versions/' + previewVersion.id + '/preview'}
               title={previewVersion.spec.title + ' 预览'}
+              authenticated
               reloadKey={reloadKey}
             />
           ) : (

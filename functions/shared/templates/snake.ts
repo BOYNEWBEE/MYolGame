@@ -253,6 +253,7 @@ function script(): string {
 
   document.addEventListener('keydown', function (e) {
     var k = e.key;
+    if (k === ' ' && e.target instanceof HTMLButtonElement) return;
     var isDir = (k === 'ArrowUp' || k === 'ArrowDown' || k === 'ArrowLeft' || k === 'ArrowRight' ||
                  k === 'w' || k === 'a' || k === 's' || k === 'd' ||
                  k === 'W' || k === 'A' || k === 'S' || k === 'D');

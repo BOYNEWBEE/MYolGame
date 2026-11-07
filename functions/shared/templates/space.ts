@@ -326,6 +326,7 @@ function script(): string {
 
   document.addEventListener('keydown', function (e) {
     var k = e.key;
+    if (k === ' ' && e.target instanceof HTMLButtonElement) return;
     if (k === 'ArrowLeft' || k === 'a' || k === 'A') keys.left = true;
     if (k === 'ArrowRight' || k === 'd' || k === 'D') keys.right = true;
     if (k === 'ArrowUp' || k === 'w' || k === 'W') keys.up = true;

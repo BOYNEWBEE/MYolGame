@@ -13,6 +13,9 @@ export type ThemeId =
 export type Difficulty = 'easy' | 'normal' | 'hard';
 export type GenerationMode = 'template' | 'model';
 
+export const MUSIC_NAMES = { 'neon-arcade': '霓虹街机', none: '无配乐' } as const;
+export type MusicPreset = keyof typeof MUSIC_NAMES;
+
 // 每种模板支持的可选玩法开关（由提示词或结构化选择控制）
 export interface GameOptions {
   widePaddle?: boolean; // 打砖块：加宽挡板
@@ -24,12 +27,17 @@ export interface GameOptions {
 }
 
 export interface GameSpec {
+  music?: MusicPreset;
   template: TemplateId;
   title: string;
   theme: ThemeId;
   speed: number; // 0.5 ~ 2.0 倍速
   difficulty: Difficulty;
   options: GameOptions;
+}
+
+export function getMusicPreset(spec: GameSpec): MusicPreset {
+  return spec.music ?? (spec.template === 'breakout' && spec.theme === 'neon' ? 'neon-arcade' : 'none');
 }
 
 export interface Palette {
@@ -247,6 +255,7 @@ export function sanitizeSpec(input: unknown, fallback?: GameSpec): GameSpec {
   const base = fallback ?? defaultSpec();
   if (typeof input !== 'object' || input === null) return base;
   const raw = input as Record<string, unknown>;
+  const music = raw.music === 'neon-arcade' || raw.music === 'none' ? raw.music : base.music;
 
   const template = TEMPLATE_IDS.includes(raw.template as TemplateId)
     ? (raw.template as TemplateId)
@@ -272,6 +281,7 @@ export function sanitizeSpec(input: unknown, fallback?: GameSpec): GameSpec {
 
   return {
     template,
+    ...(music ? { music } : {}),
     title: sanitizeTitle(raw.title, defaultTitle(template, theme)),
     theme,
     speed,

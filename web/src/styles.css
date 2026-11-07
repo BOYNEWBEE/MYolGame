@@ -618,6 +618,8 @@ textarea:focus { border-color: var(--violet); }
 
 .prompt-help { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
 .prompt-help .panel-note { flex: 1 1 230px; margin: 0; }
+.music-note { margin: 0; }
+.music-preview { display: block; width: 100%; height: 62px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 
 .sample-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .sample-list .chip { font-size: 12.5px; text-align: left; }
