@@ -48,17 +48,21 @@ export function gameShell({ spec, gameScript, config, soundEffects = false }: Ga
     font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     justify-content: safe center;
-    min-height: 100vh; padding: 12px; gap: 10px;
+    height: 100vh; min-height: 100vh; padding: 10px; gap: 8px;
   }
-  .frame { position: relative; width: min(100%, 860px); }
+  .frame {
+    position: relative; display: flex; align-items: center; justify-content: center;
+    width: min(100%, 800px); flex: 1 1 auto; min-height: 0;
+  }
   canvas {
-    display: block; width: 100%; height: auto; border-radius: 12px;
+    display: block; width: auto; height: auto; max-width: 100%; max-height: 100%;
+    border-radius: 12px;
     background: ${palette.bg};
     box-shadow: 0 0 0 1px ${palette.panel}, 0 18px 60px rgba(0,0,0,.55);
     touch-action: none;
   }
   .bar {
-    width: min(100%, 860px); display: flex; align-items: center; justify-content: space-between;
+    width: min(100%, 800px); display: flex; align-items: center; justify-content: space-between;
     gap: 8px; font-size: 12px; color: ${palette.muted};
   }
   .bar b { color: ${palette.text}; font-size: 13px; }
@@ -72,7 +76,9 @@ export function gameShell({ spec, gameScript, config, soundEffects = false }: Ga
     width: 64px; height: 44px; border-radius: 10px; border: 1px solid ${palette.panel};
     background: ${palette.panel}; color: ${palette.text}; font-size: 18px;
   }
-  @media (pointer: coarse) { .touch { display: flex; justify-content: center; } }
+  @media (pointer: coarse) {
+    .touch { display: flex; justify-content: center; }
+  }
 </style>
 </head>
 <body>
