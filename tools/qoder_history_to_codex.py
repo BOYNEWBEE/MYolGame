@@ -289,7 +289,7 @@ def convert(
 def _write_output(out_lines: list[dict], output_dir: str, session_id: str) -> str:
     """将转换结果写入指定目录，返回输出文件绝对路径。"""
     os.makedirs(output_dir, exist_ok=True)
-    filename = f"{_filename_timestamp()}-{session_id}.jsonl"
+    filename = f"rollout-{_filename_timestamp()}-{session_id}.jsonl"
     out_path = os.path.join(output_dir, filename)
     with open(out_path, "w", encoding="utf-8") as f:
         for line in out_lines:

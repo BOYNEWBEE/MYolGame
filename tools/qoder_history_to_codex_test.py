@@ -210,6 +210,7 @@ class QoderHistoryToCodexTest(unittest.TestCase):
             self.assertTrue(out_path.exists())
             # 文件名应包含时间前缀和 uuid
             self.assertTrue(out_path.name.endswith(f"-{session_id}.jsonl"))
+            self.assertTrue(out_path.name.startswith("rollout-"))
             # 文件内容应为合法 JSONL
             loaded = []
             with open(out_path, "r", encoding="utf-8") as f:

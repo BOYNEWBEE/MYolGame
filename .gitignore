@@ -15,3 +15,7 @@ test-results/
 .sandboxes/
 *.log
 data/
+
+# Python 缓存
+__pycache__/
+*.pyc
