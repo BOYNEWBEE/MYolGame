@@ -6,7 +6,9 @@ export const BREAKOUT_AUDIO_SCRIPT = `
     const effectsButton = document.getElementById('sound-effects');
     const Audio = window.AudioContext || window.webkitAudioContext;
     const OfflineAudio = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-    let context, effectsGain, musicBuffer, musicSource;
+    const bandEdges = [35, 100, 125, 155, 185, 225, 275, 335, 405, 490, 590, 725, 895, 1200];
+    const bands = new Uint8Array(bandEdges.length - 1);
+    let context, effectsGain, musicBuffer, musicSource, musicAnalyser, frequencyData;
     let musicOn = false, effectsOn = false;
 
     function tone(engine, output, at, length, wave, from, to, volume) {
@@ -89,7 +91,7 @@ export const BREAKOUT_AUDIO_SCRIPT = `
         if (!buffer || !canPlayMusic() || musicSource) return;
         const gain = context.createGain();
         gain.gain.value = 0.48;
-        gain.connect(context.destination);
+        gain.connect(musicAnalyser);
         musicSource = context.createBufferSource();
         musicSource.buffer = buffer;
         musicSource.loop = true;
@@ -106,6 +108,13 @@ export const BREAKOUT_AUDIO_SCRIPT = `
           context = new Audio();
           effectsGain = context.createGain();
           effectsGain.connect(context.destination);
+          musicAnalyser = context.createAnalyser();
+          musicAnalyser.fftSize = 2048;
+          musicAnalyser.minDecibels = -84;
+          musicAnalyser.maxDecibels = -33;
+          musicAnalyser.smoothingTimeConstant = 0.66;
+          musicAnalyser.connect(context.destination);
+          frequencyData = new Uint8Array(musicAnalyser.frequencyBinCount);
           context.addEventListener('statechange', syncMusic);
           document.addEventListener('visibilitychange', syncMusic);
         }
@@ -153,12 +162,30 @@ export const BREAKOUT_AUDIO_SCRIPT = `
         [0.24, 0.14, 'triangle', 784, 784, 0.13], [0.36, 0.27, 'triangle', 1047, 1047, 0.15]
       ]
     };
-    return function playEffect(name) {
+    function playEffect(name) {
       if (!effectsOn || document.hidden || context.state !== 'running') return;
       const at = context.currentTime;
       for (const [delay, length, wave, from, to, volume] of sounds[name]) {
         tone(context, effectsGain, at + delay, length, wave, from, to, volume);
       }
-    };
+    }
+
+    function readMusicBands() {
+      if (!musicSource || !canPlayMusic()) return null;
+      musicAnalyser.getByteFrequencyData(frequencyData);
+      const binWidth = context.sampleRate / musicAnalyser.fftSize;
+      for (let band = 0; band < bands.length; band++) {
+        const first = Math.ceil(bandEdges[band] / binWidth);
+        const end = Math.max(first + 1, Math.ceil(bandEdges[band + 1] / binWidth));
+        let peak = 0;
+        for (let bin = first; bin < end; bin++) {
+          peak = Math.max(peak, frequencyData[bin]);
+        }
+        bands[band] = peak;
+      }
+      return bands;
+    }
+
+    return { playEffect, readMusicBands, bandCount: bands.length };
   }
 `;

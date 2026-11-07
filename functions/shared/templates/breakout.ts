@@ -15,13 +15,18 @@ function script(neon: boolean): string {
   var P = CFG.palette, D = CFG.difficulty, SP = CFG.speed, OP = CFG.options || {};
   var neon = CFG.neon;
   var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-  var playEffect = ${neon ? 'createArcadeAudio()' : 'function () {}'};
+  var arcadeAudio = ${neon ? 'createArcadeAudio()' : 'null'};
+  var playEffect = arcadeAudio ? arcadeAudio.playEffect : function () {};
   var backdrop = ctx.createLinearGradient(0, 0, 0, H);
   backdrop.addColorStop(0, P.bg2);
   backdrop.addColorStop(1, P.bg);
   var glow = ctx.createRadialGradient(W / 2, 126, 0, W / 2, 126, W / 2);
   glow.addColorStop(0, P.secondary + '38');
   glow.addColorStop(1, P.secondary + '00');
+  var spectrumBase = H - 74;
+  var spectrumPaint = ctx.createLinearGradient(0, spectrumBase - 144, 0, spectrumBase);
+  spectrumPaint.addColorStop(0, P.primary + '52');
+  spectrumPaint.addColorStop(1, P.secondary + '26');
 
   var rowsByDiff = { easy: 4, normal: 5, hard: 6 };
   var livesByDiff = { easy: 5, normal: 3, hard: 2 };
@@ -195,6 +200,20 @@ function script(neon: boolean): string {
       ctx.lineTo(W, y);
     }
     ctx.stroke();
+
+    // 把低频放在中央，两侧向高频展开。声音静止时保留低矮的底线。
+    var bands = reducedMotion.matches ? null : arcadeAudio.readMusicBands();
+    var count = arcadeAudio.bandCount;
+    var barWidth = 18, step = 26;
+    var left = (W - (count * 2 - 1) * step - barWidth) / 2;
+    ctx.fillStyle = spectrumPaint;
+    for (var i = 0; i < count; i++) {
+      var strength = bands ? bands[i] / 255 : 0;
+      var height = 4 + 140 * strength * strength;
+      ctx.fillRect(left + (count - 1 - i) * step, spectrumBase - height, barWidth, height);
+      ctx.fillRect(left + (count + i) * step, spectrumBase - height, barWidth, height);
+    }
+
     ctx.fillStyle = P.panel;
     ctx.fillRect(0, 0, W, 44);
     ctx.fillStyle = P.primary + '5c';
