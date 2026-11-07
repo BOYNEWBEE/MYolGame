@@ -32,7 +32,7 @@ export default function Create(): ReactNode {
   const navigate = useNavigate();
   const session = useSession();
   const { meta } = useMeta();
-  const [prompt, setPrompt] = useState('做一个霓虹风格的打砖块，节奏快一点，挡板加宽');
+  const [prompt, setPrompt] = useState('');
   const [template, setTemplate] = useState<TemplateId>('breakout');
   const [theme, setTheme] = useState<ThemeId>('neon');
   const [speed, setSpeed] = useState(1.4);
@@ -53,9 +53,18 @@ export default function Create(): ReactNode {
   );
 
   const parsed = useMemo(() => parsePrompt(prompt, baseSpec), [prompt, baseSpec]);
-  const activeTemplate = TEMPLATES.find((t) => t.id === parsed.spec.template)!;
+  const hasPrompt = Boolean(prompt.trim());
+  const activeTemplate = TEMPLATES.find((t) => t.id === template)!;
+  const promptOverridesSettings = hasPrompt && (
+    parsed.spec.template !== template ||
+    parsed.spec.theme !== theme ||
+    parsed.spec.speed !== speed ||
+    parsed.spec.difficulty !== difficulty ||
+    Object.entries(parsed.spec.options).some(([key, enabled]) => enabled && !options[key])
+  );
 
   function applyTemplate(id: TemplateId): void {
+    if (id === template) return;
     setTemplate(id);
     setOptions({});
   }
@@ -71,7 +80,7 @@ export default function Create(): ReactNode {
     try {
       const result = await requestJson<{ project: ProjectSummary; version: VersionSummary }>(
         '/projects',
-        { method: 'POST', body: { prompt, spec: baseSpec } },
+        { method: 'POST', body: { prompt: prompt.trim() || '使用当前配置生成', spec: baseSpec } },
       );
       navigate('/projects/' + result.project.id);
     } catch (err) {
@@ -89,25 +98,38 @@ export default function Create(): ReactNode {
       <div className="page-head">
         <h1>创作新游戏</h1>
         <p className="muted">
-          描述你想要的玩法、主题、速度与难度；结构化选择与提示词共同决定生成结果。
+          选择玩法与参数，也可以填写提示词补充需求。
           {meta?.generationMode === 'model'
             ? '当前已配置真实模型辅助调整规格。'
-            : '当前为模板模式：结果由内置模板引擎确定性生成，不涉及 AI 自由创作。'}
+            : '当前使用内置模板生成。'}
         </p>
       </div>
 
       <div className="create-layout">
         <section className="panel create-form">
           <label className="field">
-            <span className="field-label">需求提示词</span>
+            <span className="field-label">需求提示词（可选）</span>
             <textarea
               rows={4}
               maxLength={meta?.limits.promptMaxLength ?? 2000}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="例如：复古像素贪吃蛇，简单上手，可以穿墙"
+              aria-describedby="create-prompt-help"
             />
           </label>
+          <div className="prompt-help">
+            <p id="create-prompt-help" className="panel-note" role="status">
+              {promptOverridesSettings
+                ? '提示词覆盖了部分手动设置，实际采用的参数见生成预览。'
+                : '提示词中识别出的参数优先。留空时按手动设置生成。'}
+            </p>
+            {hasPrompt && (
+              <button type="button" className="btn small" onClick={() => setPrompt('')}>
+                清空提示词
+              </button>
+            )}
+          </div>
 
           <div className="sample-prompts">
             <span className="field-label">示例提示词</span>
@@ -128,6 +150,7 @@ export default function Create(): ReactNode {
                   key={t.id}
                   type="button"
                   className={'template-card' + (template === t.id ? ' active' : '')}
+                  aria-pressed={template === t.id}
                   onClick={() => applyTemplate(t.id)}
                 >
                   <strong>{t.name}</strong>
@@ -145,6 +168,7 @@ export default function Create(): ReactNode {
                   key={t.id}
                   type="button"
                   className={'swatch' + (theme === t.id ? ' active' : '')}
+                  aria-pressed={theme === t.id}
                   onClick={() => setTheme(t.id)}
                   title={t.name}
                 >
@@ -170,6 +194,7 @@ export default function Create(): ReactNode {
                     key={s.value}
                     type="button"
                     className={speed === s.value ? 'active' : ''}
+                    aria-pressed={speed === s.value}
                     onClick={() => setSpeed(s.value)}
                   >
                     {s.label}
@@ -185,6 +210,7 @@ export default function Create(): ReactNode {
                     key={d.id}
                     type="button"
                     className={difficulty === d.id ? 'active' : ''}
+                    aria-pressed={difficulty === d.id}
                     onClick={() => setDifficulty(d.id)}
                   >
                     {d.name}
@@ -236,14 +262,16 @@ export default function Create(): ReactNode {
           <Cover spec={parsed.spec} className="cover preview-cover" />
           <h3>{parsed.spec.title}</h3>
           <SpecBadges spec={parsed.spec} />
-          <div className="parse-notes">
-            {parsed.matched.template && <p>识别到玩法：{parsed.matched.template}</p>}
-            {parsed.matched.theme && <p>识别到主题：{parsed.matched.theme}</p>}
-            {parsed.matched.speed && <p>识别到速度：{parsed.matched.speed}</p>}
-            {parsed.matched.difficulty && <p>识别到难度：{parsed.matched.difficulty}</p>}
-            {parsed.matched.options.length > 0 && <p>识别到选项：{parsed.matched.options.join('、')}</p>}
-            {parsed.notes.map((note, i) => <p key={i} className="warn">{note}</p>)}
-          </div>
+          {hasPrompt && (
+            <div className="parse-notes">
+              {parsed.matched.template && <p>识别到玩法：{parsed.matched.template}</p>}
+              {parsed.matched.theme && <p>识别到主题：{parsed.matched.theme}</p>}
+              {parsed.matched.speed && <p>识别到速度：{parsed.matched.speed}</p>}
+              {parsed.matched.difficulty && <p>识别到难度：{parsed.matched.difficulty}</p>}
+              {parsed.matched.options.length > 0 && <p>识别到选项：{parsed.matched.options.join('、')}</p>}
+              {parsed.notes.map((note, i) => <p key={i} className="warn">{note}</p>)}
+            </div>
+          )}
           <GenerationBadge mode={meta?.generationMode === 'model' ? 'model' : 'template'} />
         </aside>
       </div>

@@ -22,8 +22,6 @@ interface ProjectDetail {
   tasks: TaskItem[];
 }
 
-const RUNNING_STAGES = ['解析需求', '校验规格', '渲染游戏模板', '校验产物', '保存版本'];
-
 export default function Workbench(): ReactNode {
   const { id } = useParams<{ id: string }>();
   const { meta } = useMeta();
@@ -32,14 +30,12 @@ export default function Workbench(): ReactNode {
   const [notice, setNotice] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [generating, setGenerating] = useState(false);
-  const [stageIndex, setStageIndex] = useState(0);
   const [previewVersionId, setPreviewVersionId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [description, setDescription] = useState('');
   const [allowDownload, setAllowDownload] = useState(true);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const chatRef = useRef<HTMLDivElement>(null);
-  const stageTimer = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -63,23 +59,7 @@ export default function Workbench(): ReactNode {
 
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
-  }, [detail?.messages.length]);
-
-  // 生成期间展示阶段进度（服务端为同步生成，阶段名称与真实任务日志一致）
-  useEffect(() => {
-    if (!generating) {
-      if (stageTimer.current !== null) window.clearInterval(stageTimer.current);
-      stageTimer.current = null;
-      setStageIndex(0);
-      return;
-    }
-    stageTimer.current = window.setInterval(() => {
-      setStageIndex((i) => Math.min(i + 1, RUNNING_STAGES.length - 1));
-    }, 450);
-    return () => {
-      if (stageTimer.current !== null) window.clearInterval(stageTimer.current);
-    };
-  }, [generating]);
+  }, [detail?.messages.length, generating]);
 
   async function refreshAfterMutation(message?: string): Promise<void> {
     await load();
@@ -92,17 +72,13 @@ export default function Workbench(): ReactNode {
     setError(null);
     setNotice(null);
     try {
-      const result = await requestJson<{ version: VersionSummary; task: TaskItem }>(
+      const result = await requestJson<{ version: VersionSummary }>(
         '/projects/' + id + '/tasks',
         { method: 'POST', body: { prompt: basePrompt } },
       );
       setPreviewVersionId(result.version.id);
-      setPrompt('');
-      await refreshAfterMutation(
-        result.version.note + ' 已生成（' +
-        RUNNING_STAGES.map((s, i) => (result.task.stages[i]?.ok === false ? s + '失败' : s)).join(' → ') +
-        '）。任务记录已持久保存。',
-      );
+      setPrompt((draft) => (draft === basePrompt ? '' : draft));
+      await refreshAfterMutation(result.version.note + ' 已生成，可在试玩区查看。');
     } catch (err) {
       setError(err instanceof Error ? err.message : '生成失败');
       await load();
@@ -251,18 +227,9 @@ export default function Workbench(): ReactNode {
               </div>
             ))}
             {generating && (
-              <div className="msg system generating">
+              <div className="msg system" role="status">
                 <span className="msg-role">系统</span>
-                <div className="stage-progress">
-                  {RUNNING_STAGES.map((stage, i) => (
-                    <span
-                      key={stage}
-                      className={'stage' + (i < stageIndex ? ' done' : i === stageIndex ? ' active' : '')}
-                    >
-                      {stage}
-                    </span>
-                  ))}
-                </div>
+                <p>正在生成新版本。完成后可在「最近任务」查看处理记录。</p>
               </div>
             )}
           </div>

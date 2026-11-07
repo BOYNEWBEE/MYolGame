@@ -616,6 +616,9 @@ textarea, input[type="text"] {
 }
 textarea:focus { border-color: var(--violet); }
 
+.prompt-help { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.prompt-help .panel-note { flex: 1 1 230px; margin: 0; }
+
 .sample-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .sample-list .chip { font-size: 12.5px; text-align: left; }
 
@@ -719,18 +722,6 @@ textarea:focus { border-color: var(--violet); }
 .msg time { font-size: 11px; color: var(--muted); }
 .msg-role { font-size: 11px; font-weight: 700; color: var(--primary); }
 .msg.system .msg-role { color: var(--violet); }
-
-.stage-progress { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.stage {
-  font-size: 11.5px;
-  padding: 2px 9px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--muted);
-}
-.stage.active { color: var(--warn); border-color: rgba(251, 191, 36, 0.5); animation: pulse 1s infinite; }
-.stage.done { color: var(--ok); border-color: rgba(74, 222, 128, 0.4); }
-@keyframes pulse { 50% { opacity: 0.55; } }
 
 .chat-input { display: grid; gap: 8px; }
 .chat-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
