@@ -17,7 +17,7 @@ export const OFFICIAL_AUTHOR = 'MYolGame 官方';
 export const SEED_ITEMS: SeedItem[] = [
   {
     title: '霓虹打砖块',
-    description: '赛博霓虹配色的经典打砖块，困难难度下前两排砖块需要击打两次，球速随关卡提升。',
+    description: '霓虹街机配色的经典打砖块，可开启电子配乐和碰撞音效。困难难度下前两排砖块需要击打两次，球速随关卡提升。',
     prompt: '做一个霓虹风格的打砖块，困难难度',
     template: 'breakout',
     theme: 'neon',

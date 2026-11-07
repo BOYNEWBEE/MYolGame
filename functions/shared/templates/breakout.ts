@@ -2,15 +2,26 @@
 
 import { gameShell } from '../html.ts';
 import { getTheme, type GameSpec } from '../spec.ts';
+import { BREAKOUT_AUDIO_SCRIPT } from './breakout-audio.ts';
 
-function script(): string {
+function script(neon: boolean): string {
   // 以下为固定的游戏运行时代码（不含任何用户输入）
   return `
 (function () {
+  ${neon ? BREAKOUT_AUDIO_SCRIPT : ''}
   var canvas = document.getElementById('game');
   var ctx = canvas.getContext('2d');
   var W = canvas.width, H = canvas.height;
   var P = CFG.palette, D = CFG.difficulty, SP = CFG.speed, OP = CFG.options || {};
+  var neon = CFG.neon;
+  var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var playEffect = ${neon ? 'createArcadeAudio()' : 'function () {}'};
+  var backdrop = ctx.createLinearGradient(0, 0, 0, H);
+  backdrop.addColorStop(0, P.bg2);
+  backdrop.addColorStop(1, P.bg);
+  var glow = ctx.createRadialGradient(W / 2, 126, 0, W / 2, 126, W / 2);
+  glow.addColorStop(0, P.secondary + '38');
+  glow.addColorStop(1, P.secondary + '00');
 
   var rowsByDiff = { easy: 4, normal: 5, hard: 6 };
   var livesByDiff = { easy: 5, normal: 3, hard: 2 };
@@ -60,6 +71,7 @@ function script(): string {
     ball.vx = Math.cos(ang) * s;
     ball.vy = Math.sin(ang) * s;
     state = 'play';
+    playEffect('launch');
   }
 
   function restart() {
@@ -73,13 +85,20 @@ function script(): string {
   }
 
   function burst(x, y, color) {
-    for (var i = 0; i < 10; i++) {
+    var count = reducedMotion.matches ? 0 : neon ? 16 : 10;
+    for (var i = 0; i < count; i++) {
       var a = Math.random() * Math.PI * 2, v = 60 + Math.random() * 160;
       particles.push({ x: x, y: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.5, color: color });
     }
   }
 
   function update(dt) {
+    for (var p = particles.length - 1; p >= 0; p--) {
+      var q = particles[p];
+      q.x += q.vx * dt; q.y += q.vy * dt; q.life -= dt;
+      if (q.life <= 0) particles.splice(p, 1);
+    }
+
     var pv = 520 * SP;
     if (keys.left) paddle.x -= pv * dt;
     if (keys.right) paddle.x += pv * dt;
@@ -110,6 +129,7 @@ function script(): string {
         ball.vx = Math.cos(ang) * sp;
         ball.vy = Math.sin(ang) * sp;
         ball.y = paddle.y - ball.r - 1;
+        playEffect('paddle');
       }
 
       for (var i = 0; i < bricks.length; i++) {
@@ -124,8 +144,10 @@ function script(): string {
             bricks.splice(i, 1);
             score += D === 'hard' ? 15 : 10;
             burst(b.x + b.w / 2, b.y + b.h / 2, b.color);
+            if (bricks.length > 0) playEffect('brick');
           } else {
             score += 2;
+            playEffect('crack');
           }
           break;
         }
@@ -133,6 +155,7 @@ function script(): string {
 
       if (ball.y > H + ball.r) {
         lives -= 1;
+        playEffect('drop');
         if (lives <= 0) { state = 'over'; } else { resetBall(); }
         return;
       }
@@ -141,14 +164,9 @@ function script(): string {
     if (bricks.length === 0) {
       level += 1;
       score += 50;
+      playEffect('level');
       buildLevel();
       resetBall();
-    }
-
-    for (var p = particles.length - 1; p >= 0; p--) {
-      var q = particles[p];
-      q.x += q.vx * dt; q.y += q.vy * dt; q.life -= dt;
-      if (q.life <= 0) particles.splice(p, 1);
     }
   }
 
@@ -162,13 +180,33 @@ function script(): string {
     ctx.closePath();
   }
 
-  function draw() {
-    var g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, P.bg2); g.addColorStop(1, P.bg);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
+  function drawNeonCourt() {
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 44, W, H - 44);
+    ctx.strokeStyle = P.primary + '22';
+    ctx.beginPath();
+    for (var x = -W; x <= W * 2; x += 100) {
+      ctx.moveTo(W / 2 + (x - W / 2) * 0.32, 300);
+      ctx.lineTo(x, H);
+    }
+    for (var row = 0; row <= 8; row++) {
+      var y = 300 + row * row * (H - 300) / 64;
+      ctx.moveTo(0, y);
+      ctx.lineTo(W, y);
+    }
+    ctx.stroke();
+    ctx.fillStyle = P.panel;
+    ctx.fillRect(0, 0, W, 44);
+    ctx.fillStyle = P.primary + '5c';
+    ctx.fillRect(0, 43, W, 1);
+  }
 
-    ctx.font = '16px sans-serif';
+  function draw() {
+    ctx.fillStyle = backdrop;
+    ctx.fillRect(0, 0, W, H);
+    if (neon) drawNeonCourt();
+
+    ctx.font = neon ? 'bold 23px sans-serif' : '16px sans-serif';
     ctx.fillStyle = P.text;
     ctx.textAlign = 'left';
     ctx.fillText('得分 ' + score, 20, 32);
@@ -184,6 +222,11 @@ function script(): string {
       ctx.globalAlpha = b.hp > 1 ? 1 : 0.85;
       roundRect(b.x, b.y, b.w, b.h, 5);
       ctx.fill();
+      if (neon) {
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = P.text;
+        ctx.fillRect(b.x + 5, b.y + 3, b.w - 10, 2);
+      }
       if (b.hp > 1) {
         ctx.globalAlpha = 0.5;
         ctx.fillStyle = P.text;
@@ -193,14 +236,35 @@ function script(): string {
       ctx.globalAlpha = 1;
     }
 
+    if (neon) {
+      ctx.shadowColor = P.primary;
+      ctx.shadowBlur = 15;
+    }
     ctx.fillStyle = P.primary;
     roundRect(paddle.x, paddle.y, paddle.w, paddle.h, 7);
     ctx.fill();
+    ctx.shadowBlur = 0;
+    if (neon) {
+      ctx.fillStyle = P.text;
+      ctx.fillRect(paddle.x + 9, paddle.y + 3, paddle.w - 18, 2);
+      if (state === 'play' && !reducedMotion.matches) {
+        ctx.strokeStyle = P.accent + '77';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(ball.x, ball.y);
+        ctx.lineTo(ball.x - ball.vx * 0.055, ball.y - ball.vy * 0.055);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+      }
+      ctx.shadowColor = P.accent;
+      ctx.shadowBlur = 14;
+    }
 
     ctx.fillStyle = P.accent;
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
 
     for (var p = 0; p < particles.length; p++) {
       var q = particles[p];
@@ -212,16 +276,23 @@ function script(): string {
 
     if (state !== 'play') {
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillRect(0, 0, W, H);
+      ctx.fillRect(0, neon ? 44 : 0, W, neon ? H - 44 : H);
+      if (neon) {
+        roundRect(W / 2 - 258, H / 2 - 99, 516, 180, 18);
+        ctx.fillStyle = P.bg2;
+        ctx.fill();
+        ctx.strokeStyle = P.primary + '99';
+        ctx.stroke();
+      }
       ctx.textAlign = 'center';
       if (state === 'ready') {
         ctx.fillStyle = P.text;
         ctx.font = 'bold 34px sans-serif';
-        ctx.fillText(CFG.title, W / 2, H / 2 - 40);
-        ctx.font = '18px sans-serif';
-        ctx.fillStyle = P.muted;
+        ctx.fillText(CFG.title, W / 2, H / 2 - 40, W - (neon ? 330 : 40));
+        ctx.font = neon ? '22px sans-serif' : '18px sans-serif';
+        ctx.fillStyle = neon ? P.text : P.muted;
         ctx.fillText('← → / A D / 鼠标移动挡板', W / 2, H / 2 + 6);
-        ctx.fillStyle = P.secondary;
+        ctx.fillStyle = neon ? P.primary : P.secondary;
         ctx.fillText('点击或按空格发射小球', W / 2, H / 2 + 40);
       } else {
         ctx.fillStyle = P.accent;
@@ -230,8 +301,8 @@ function script(): string {
         ctx.fillStyle = P.text;
         ctx.font = '20px sans-serif';
         ctx.fillText('最终得分 ' + score + ' · 到达第 ' + level + ' 关', W / 2, H / 2 + 10);
-        ctx.fillStyle = P.muted;
-        ctx.font = '16px sans-serif';
+        ctx.fillStyle = neon ? P.text : P.muted;
+        ctx.font = neon ? '22px sans-serif' : '16px sans-serif';
         ctx.fillText('按 R 或点击重新开始', W / 2, H / 2 + 46);
       }
     }
@@ -247,6 +318,7 @@ function script(): string {
   }
 
   document.addEventListener('keydown', function (e) {
+    if (e.key === ' ' && e.target instanceof HTMLButtonElement) return;
     if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = true;
     if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = true;
     if (e.key === ' ') { e.preventDefault(); if (state === 'over') restart(); else launch(); }
@@ -273,6 +345,7 @@ function script(): string {
     b.addEventListener('pointerdown', function (e) { e.preventDefault(); on(); });
     b.addEventListener('pointerup', off);
     b.addEventListener('pointerleave', off);
+    b.addEventListener('pointercancel', off);
     touch.appendChild(b);
   }
   bindBtn('◀', function () { keys.left = true; }, function () { keys.left = false; });
@@ -288,12 +361,15 @@ function script(): string {
 
 export function renderBreakout(spec: GameSpec): string {
   const palette = getTheme(spec.theme).palette;
+  const neon = spec.theme === 'neon';
   return gameShell({
     spec,
-    gameScript: script(),
+    gameScript: script(neon),
+    soundControls: neon,
     config: {
       title: spec.title,
       palette,
+      neon,
       difficulty: spec.difficulty,
       speed: spec.speed,
       options: {

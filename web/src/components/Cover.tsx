@@ -8,7 +8,7 @@ interface CoverProps {
   className?: string;
 }
 
-function BreakoutArt({ p }: { p: ReturnType<typeof getTheme>['palette'] }): ReactNode {
+function BreakoutArt({ p, neon }: { p: ReturnType<typeof getTheme>['palette']; neon: boolean }): ReactNode {
   const rows = [0, 1, 2].map((r) =>
     Array.from({ length: 7 }, (_, c) => (
       <rect
@@ -25,11 +25,26 @@ function BreakoutArt({ p }: { p: ReturnType<typeof getTheme>['palette'] }): Reac
   );
   return (
     <g>
+      {neon && (
+        <path
+          d="M0 140h320M0 151h320M0 168h320M0 192h320M86 140L0 200M123 140l-43 60M160 140v60M197 140l43 60M234 140l86 60"
+          fill="none"
+          stroke={p.primary}
+          strokeOpacity="0.2"
+        />
+      )}
       {rows}
       <circle cx="196" cy="128" r="7" fill={p.accent} />
       <circle cx="196" cy="128" r="12" fill={p.accent} opacity="0.25" />
-      <path d="M196 128 L150 168" stroke={p.muted} strokeWidth="1.5" strokeDasharray="4 4" opacity="0.6" />
+      <path
+        d="M196 128 L150 168"
+        stroke={neon ? p.accent : p.muted}
+        strokeWidth={neon ? '3' : '1.5'}
+        strokeDasharray={neon ? undefined : '4 4'}
+        opacity="0.6"
+      />
       <rect x="118" y="168" width="70" height="10" rx="5" fill={p.primary} />
+      {neon && <rect x="126" y="170" width="54" height="2" rx="1" fill={p.text} />}
     </g>
   );
 }
@@ -117,7 +132,7 @@ export default function Cover({ spec, className }: CoverProps): ReactNode {
         </linearGradient>
       </defs>
       <rect width="320" height="200" fill={'url(#cv-' + spec.theme + ')'} />
-      {spec.template === 'breakout' && <BreakoutArt p={p} />}
+      {spec.template === 'breakout' && <BreakoutArt p={p} neon={spec.theme === 'neon'} />}
       {spec.template === 'snake' && <SnakeArt p={p} />}
       {spec.template === 'space-shooter' && <SpaceArt p={p} />}
       <rect width="320" height="200" fill="none" stroke={p.primary} strokeOpacity="0.15" />
