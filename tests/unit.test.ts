@@ -7,6 +7,7 @@ import { parsePrompt } from '../functions/shared/prompt.ts';
 import { buildSourcePackage } from '../functions/shared/source.ts';
 import { createZip, crc32 } from '../functions/shared/zip.ts';
 import { defaultSpec } from '../functions/shared/spec.ts';
+import { renderGame } from '../functions/shared/templates/index.ts';
 import { createHandler, type HandlerEnv } from '../functions/handler.ts';
 import { FileStore } from '../dev/store_file.ts';
 
@@ -61,6 +62,42 @@ describe('提示词解析', () => {
     assert.equal(spec.template, 'breakout');
     assert.equal(spec.theme, 'neon');
     assert.ok(notes.some((n) => n.includes('识别到可调整的关键词')));
+  });
+
+  test('识别俄罗斯方块与 2048 模板及其专属选项', () => {
+    const tetris = parsePrompt('做一个霓虹俄罗斯方块，困难难度，带落点预览和暂存');
+    assert.equal(tetris.spec.template, 'tetris');
+    assert.equal(tetris.spec.theme, 'neon');
+    assert.equal(tetris.spec.difficulty, 'hard');
+    assert.equal(tetris.spec.options.ghostPiece, true);
+    assert.equal(tetris.spec.options.holdPiece, true);
+    assert.equal(tetris.spec.title, '霓虹俄罗斯方块');
+
+    const merge = parsePrompt('糖果风 2048，可以撤销一步，5x5 大棋盘');
+    assert.equal(merge.spec.template, '2048');
+    assert.equal(merge.spec.theme, 'candy');
+    assert.equal(merge.spec.options.undoMove, true);
+    assert.equal(merge.spec.options.fiveGrid, true);
+  });
+});
+
+describe('模板渲染', () => {
+  test('新增模板输出可独立运行的单文件 HTML', () => {
+    const tetris = defaultSpec('tetris', 'neon');
+    tetris.options.ghostPiece = true;
+    tetris.options.holdPiece = true;
+    const tetrisHtml = renderGame(tetris);
+    assert.ok(tetrisHtml.includes('<canvas'));
+    assert.ok(tetrisHtml.includes('const CFG ='));
+    assert.ok(Buffer.byteLength(tetrisHtml) < 512 * 1024);
+
+    const merge = defaultSpec('2048', 'candy');
+    merge.options.undoMove = true;
+    merge.options.fiveGrid = true;
+    const mergeHtml = renderGame(merge);
+    assert.ok(mergeHtml.includes('<canvas'));
+    assert.ok(mergeHtml.includes('const CFG ='));
+    assert.ok(Buffer.byteLength(mergeHtml) < 512 * 1024);
   });
 });
 

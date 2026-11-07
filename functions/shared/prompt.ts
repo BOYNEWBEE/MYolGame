@@ -40,6 +40,8 @@ const TEMPLATE_KEYWORDS: { id: TemplateId; words: string[] }[] = [
     id: 'space-shooter',
     words: ['太空射击', '飞机', '战机', '射击', '星际', '打飞机', '空战', 'space', 'shooter'],
   },
+  { id: 'tetris', words: ['俄罗斯方块', '方块消除', '消行', 'tetris'] },
+  { id: '2048', words: ['2048', '数字合并', '合并数字', '数字拼图'] },
 ];
 
 const OPTION_KEYWORDS: { key: keyof GameOptions; name: string; words: string[] }[] = [
@@ -49,6 +51,10 @@ const OPTION_KEYWORDS: { key: keyof GameOptions; name: string; words: string[] }
   { key: 'goldenFood', name: '金苹果', words: ['金苹果', '金色食物', '奖励果', '金色奖励'] },
   { key: 'spreadShot', name: '散射弹', words: ['散射', '三向', '散弹', '双枪', '三连发'] },
   { key: 'shield', name: '能量护盾', words: ['护盾', '防护罩', '护罩'] },
+  { key: 'ghostPiece', name: '落点预览', words: ['落点预览', '落点提示', '幽灵方块', '影子方块', '虚影'] },
+  { key: 'holdPiece', name: '暂存换块', words: ['暂存换块', '暂存', '换块', '保留方块'] },
+  { key: 'undoMove', name: '撤销一步', words: ['撤销一步', '撤销', '悔棋', '回退一步', '后悔一步'] },
+  { key: 'fiveGrid', name: '5×5 棋盘', words: ['5x5', '5×5', '5*5', '五乘五', '大棋盘'] },
 ];
 
 function findTemplate(text: string): TemplateId | undefined {

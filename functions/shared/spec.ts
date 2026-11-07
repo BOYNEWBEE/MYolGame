@@ -1,6 +1,6 @@
 // 游戏规格与主题/模板元数据：服务端生成与前端展示共用，保证两侧一致。
 
-export type TemplateId = 'breakout' | 'snake' | 'space-shooter';
+export type TemplateId = 'breakout' | 'snake' | 'space-shooter' | 'tetris' | '2048';
 export type ThemeId =
   | 'neon'
   | 'retro'
@@ -24,6 +24,10 @@ export interface GameOptions {
   goldenFood?: boolean; // 贪吃蛇：金苹果奖励
   spreadShot?: boolean; // 太空射击：散射弹
   shield?: boolean; // 太空射击：能量护盾
+  ghostPiece?: boolean; // 俄罗斯方块：落点预览
+  holdPiece?: boolean; // 俄罗斯方块：暂存换块
+  undoMove?: boolean; // 2048：撤销一步
+  fiveGrid?: boolean; // 2048：5×5 棋盘
 }
 
 export interface GameSpec {
@@ -194,6 +198,34 @@ export const TEMPLATES: TemplateMeta[] = [
       '深海配色太空射击，简单难度，慢慢来',
     ],
   },
+  {
+    id: 'tetris',
+    name: '俄罗斯方块',
+    description: '经典方块消除：旋转下落方块填满整行，消行得分并逐级加速，可选落点预览与暂存换块。',
+    controls: '← → 移动，↑ 顺时针旋转，Z 逆时针，↓ 软降，空格直落，C 暂存，P 暂停，R 重新开始',
+    options: [
+      { key: 'ghostPiece', name: '落点预览', description: '在底部显示当前方块的落点虚影' },
+      { key: 'holdPiece', name: '暂存换块', description: '按 C 暂存当前方块，稍后换回' },
+    ],
+    samplePrompts: [
+      '霓虹俄罗斯方块，困难难度，带落点预览和暂存',
+      '复古像素俄罗斯方块，简单一点，慢速',
+    ],
+  },
+  {
+    id: '2048',
+    name: '2048',
+    description: '数字合并益智：滑动让相同数字合并，目标是拼出 2048，可选 5×5 大棋盘与撤销一步。',
+    controls: '← ↑ ↓ → 或 W A S D 或滑动移动，U 撤销，P 暂停，R 重新开始',
+    options: [
+      { key: 'undoMove', name: '撤销一步', description: '按 U 回退上一步移动' },
+      { key: 'fiveGrid', name: '5×5 棋盘', description: '更大的棋盘，更多腾挪空间' },
+    ],
+    samplePrompts: [
+      '糖果风 2048，普通难度，可以撤销一步',
+      '星空 2048，5x5 大棋盘',
+    ],
+  },
 ];
 
 export const DIFFICULTIES: { id: Difficulty; name: string }[] = [
@@ -210,6 +242,8 @@ export const TEMPLATE_OPTION_KEYS: Record<TemplateId, (keyof GameOptions)[]> = {
   breakout: ['widePaddle', 'extraLife'],
   snake: ['wrapWalls', 'goldenFood'],
   'space-shooter': ['spreadShot', 'shield'],
+  tetris: ['ghostPiece', 'holdPiece'],
+  '2048': ['undoMove', 'fiveGrid'],
 };
 
 export function getTemplate(id: TemplateId): TemplateMeta {

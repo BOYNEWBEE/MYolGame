@@ -114,6 +114,142 @@ function SpaceArt({ p }: { p: ReturnType<typeof getTheme>['palette'] }): ReactNo
   );
 }
 
+function TetrisArt({ p }: { p: ReturnType<typeof getTheme>['palette'] }): ReactNode {
+  const cols = 6;
+  const rows = 7;
+  const cell = 22;
+  const ox = 94;
+  const oy = 22;
+  const stack = [
+    [0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0, 0],
+    [0, 0, 1, 0, 0, 0],
+    [0, 1, 1, 1, 0, 0],
+    [2, 2, 3, 3, 0, 4],
+    [5, 5, 2, 3, 4, 4],
+  ];
+  const falling: [number, number][] = [[2, 1], [1, 2], [2, 2], [3, 2]];
+  return (
+    <g>
+      <rect x={ox - 5} y={oy - 5} width={cols * cell + 10} height={rows * cell + 10} rx={8} fill={p.panel} />
+      {Array.from({ length: cols + 1 }, (_, i) => (
+        <line
+          key={'v' + i}
+          x1={ox + i * cell}
+          y1={oy}
+          x2={ox + i * cell}
+          y2={oy + rows * cell}
+          stroke={p.text}
+          strokeOpacity="0.07"
+        />
+      ))}
+      {Array.from({ length: rows + 1 }, (_, i) => (
+        <line
+          key={'h' + i}
+          x1={ox}
+          y1={oy + i * cell}
+          x2={ox + cols * cell}
+          y2={oy + i * cell}
+          stroke={p.text}
+          strokeOpacity="0.07"
+        />
+      ))}
+      {stack.map((row, r) =>
+        row.map((v, c) =>
+          v === 0 ? null : (
+            <rect
+              key={r + '-' + c}
+              x={ox + c * cell + 2}
+              y={oy + r * cell + 2}
+              width={cell - 4}
+              height={cell - 4}
+              rx={4}
+              fill={p.bricks[(v - 1) % p.bricks.length]!}
+              opacity={0.92}
+            />
+          ),
+        ),
+      )}
+      {falling.map(([c, r], i) => (
+        <rect
+          key={'fall-' + i}
+          x={ox + c * cell + 2}
+          y={oy + r * cell + 2}
+          width={cell - 4}
+          height={cell - 4}
+          rx={4}
+          fill={p.accent}
+        />
+      ))}
+      <rect x="244" y="40" width="52" height="52" rx="8" fill={p.panel} />
+      <rect x="256" y="52" width="28" height="28" rx="5" fill={p.primary} />
+      <rect x="244" y="112" width="52" height="52" rx="8" fill={p.panel} />
+      <rect x="258" y="124" width="8" height="8" rx="2" fill={p.secondary} />
+      <rect x="258" y="134" width="8" height="8" rx="2" fill={p.secondary} />
+      <rect x="268" y="134" width="8" height="8" rx="2" fill={p.secondary} />
+      <rect x="274" y="124" width="8" height="8" rx="2" fill={p.secondary} />
+    </g>
+  );
+}
+
+function Game2048Art({ p }: { p: ReturnType<typeof getTheme>['palette'] }): ReactNode {
+  const values = [
+    [2, 0, 0, 4],
+    [0, 8, 0, 0],
+    [0, 16, 32, 0],
+    [0, 0, 64, 2048],
+  ];
+  const cell = 36;
+  const gap = 8;
+  const ox = 68;
+  const oy = 8;
+  const colors = [...p.bricks, p.primary, p.secondary, p.accent];
+  return (
+    <g>
+      <rect x={ox - gap} y={oy - gap} width={4 * cell + 5 * gap} height={4 * cell + 5 * gap} rx={10} fill={p.panel} />
+      {values.map((row, r) =>
+        row.map((v, c) => {
+          const x = ox + c * (cell + gap);
+          const y = oy + r * (cell + gap);
+          if (!v) {
+            return (
+              <rect
+                key={r + '-' + c}
+                x={x}
+                y={y}
+                width={cell}
+                height={cell}
+                rx={6}
+                fill={p.text}
+                fillOpacity="0.06"
+              />
+            );
+          }
+          const exp = Math.log2(v);
+          const fill = v === 2048 ? p.accent : colors[(exp - 1) % colors.length]!;
+          return (
+            <g key={r + '-' + c}>
+              <rect x={x} y={y} width={cell} height={cell} rx={6} fill={fill} opacity="0.92" />
+              <text
+                x={x + cell / 2}
+                y={y + cell / 2 + 1}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fontSize={v >= 1000 ? 10 : v >= 100 ? 13 : 16}
+                fontWeight="700"
+                fill={p.bg}
+              >
+                {v}
+              </text>
+            </g>
+          );
+        }),
+      )}
+    </g>
+  );
+}
+
 export default function Cover({ spec, className }: CoverProps): ReactNode {
   const theme = getTheme(spec.theme);
   const p = theme.palette;
@@ -135,6 +271,8 @@ export default function Cover({ spec, className }: CoverProps): ReactNode {
       {spec.template === 'breakout' && <BreakoutArt p={p} neon={spec.theme === 'neon'} />}
       {spec.template === 'snake' && <SnakeArt p={p} />}
       {spec.template === 'space-shooter' && <SpaceArt p={p} />}
+      {spec.template === 'tetris' && <TetrisArt p={p} />}
+      {spec.template === '2048' && <Game2048Art p={p} />}
       <rect width="320" height="200" fill="none" stroke={p.primary} strokeOpacity="0.15" />
     </svg>
   );

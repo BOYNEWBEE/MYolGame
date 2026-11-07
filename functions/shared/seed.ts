@@ -5,7 +5,7 @@ export interface SeedItem {
   title: string;
   description: string;
   prompt: string;
-  template: 'breakout' | 'snake' | 'space-shooter';
+  template: 'breakout' | 'snake' | 'space-shooter' | 'tetris' | '2048';
   theme: 'neon' | 'retro' | 'forest' | 'ocean' | 'candy' | 'starfield' | 'ink' | 'sunset';
   speed: number;
   difficulty: 'easy' | 'normal' | 'hard';

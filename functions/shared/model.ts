@@ -43,7 +43,7 @@ export async function modelAdjustSpec(
         current_spec: baseSpec,
         instruction:
           '根据用户中文提示词调整游戏规格，返回 JSON：{"spec": {template, title, theme, speed, difficulty, options}}。' +
-          'template 仅可为 breakout/snake/space-shooter；theme 仅可为内置主题 id；speed 为 0.5-2.0 数值。',
+          'template 仅可为 breakout/snake/space-shooter/tetris/2048；theme 仅可为内置主题 id；speed 为 0.5-2.0 数值。',
       }),
       signal: controller.signal,
     });
