@@ -1,8 +1,8 @@
-// 云端存储实现（仅 Deno / Qoder Sites 部署时使用；本地开发使用 dev/store_file.ts）。
-// 依赖平台注入的数据库凭据：读取 QODER_DATABASE Secret 建立 Supabase 客户端。
-// 部署时按 sites-building 技能官方数据库适配器核对凭据格式后再上线（见 docs/实施记录.md）。
+// 云端存储实现（Deno / Qoder Sites 边缘函数）。
+// 数据库客户端由平台注入的 _qoder 模块创建，凭据由平台在运行时读取，
+// 本文件不读取、不记录、不向前端暴露任何数据库连接信息。
+// 表位于平台的 app schema，列名为 snake_case，这里统一映射到领域模型的 camelCase。
 
-import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.57.4';
 import type {
   Game,
   GameFilter,
@@ -14,164 +14,186 @@ import type {
   Version,
 } from './store.ts';
 
-function readDbConfig(): { url: string; key: string } {
-  const raw = Deno.env.get('QODER_DATABASE');
-  if (!raw) throw new Error('database_not_configured');
-  const parsed = JSON.parse(raw) as Record<string, unknown>;
-  const url = String(parsed.url ?? parsed.supabaseUrl ?? '');
-  const key = String(parsed.key ?? parsed.anonKey ?? parsed.serviceKey ?? '');
-  if (!url || !key) throw new Error('database_not_configured');
-  return { url, key };
+// 平台注入的 Supabase 兼容客户端；这里只声明本文件用到的最小形状。
+export interface DatabaseClient {
+  // 链式查询对象由平台 SDK 提供，逐表查询在运行时校验。
+  from(table: string): any;
 }
 
-export function createSupabaseStore(): Store {
-  let client: SupabaseClient | null = null;
-  let initPromise: Promise<void> | null = null;
+type Row = Record<string, unknown>;
 
-  function db(): SupabaseClient {
-    if (!client) {
-      const config = readDbConfig();
-      client = createClient(config.url, config.key, {
-        auth: { persistSession: false, autoRefreshToken: false },
-      });
-    }
-    return client;
-  }
+function toSnake(key: string): string {
+  return key.replace(/[A-Z]/g, (char) => '_' + char.toLowerCase());
+}
 
-  function check<T>(result: { data: T | null; error: { message: string } | null }): T {
-    if (result.error) throw new Error('database_error');
+function toCamel(key: string): string {
+  return key.replace(/_([a-z])/g, (_, char: string) => char.toUpperCase());
+}
+
+function toRow(record: object): Row {
+  const row: Row = {};
+  for (const [key, value] of Object.entries(record)) row[toSnake(key)] = value;
+  return row;
+}
+
+function fromRow<T>(row: Row): T {
+  const record: Row = {};
+  for (const [key, value] of Object.entries(row)) record[toCamel(key)] = value;
+  return record as T;
+}
+
+function fromRows<T>(rows: Row[]): T[] {
+  return rows.map((row) => fromRow<T>(row));
+}
+
+export function createSupabaseStore(client: DatabaseClient): Store {
+  function check<T>(result: { data: T | null; error: { code?: string; message?: string } | null }): T {
+    if (result.error) throw new Error('database_error:' + (result.error.code ?? 'unknown'));
     return result.data as T;
   }
 
   const store: Store = {
     async init() {
-      if (!initPromise) {
-        initPromise = (async () => {
-          db(); // 触发配置校验，失败时抛出 database_not_configured
-        })();
-      }
-      await initPromise;
+      // 平台 SDK 在每次请求时读取数据库凭据，无需本地初始化。
     },
 
     async createSession(session) {
-      check(await db().from('myol_sessions').insert(session).select('token').single());
+      check(await client.from('myol_sessions').insert(toRow(session)).select('token').single());
     },
     async getSession(token) {
       const rows = check(
-        await db().from('myol_sessions').select('*').eq('token', token).limit(1),
-      ) as Session[];
-      return rows[0] ?? null;
+        await client.from('myol_sessions').select('*').eq('token', token).limit(1),
+      ) as Row[];
+      return rows[0] ? fromRow<Session>(rows[0]) : null;
     },
 
     async createProject(project) {
-      check(await db().from('myol_projects').insert(project).select('id').single());
+      check(await client.from('myol_projects').insert(toRow(project)).select('id').single());
     },
     async getProject(id) {
       const rows = check(
-        await db().from('myol_projects').select('*').eq('id', id).limit(1),
-      ) as Project[];
-      return rows[0] ?? null;
+        await client.from('myol_projects').select('*').eq('id', id).limit(1),
+      ) as Row[];
+      return rows[0] ? fromRow<Project>(rows[0]) : null;
     },
     async updateProject(project) {
       check(
-        await db().from('myol_projects').update(project).eq('id', project.id).select('id').single(),
+        await client
+          .from('myol_projects')
+          .update(toRow(project))
+          .eq('id', project.id)
+          .select('id')
+          .single(),
       );
     },
     async listProjects(ownerToken) {
       const rows = check(
-        await db()
+        await client
           .from('myol_projects')
           .select('*')
-          .eq('ownerToken', ownerToken)
-          .order('updatedAt', { ascending: false })
+          .eq('owner_token', ownerToken)
+          .order('updated_at', { ascending: false })
           .limit(200),
-      ) as Project[];
-      return rows;
+      ) as Row[];
+      return fromRows<Project>(rows);
     },
     async deleteProject(id) {
-      await db().from('myol_versions').delete().eq('projectId', id);
-      await db().from('myol_messages').delete().eq('projectId', id);
-      await db().from('myol_tasks').delete().eq('projectId', id);
-      check(await db().from('myol_projects').delete().eq('id', id).select('id'));
+      await client.from('myol_versions').delete().eq('project_id', id);
+      await client.from('myol_messages').delete().eq('project_id', id);
+      await client.from('myol_tasks').delete().eq('project_id', id);
+      check(await client.from('myol_projects').delete().eq('id', id).select('id'));
     },
 
     async createVersion(version) {
-      check(await db().from('myol_versions').insert(version).select('id').single());
+      check(await client.from('myol_versions').insert(toRow(version)).select('id').single());
     },
     async getVersion(id) {
       const rows = check(
-        await db().from('myol_versions').select('*').eq('id', id).limit(1),
-      ) as Version[];
-      return rows[0] ?? null;
+        await client.from('myol_versions').select('*').eq('id', id).limit(1),
+      ) as Row[];
+      return rows[0] ? fromRow<Version>(rows[0]) : null;
     },
     async listVersions(projectId) {
       const rows = check(
-        await db()
+        await client
           .from('myol_versions')
           .select('*')
-          .eq('projectId', projectId)
-          .order('createdAt', { ascending: true })
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: true })
           .limit(500),
-      ) as Version[];
-      return rows;
+      ) as Row[];
+      return fromRows<Version>(rows);
     },
 
     async addMessage(message) {
-      check(await db().from('myol_messages').insert(message).select('id').single());
+      check(await client.from('myol_messages').insert(toRow(message)).select('id').single());
     },
     async listMessages(projectId) {
       const rows = check(
-        await db()
+        await client
           .from('myol_messages')
           .select('*')
-          .eq('projectId', projectId)
-          .order('createdAt', { ascending: true })
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: true })
           .limit(500),
-      ) as Message[];
-      return rows;
+      ) as Row[];
+      return fromRows<Message>(rows);
     },
 
     async addTask(task) {
-      check(await db().from('myol_tasks').insert(task).select('id').single());
+      check(await client.from('myol_tasks').insert(toRow(task)).select('id').single());
     },
     async updateTask(task) {
-      check(await db().from('myol_tasks').update(task).eq('id', task.id).select('id').single());
+      check(
+        await client
+          .from('myol_tasks')
+          .update(toRow(task))
+          .eq('id', task.id)
+          .select('id')
+          .single(),
+      );
     },
     async getTask(id) {
       const rows = check(
-        await db().from('myol_tasks').select('*').eq('id', id).limit(1),
-      ) as TaskRecord[];
-      return rows[0] ?? null;
+        await client.from('myol_tasks').select('*').eq('id', id).limit(1),
+      ) as Row[];
+      return rows[0] ? fromRow<TaskRecord>(rows[0]) : null;
     },
     async listTasks(projectId) {
       const rows = check(
-        await db()
+        await client
           .from('myol_tasks')
           .select('*')
-          .eq('projectId', projectId)
-          .order('createdAt', { ascending: false })
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false })
           .limit(200),
-      ) as TaskRecord[];
-      return rows;
+      ) as Row[];
+      return fromRows<TaskRecord>(rows);
     },
 
     async upsertGame(game) {
-      check(await db().from('myol_games').upsert(game, { onConflict: 'id' }).select('id').single());
+      check(
+        await client
+          .from('myol_games')
+          .upsert(toRow(game), { onConflict: 'id' })
+          .select('id')
+          .single(),
+      );
     },
     async getGame(id) {
       const rows = check(
-        await db().from('myol_games').select('*').eq('id', id).limit(1),
-      ) as Game[];
-      return rows[0] ?? null;
+        await client.from('myol_games').select('*').eq('id', id).limit(1),
+      ) as Row[];
+      return rows[0] ? fromRow<Game>(rows[0]) : null;
     },
     async getGameByProject(projectId) {
       const rows = check(
-        await db().from('myol_games').select('*').eq('projectId', projectId).limit(1),
-      ) as Game[];
-      return rows[0] ?? null;
+        await client.from('myol_games').select('*').eq('project_id', projectId).limit(1),
+      ) as Row[];
+      return rows[0] ? fromRow<Game>(rows[0]) : null;
     },
     async listGames(filter) {
-      let query = db().from('myol_games').select('*', { count: 'exact' });
+      let query = client.from('myol_games').select('*', { count: 'exact' });
       if (filter.template) query = query.eq('template', filter.template);
       if (filter.theme) query = query.eq('theme', filter.theme);
       if (filter.difficulty) query = query.eq('difficulty', filter.difficulty);
@@ -183,61 +205,70 @@ export function createSupabaseStore(): Store {
         .order(filter.sort === 'hot' ? 'plays' : 'created_at', { ascending: false })
         .range(filter.offset, filter.offset + filter.limit - 1);
       const result = await query;
-      if (result.error) throw new Error('database_error');
-      return { items: (result.data ?? []) as Game[], total: result.count ?? 0 };
+      if (result.error) throw new Error('database_error:' + (result.error.code ?? 'unknown'));
+      return {
+        items: fromRows<Game>((result.data ?? []) as Row[]),
+        total: result.count ?? 0,
+      };
     },
     async deleteGame(id) {
-      await db().from('myol_favorites').delete().eq('gameId', id);
-      check(await db().from('myol_games').delete().eq('id', id).select('id'));
+      await client.from('myol_favorites').delete().eq('game_id', id);
+      check(await client.from('myol_games').delete().eq('id', id).select('id'));
     },
     async incrementPlays(gameId) {
       const game = await store.getGame(gameId);
       if (!game) return;
-      await db().from('myol_games').update({ plays: game.plays + 1 }).eq('id', gameId);
+      await client.from('myol_games').update({ plays: game.plays + 1 }).eq('id', gameId);
     },
 
     async setFavorite(token, gameId, favorite) {
       if (favorite) {
-        await db()
-          .from('myol_favorites')
-          .upsert({ token, gameId, createdAt: new Date().toISOString() }, {
-            onConflict: 'token,gameId',
-          });
+        await client.from('myol_favorites').upsert(
+          {
+            id: token + ':' + gameId,
+            token,
+            game_id: gameId,
+            created_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' },
+        );
       } else {
-        await db().from('myol_favorites').delete().eq('token', token).eq('gameId', gameId);
+        await client.from('myol_favorites').delete().eq('token', token).eq('game_id', gameId);
       }
       const count = await store.countFavorites(gameId);
-      await db().from('myol_games').update({ favorites: count }).eq('id', gameId);
+      await client.from('myol_games').update({ favorites: count }).eq('id', gameId);
     },
     async isFavorite(token, gameId) {
       const rows = check(
-        await db()
+        await client
           .from('myol_favorites')
-          .select('gameId')
+          .select('id')
           .eq('token', token)
-          .eq('gameId', gameId)
+          .eq('game_id', gameId)
           .limit(1),
-      ) as { gameId: string }[];
+      ) as Row[];
       return rows.length > 0;
     },
     async listFavoriteGameIds(token) {
       const rows = check(
-        await db()
+        await client
           .from('myol_favorites')
-          .select('gameId')
+          .select('game_id')
           .eq('token', token)
-          .order('createdAt', { ascending: false })
+          .order('created_at', { ascending: false })
           .limit(200),
-      ) as { gameId: string }[];
-      return rows.map((r) => r.gameId);
+      ) as Row[];
+      return rows.map((row) => String(row.game_id));
     },
     async countFavorites(gameId) {
-      const result = await db()
+      const result = await client
         .from('myol_favorites')
-        .select('gameId', { count: 'exact' })
-        .eq('gameId', gameId)
+        .select('id', { count: 'exact' })
+        .eq('game_id', gameId)
         .limit(1);
-      if (result.error || typeof result.count !== 'number') throw new Error('database_error');
+      if (result.error || typeof result.count !== 'number') {
+        throw new Error('database_error:count_unavailable');
+      }
       return result.count;
     },
   };

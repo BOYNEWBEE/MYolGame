@@ -1,15 +1,29 @@
 /* MYolGame 设计系统：深色靛蓝/紫色游戏创作社区 */
 
 :root {
-  --bg: #070814;
+  /* Sites 设计参数：默认值保持现有深色视觉，可由设计工作台调整 */
+  --site-bg: #070814;
+  --site-fg: #e8eaff;
+  --site-accent: #818cf8;
+  --site-on-accent: #ffffff;
+  --site-surface: #12142b;
+  --site-muted: #9298c4;
+  --site-border: rgba(139, 92, 246, 0.18);
+  --site-font: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Source Han Sans SC", system-ui, sans-serif;
+  --site-radius: 14px;
+  --site-space: 1;
+  --site-type: 1;
+  --site-motion: 1;
+
+  --bg: var(--site-bg);
   --bg-soft: #0b0d20;
-  --panel: #12142b;
+  --panel: var(--site-surface);
   --panel-2: #171a36;
-  --border: rgba(139, 92, 246, 0.18);
+  --border: var(--site-border);
   --border-strong: rgba(139, 92, 246, 0.4);
-  --text: #e8eaff;
-  --muted: #9298c4;
-  --primary: #818cf8;
+  --text: var(--site-fg);
+  --muted: var(--site-muted);
+  --primary: var(--site-accent);
   --primary-strong: #6366f1;
   --violet: #c084fc;
   --pink: #e879f9;
@@ -17,10 +31,10 @@
   --ok: #4ade80;
   --warn: #fbbf24;
   --grad: linear-gradient(120deg, #6366f1, #a855f7 55%, #ec4899);
-  --radius: 14px;
+  --radius: var(--site-radius);
   --radius-sm: 9px;
   --shadow: 0 16px 48px rgba(2, 3, 15, 0.55);
-  --font: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Source Han Sans SC", system-ui, sans-serif;
+  --font: var(--site-font);
 }
 
 * { box-sizing: border-box; }
@@ -54,8 +68,19 @@ a:hover { color: var(--violet); }
 h1, h2, h3 { line-height: 1.3; margin: 0 0 8px; }
 
 .app { display: flex; flex-direction: column; min-height: 100vh; }
-.main { flex: 1; width: 100%; max-width: 1240px; margin: 0 auto; padding: 24px 20px 56px; }
-.page { animation: fade-in 0.25s ease; }
+.main {
+  flex: 1;
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: calc(24px * var(--site-space, 1)) 20px calc(56px * var(--site-space, 1));
+}
+.page { animation: fade-in calc(250ms * var(--site-motion, 1)) ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .page { animation: none; }
+  .btn { transition: none; }
+}
 
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(6px); }
@@ -159,7 +184,7 @@ h1, h2, h3 { line-height: 1.3; margin: 0 0 8px; }
   font-size: 14px;
   font-family: inherit;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all calc(180ms * var(--site-motion, 1)) ease;
   white-space: nowrap;
 }
 .btn:hover:not(:disabled) { border-color: var(--violet); transform: translateY(-1px); }
@@ -167,7 +192,7 @@ h1, h2, h3 { line-height: 1.3; margin: 0 0 8px; }
 .btn.primary {
   background: var(--grad);
   border: none;
-  color: #fff;
+  color: var(--site-on-accent);
   font-weight: 600;
   box-shadow: 0 6px 20px rgba(139, 92, 246, 0.35);
 }
@@ -297,7 +322,7 @@ h1, h2, h3 { line-height: 1.3; margin: 0 0 8px; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 
 .page-head { margin-bottom: 22px; }
-.page-head h1 { font-size: 26px; }
+.page-head h1 { font-size: calc(26px * var(--site-type, 1)); }
 .page-head p { margin: 4px 0 0; }
 
 /* ---------- 首页 ---------- */
@@ -310,7 +335,7 @@ h1, h2, h3 { line-height: 1.3; margin: 0 0 8px; }
   padding: 34px 0 30px;
 }
 
-.hero-text h1 { font-size: 36px; letter-spacing: 0.5px; }
+.hero-text h1 { font-size: calc(36px * var(--site-type, 1)); letter-spacing: 0.5px; }
 .hero-text h1 em {
   font-style: normal;
   background: var(--grad);

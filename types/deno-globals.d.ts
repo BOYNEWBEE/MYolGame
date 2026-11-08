@@ -4,9 +4,3 @@ declare const Deno: {
   env: { get(key: string): string | undefined };
   serve(handler: (req: Request) => Response | Promise<Response>): void;
 };
-
-declare module 'npm:@supabase/supabase-js@2.57.4' {
-  // deno-lint-ignore-file no-explicit-any
-  export function createClient(url: string, key: string, options?: unknown): any;
-  export type SupabaseClient = any;
-}
