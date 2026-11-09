@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { API_BASE, ApiError, downloadAuthorized, requestJson } from '../api.ts';
+import { appHref } from '../routing.ts';
 import { useMeta } from '../meta.ts';
 import SandboxFrame from '../components/SandboxFrame.tsx';
 import Cover from '../components/Cover.tsx';
@@ -187,7 +188,7 @@ export default function Workbench(): ReactNode {
     setBusyAction('delete');
     try {
       await requestJson('/projects/' + id, { method: 'DELETE' });
-      window.location.href = '/projects';
+      window.location.href = appHref('/projects');
     } catch (err) {
       setError(err instanceof Error ? err.message : '删除失败');
       setBusyAction(null);

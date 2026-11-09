@@ -22,7 +22,12 @@ export function createM0Application(options: M0Options) {
       trustedWrite(req, origin);
       const user = await currentUser(options.db, req);
       const auth = await accountRoute(options.db, req, path, user);
-      if (auth) return auth;
+      if (auth) {
+        if (req.method === 'GET' && ['/api/account', '/api/me'].includes(path)) {
+          return json({ ...await auth.json(), workerConfigured: options.workerKey().length >= 32 });
+        }
+        return auth;
+      }
       if (path === '/api/meta' && req.method === 'GET' && options.business) {
         const response = await options.business(req);
         const meta = await response.json();

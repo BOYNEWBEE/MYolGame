@@ -4,6 +4,7 @@ import { createDatabaseClient, createSiteContext, errorResponse } from './_qoder
 import { createHandler } from './handler.ts';
 import { createSupabaseStore } from './store_supabase.ts';
 import { createM0Application } from './m0/app.ts';
+import { PUBLIC_ORIGIN } from './site-config.ts';
 
 const db = createDatabaseClient();
 const store = createSupabaseStore(db);
@@ -13,7 +14,7 @@ const handle = createM0Application({
     store: { ...store, getSession: async token => principal?.token === token ? principal : null },
     env: { model: {} },
   })(request),
-  origin: () => Deno.env.get('APP_ORIGIN') ?? '',
+  origin: () => Deno.env.get('APP_ORIGIN') ?? PUBLIC_ORIGIN,
   workerKey: () => Deno.env.get('APP_M0_WORKER_KEY') ?? '',
 });
 Deno.serve(async (request: Request) => {

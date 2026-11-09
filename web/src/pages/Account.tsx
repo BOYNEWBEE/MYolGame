@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { appHref } from '../routing.ts';
 import { requestJson } from '../api.ts';
 import { useSession } from '../session.tsx';
 
@@ -18,7 +19,7 @@ export default function Account() {
         localStorage.removeItem('myol.token');
         localStorage.removeItem('myol.nickname');
       }
-      window.location.assign(action === 'password' ? '/account' : cloud ? '/m0' : '/projects');
+      window.location.assign(appHref(action === 'password' ? '/account' : cloud ? '/m0' : '/projects'));
     } catch (e) { setError(e instanceof Error ? e.message : '操作失败'); setBusy(false); }
   }
   function submit(e: FormEvent<HTMLFormElement>) {

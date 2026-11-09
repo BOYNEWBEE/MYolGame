@@ -36,4 +36,4 @@ for (const entry of entries) {
 }
 await writeFile('.runtime/myolgame-m0-qoder-inputs.zip', createZip(entries));
 console.log('已生成部署输入目录：' + relative(process.cwd(), output));
-console.log('已生成归档：.runtime/myolgame-m0-qoder-inputs.zip（未执行远端迁移或发布）');
+console.log('已生成归档：.runtime/myolgame-m0-qoder-inputs.zip（此打包命令不执行远端迁移或发布）');

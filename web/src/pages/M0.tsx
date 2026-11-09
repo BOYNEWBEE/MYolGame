@@ -72,7 +72,7 @@ export default function M0() {
   if (!session.account) return <div className="page"><h1>云端 M0 任务</h1><p>请先登录邮箱账号再创建任务。</p><Link to="/account">登录 / 注册</Link></div>;
   return <div className="page">
     <h1>云端 M0 模拟任务</h1>
-    <p>本阶段验证账号、数据库队列和进度恢复。不会调用模型或生成游戏；关闭网页后由独立后台调度继续执行。</p>
+    <p>本阶段验证账号、数据库队列和进度恢复。不会调用模型或生成游戏；{session.cloudWorkerConfigured ? '后台凭据已配置；任务实际执行取决于独立调度是否正在运行。' : '后台调度尚未配置，当前可提交和恢复任务，但任务会保持排队。'}</p>
     <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
       <label>模拟任务需求<textarea required maxLength={2000} value={prompt} onChange={e => setPrompt(e.target.value)} /></label>
       <button className="btn primary" disabled={busy || !prompt.trim()}>{busy ? '处理中…' : command ? '恢复原提交结果' : '创建模拟任务'}</button>

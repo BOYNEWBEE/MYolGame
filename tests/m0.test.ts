@@ -38,6 +38,7 @@ test('M0 邮箱认证、重启、CSRF、改密撤销和双账号隔离', async (
   assert.equal((await ctx.request('/m0/tasks/' + task.id + '/events', { cookie: b })).status, 404);
   assert.equal((await ctx.request('/m0/tasks/' + task.id + '/cancel', { cookie: b, body: {} })).status, 404);
   assert.equal((await ctx.request('/m0/tasks')).status, 401);
+  assert.equal((await (await ctx.request('/account', { cookie: a })).json()).workerConfigured, true);
   const login = await ctx.request('/auth/login', { body: { email: 'alice@example.com', password: 'synthetic-password' } });
   const second = login.headers.get('set-cookie')!.split(';')[0]!;
   assert.equal((await ctx.request('/account/password', { cookie: a, body: { password: 'synthetic-password', newPassword: 'replacement-password' } })).status, 200);
