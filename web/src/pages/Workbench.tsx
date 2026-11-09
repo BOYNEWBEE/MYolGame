@@ -1,11 +1,12 @@
 // 创作工作台：对话修改、生成状态、试玩预览、版本回退、发布与下载。
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { API_BASE, ApiError, downloadAuthorized, requestJson } from '../api.ts';
 import { useMeta } from '../meta.ts';
 import SandboxFrame from '../components/SandboxFrame.tsx';
 import Cover from '../components/Cover.tsx';
+import PublishTemplateForm from '../components/PublishTemplateForm.tsx';
 import { GenerationBadge, SpecBadges } from '../components/Badges.tsx';
 import type {
   GameSummary,
@@ -27,11 +28,12 @@ interface ProjectDetail {
 }
 
 export default function Workbench(): ReactNode {
+  const location = useLocation();
   const { id } = useParams<{ id: string }>();
   const { meta } = useMeta();
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(typeof location.state?.notice === 'string' ? location.state.notice : null);
   const [prompt, setPrompt] = useState('');
   const [generating, setGenerating] = useState(false);
   const [previewVersionId, setPreviewVersionId] = useState<string | null>(null);
@@ -96,6 +98,7 @@ export default function Workbench(): ReactNode {
   }
 
   async function generate(basePrompt: string): Promise<void> {
+    if (detail?.project.templateOrigin && !meta?.agent?.configured) { setError('此项目的修改需要启用 Agent 源码开发'); return; }
     if (!id || requestInFlight.current || processing || !basePrompt.trim()) return;
     requestInFlight.current = true;
     setGenerating(true);
@@ -256,6 +259,7 @@ export default function Workbench(): ReactNode {
         </div>
       )}
 
+      {project.templateOrigin && <div className="panel template-origin"><span>来源：<Link to={'/templates/' + project.templateOrigin.templateId}>{project.templateOrigin.title}</Link> · {project.templateOrigin.versionLabel} · MIT · 独立私有副本</span>{!meta?.agent?.configured && <p className="panel-note">当前未启用源码开发，仍可试玩、下载和发布；启用 Agent 后可继续修改。</p>}</div>}
       <div className="workbench-layout">
         <section className="panel chat-panel">
           <h2>创作对话</h2>
@@ -366,6 +370,7 @@ export default function Workbench(): ReactNode {
         </section>
 
         <section className="side-panels">
+          <PublishTemplateForm projectId={project.id} version={previewVersion} />
           <div className="panel versions-panel">
             <h2>版本历史（{versions.length}）</h2>
             <ol className="version-list">

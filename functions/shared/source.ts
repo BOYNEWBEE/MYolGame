@@ -1,5 +1,6 @@
 // 源码包构建：把某个版本打包为可下载的 ZIP（游戏 HTML + 规格 + 说明）。
 
+import { mitLicense, retainAttributions, type TemplateOrigin } from './creation-template.ts';
 import { createZip, type ZipEntry } from './zip.ts';
 import { DIFFICULTIES, getTemplate, getTheme, type GameSpec, type GenerationMode } from './spec.ts';
 
@@ -9,6 +10,7 @@ export interface SourcePackageInput {
   mode: GenerationMode;
   versionNote: string;
   createdAt: string;
+  templateOrigin?: TemplateOrigin;
 }
 
 export function buildSourcePackage(input: SourcePackageInput): Uint8Array {
@@ -22,7 +24,7 @@ export function buildSourcePackage(input: SourcePackageInput): Uint8Array {
 
   const readme = `# ${spec.title}
 
-由 MYolGame 平台生成（生成方式：${mode === 'agent' ? 'Agent 源码开发（浏览器烟测通过，具体玩法需人工试玩确认）' : mode === 'model' ? '真实模型辅助（结果仍限于内置模板与规格白名单）' : '模板生成，非任意 AI 创作'}）。
+由 MYolGame 平台生成（生成方式：${mode === 'agent' ? 'Agent 源码开发（检查结果见工作台，具体玩法需人工试玩确认）' : mode === 'model' ? '真实模型辅助（结果仍限于内置模板与规格白名单）' : '模板生成，非任意 AI 创作'}）。
 
 - 玩法模板：${template.name}
 - 主题：${theme.name}
@@ -50,11 +52,13 @@ ${mode === 'agent' ? '- 游戏源码由 Agent 开发，spec.json 仅记录起始
 ${mode === 'agent' ? '- 本包不包含平台源码；使用和分发前请自行确认生成内容及素材的许可。' : '- 本包不包含平台源码；模板代码以 MIT 许可提供。'}
 `;
 
+  const origin = input.templateOrigin;
   const entries: ZipEntry[] = [
-    { name: 'index.html', content: html },
+    { name: 'index.html', content: retainAttributions(html, origin) },
     { name: 'README.md', content: readme },
     { name: 'spec.json', content: JSON.stringify(spec, null, 2) + '\n' },
-    ...(mode === 'agent' ? [] : [{ name: 'LICENSE', content: 'MIT License\n\nCopyright (c) 2026 MYolGame creators\n\n游戏模板代码以 MIT 许可发布。\n' }]),
+    ...(origin ? [{ name: 'ATTRIBUTION.json', content: JSON.stringify(origin, null, 2) + '\n' },
+      { name: 'LICENSE', content: mitLicense([...new Set(origin.attributions.map((a) => a.authorName))].join(', ')) }] : mode === 'agent' ? [] : [{ name: 'LICENSE', content: 'MIT License\n\nCopyright (c) 2026 MYolGame creators\n\n游戏模板代码以 MIT 许可发布。\n' }]),
   ];
   return createZip(entries);
 }

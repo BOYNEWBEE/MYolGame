@@ -2,9 +2,11 @@
 // 身份模型：匿名会话 + 创作者令牌（原型级，非完整账号系统，界面与文档均已注明）。
 // 生成游戏通过独立沙箱页面预览；业务进程不执行生成的脚本。
 
+import { buildCommunityRoutes } from './community.ts';
+import { retainAttributions } from './shared/creation-template.ts';
 import { generateGame } from './generate.ts';
 import type { AgentService } from './agent.ts';
-import { GAME_CSP } from './shared/artifact.ts';
+import { GAME_CSP, embedGamePolicy } from './shared/artifact.ts';
 import { buildSourcePackage } from './shared/source.ts';
 import {
   DIFFICULTIES,
@@ -179,6 +181,7 @@ function versionSummary(version: Version): Record<string, unknown> {
     artifactHash: version.artifactHash,
     checks: version.checks,
     agentName: version.agentName,
+    templateOrigin: version.templateOrigin,
     createdAt: version.createdAt,
   };
 }
@@ -192,6 +195,7 @@ function projectSummary(project: Project): Record<string, unknown> {
     visibility: project.visibility,
     gameId: project.gameId,
     allowDownload: project.allowDownload,
+    templateOrigin: project.templateOrigin,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
   };
@@ -214,6 +218,7 @@ async function runGenerationTask(
   prompt: string,
   specOverride: unknown,
 ): Promise<{ task: TaskRecord; version: Version; notes: string[] }> {
+  if (project.templateOrigin) throw httpError(409, 'agent_required', '此项目基于社区源码模板，修改需要启用 Agent 源码开发');
   const baseSpec = specOverride
     ? sanitizeSpec(specOverride, project.spec)
     : project.spec;
@@ -313,7 +318,7 @@ type RouteContext = {
   query: URLSearchParams;
 };
 
-type Route = {
+export type Route = {
   method: string;
   pattern: RegExp;
   handle: (ctx: RouteContext) => Promise<Response>;
@@ -321,6 +326,7 @@ type Route = {
 
 function buildRoutes(): Route[] {
   return [
+    ...buildCommunityRoutes({ authenticate, getOwnedProject, readBody, json, gameHtmlResponse, projectSummary, versionSummary }),
     {
       method: 'GET',
       pattern: /^\/api\/meta$/,
@@ -423,7 +429,7 @@ function buildRoutes(): Route[] {
         const version = await deps.store.getVersion(game.versionId);
         if (!version) throw httpError(404, 'version_not_found', '游戏版本数据缺失');
         await deps.store.incrementPlays(game.id);
-        return gameHtmlResponse(version.html);
+        return gameHtmlResponse(retainAttributions(version.html, version.templateOrigin));
       },
     },
     {
@@ -435,7 +441,7 @@ function buildRoutes(): Route[] {
         if (!game.allowDownload) throw httpError(403, 'download_disabled', '创作者未开放该游戏下载');
         const version = await deps.store.getVersion(game.versionId);
         if (!version) throw httpError(404, 'version_not_found', '游戏版本数据缺失');
-        return gameHtmlResponse(version.html, game.title);
+        return gameHtmlResponse(retainAttributions(version.html, version.templateOrigin), game.title);
       },
     },
     {
@@ -724,10 +730,8 @@ function buildRoutes(): Route[] {
         if (!version || version.projectId !== project.id) {
           throw httpError(404, 'version_not_found', '版本不存在');
         }
-        // 工作台鉴权获取 HTML 后用 srcdoc 运行，文档内也需要同样的网络限制。
-        const html = version.html.replace('<head>', '<head>\n<meta http-equiv="Content-Security-Policy" content="' + GAME_CSP + '">');
-        if (html === version.html) throw httpError(500, 'invalid_artifact', '游戏预览格式不正确');
-        return gameHtmlResponse(html);
+        // srcDoc 不继承响应头；为自由生成的完整 HTML 加上前置资源限制。
+        return gameHtmlResponse(embedGamePolicy(retainAttributions(version.html, version.templateOrigin)));
       },
     },
     {
@@ -740,7 +744,7 @@ function buildRoutes(): Route[] {
         if (!version || version.projectId !== project.id) {
           throw httpError(404, 'version_not_found', '版本不存在');
         }
-        return gameHtmlResponse(version.html, version.spec.title + '-' + version.note);
+        return gameHtmlResponse(retainAttributions(version.html, version.templateOrigin), version.spec.title + '-' + version.note);
       },
     },
     {
@@ -760,6 +764,7 @@ function buildRoutes(): Route[] {
           mode: version.generationMode,
           versionNote: version.note,
           createdAt: version.createdAt,
+          templateOrigin: version.templateOrigin,
         });
         return zipResponse(bytes, project.title + '-source');
       },

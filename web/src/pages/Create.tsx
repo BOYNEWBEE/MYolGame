@@ -2,7 +2,7 @@
 // 提交后由服务端真正生成并进入工作台。
 
 import { useMemo, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ApiError, requestJson } from '../api.ts';
 import { useSession } from '../session.tsx';
 import { useMeta } from '../meta.ts';
@@ -110,6 +110,7 @@ export default function Create(): ReactNode {
     <div className="page create-page">
       <div className="page-head">
         <h1>创作新游戏</h1>
+        <p><Link to="/templates">也可以从社区模板开始 →</Link></p>
         <p className="muted">
           选择玩法与参数，也可以填写提示词补充需求。
           {meta?.generationMode === 'agent'

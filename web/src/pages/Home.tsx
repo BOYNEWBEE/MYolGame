@@ -71,6 +71,7 @@ export default function Home(): ReactNode {
           </p>
           <div className="hero-actions">
             <Link to="/create" className="btn primary large">开始创作</Link>
+            <Link to="/templates" className="btn large">使用社区模板</Link>
             <a href="#games" className="btn large">浏览社区作品</a>
           </div>
           <p className="hero-notice">
@@ -183,7 +184,7 @@ export default function Home(): ReactNode {
           </>
         )}
         <p className="browse-footnote">
-          社区公开游戏保存在服务端，任何浏览器均可访问；游玩数据实时统计。所有作品当前均为模板生成。
+          社区公开游戏保存在服务端，任何浏览器均可访问；游玩数据实时统计。作品生成方式见各作品标记。
         </p>
       </section>
     </div>

@@ -3,6 +3,8 @@
 // 本文件不读取、不记录、不向前端暴露任何数据库连接信息。
 // 表位于平台的 app schema，列名为 snake_case，这里统一映射到领域模型的 camelCase。
 
+import type { CreationTemplate } from './shared/creation-template.ts';
+
 import type {
   Game,
   GameFilter,
@@ -69,6 +71,16 @@ export function createSupabaseStore(client: DatabaseClient): Store {
 
     async createProject(project) {
       check(await client.from('myol_projects').insert(toRow(project)).select('id').single());
+    },
+    async createProjectFromTemplate(project, version, message) {
+      await store.createProject(project);
+      try {
+        await store.createVersion(version);
+        await store.addMessage(message);
+      } catch (error) {
+        await store.deleteProject(project.id);
+        throw error;
+      }
     },
     async getProject(id) {
       const rows = check(
@@ -175,6 +187,30 @@ export function createSupabaseStore(client: DatabaseClient): Store {
       const rows = check(await client.from('myol_tasks').select('*')
         .eq('generation_mode', 'agent').is('finished_at', null)) as Row[];
       return fromRows<TaskRecord>(rows);
+    },
+
+    async createCreationTemplate(template) {
+      check(await client.from('myol_creation_templates').insert(toRow(template)).select('id').single());
+    },
+    async getCreationTemplate(id) {
+      const rows = check(await client.from('myol_creation_templates').select('*').eq('id', id).limit(1)) as Row[];
+      return rows[0] ? fromRow<CreationTemplate>(rows[0]) : null;
+    },
+    async listCreationTemplates(filter) {
+      let query = client.from('myol_creation_templates').select('*', { count: 'exact' });
+      query = filter.ownerToken ? query.eq('owner_token', filter.ownerToken) : query.eq('published', true);
+      if (filter.kind) query = query.eq('official', filter.kind === 'official');
+      if (filter.q) {
+        const safe = filter.q.replace(/[^\p{L}\p{N} -]/gu, ' ').slice(0, 60);
+        query = query.or('title.ilike.%' + safe + '%,description.ilike.%' + safe + '%,author_name.ilike.%' + safe + '%');
+      }
+      const result = await query.order('created_at', { ascending: false }).order('id', { ascending: true })
+        .range(filter.offset, filter.offset + filter.limit - 1);
+      if (result.error) throw new Error('database_error:' + (result.error.code ?? 'unknown'));
+      return { items: fromRows<CreationTemplate>((result.data ?? []) as Row[]), total: result.count ?? 0 };
+    },
+    async setCreationTemplatePublished(id, published) {
+      check(await client.from('myol_creation_templates').update({ published }).eq('id', id).select('id').single());
     },
 
     async upsertGame(game) {

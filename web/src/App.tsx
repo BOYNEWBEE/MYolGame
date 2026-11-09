@@ -7,6 +7,8 @@ import Create from './pages/Create.tsx';
 import Projects from './pages/Projects.tsx';
 import Workbench from './pages/Workbench.tsx';
 import Favorites from './pages/Favorites.tsx';
+import Templates from './pages/Templates.tsx';
+import TemplateDetail from './pages/TemplateDetail.tsx';
 
 function Logo(): ReactNode {
   return (
@@ -38,6 +40,7 @@ export default function App(): ReactNode {
           <Logo />
           <nav className="nav-links" aria-label="主导航">
             <NavLink to="/" end>社区首页</NavLink>
+            <NavLink to="/templates">社区模板</NavLink>
             <NavLink to="/create">创作游戏</NavLink>
             <NavLink to="/projects">我的项目</NavLink>
             <NavLink to="/favorites">我的收藏</NavLink>
@@ -53,6 +56,8 @@ export default function App(): ReactNode {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/games/:id" element={<GameDetail />} />
+          <Route path="/templates" element={<Templates />} />
+          <Route path="/templates/:id" element={<TemplateDetail />} />
           <Route path="/create" element={<Create />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/projects/:id" element={<Workbench />} />

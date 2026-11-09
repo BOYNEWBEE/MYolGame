@@ -3,6 +3,7 @@
 
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import type { CreationTemplate, CreationTemplateFilter } from '../functions/shared/creation-template.ts';
 import type {
   Game,
   GameFilter,
@@ -15,6 +16,7 @@ import type {
 } from '../functions/store.ts';
 
 interface DbShape {
+  creationTemplates: CreationTemplate[];
   sessions: Session[];
   projects: Project[];
   versions: Version[];
@@ -26,6 +28,7 @@ interface DbShape {
 
 function emptyDb(): DbShape {
   return {
+    creationTemplates: [],
     sessions: [],
     projects: [],
     versions: [],
@@ -84,6 +87,14 @@ export class FileStore implements Store {
 
   async createProject(project: Project): Promise<void> {
     this.db.projects.push(project);
+    await this.persist();
+  }
+
+  async createProjectFromTemplate(project: Project, version: Version, message: Message): Promise<void> {
+    // 套用时一次持久化私有项目、基础版本和来源消息。
+    this.db.projects.push(project);
+    this.db.versions.push(version);
+    this.db.messages.push(message);
     await this.persist();
   }
 
@@ -248,4 +259,31 @@ export class FileStore implements Store {
   async countFavorites(gameId: string): Promise<number> {
     return this.db.favorites.filter((f) => f.gameId === gameId).length;
   }
+
+  async createCreationTemplate(template: CreationTemplate): Promise<void> {
+    this.db.creationTemplates.push(template);
+    await this.persist();
+  }
+
+  async getCreationTemplate(id: string): Promise<CreationTemplate | null> {
+    return this.db.creationTemplates.find((t) => t.id === id) ?? null;
+  }
+
+  async listCreationTemplates(filter: CreationTemplateFilter): Promise<{ items: CreationTemplate[]; total: number }> {
+    let items = this.db.creationTemplates.filter((t) => filter.ownerToken ? t.ownerToken === filter.ownerToken : t.published);
+    if (filter.kind) items = items.filter((t) => filter.kind === 'official' ? t.official : !t.official);
+    if (filter.q) {
+      const q = filter.q.toLowerCase();
+      items = items.filter((t) => [t.title, t.description, t.authorName].some((text) => text.toLowerCase().includes(q)));
+    }
+    items = [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
+    return { items: items.slice(filter.offset, filter.offset + filter.limit), total: items.length };
+  }
+
+  async setCreationTemplatePublished(id: string, published: boolean): Promise<void> {
+    const template = this.db.creationTemplates.find((t) => t.id === id);
+    if (template) template.published = published;
+    await this.persist();
+  }
+
 }

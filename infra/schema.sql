@@ -16,6 +16,7 @@ CREATE TABLE app.myol_projects (
   title text NOT NULL,
   spec jsonb NOT NULL,
   current_version_id text NOT NULL,
+  template_origin jsonb,
   visibility text NOT NULL,
   game_id text,
   allow_download boolean NOT NULL,
@@ -35,6 +36,7 @@ CREATE TABLE app.myol_versions (
   artifact_hash text,
   checks jsonb,
   agent_name text,
+  template_origin jsonb,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -87,5 +89,28 @@ CREATE TABLE app.myol_favorites (
   id text PRIMARY KEY,
   token text NOT NULL,
   game_id text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+
+-- 社区创作模板保存独立源码快照，不引用可变的项目当前版本。
+CREATE TABLE app.myol_creation_templates (
+  id text PRIMARY KEY,
+  owner_token text NOT NULL,
+  title text NOT NULL,
+  description text NOT NULL,
+  prompt text NOT NULL,
+  parameters jsonb NOT NULL,
+  license text NOT NULL,
+  version_label text NOT NULL,
+  author_name text NOT NULL,
+  official boolean NOT NULL,
+  published boolean NOT NULL,
+  source_version_note text NOT NULL,
+  spec jsonb NOT NULL,
+  html text NOT NULL,
+  generation_mode text NOT NULL,
+  verification text NOT NULL,
+  attributions jsonb NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );

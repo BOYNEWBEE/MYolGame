@@ -1,4 +1,5 @@
 // 只通过 IPC 传递当前任务和游戏源码，不向 Worker 提供业务数据库或用户令牌。
+import type { TemplateOrigin } from '../../functions/shared/creation-template.ts';
 import type { ArtifactChecks } from '../../functions/store.ts';
 import type { GameSpec } from '../../functions/shared/spec.ts';
 
@@ -18,6 +19,7 @@ export interface WorkerInput {
   spec: GameSpec;
   html: string;
   directory: string;
+  templateOrigin?: TemplateOrigin;
   config: AgentConfig;
 }
 

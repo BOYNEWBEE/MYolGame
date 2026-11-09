@@ -1,4 +1,5 @@
 // API 进程独占 FileStore；Worker 仅收发 IPC，避免多个进程覆盖同一 JSON 数据库。
+import { createHash } from 'node:crypto';
 import { fork, type ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,6 +7,7 @@ import type { AgentService } from '../../functions/agent.ts';
 import { taskActive } from '../../functions/agent.ts';
 import type { GameSpec } from '../../functions/shared/spec.ts';
 import { sanitizeTitle } from '../../functions/shared/spec.ts';
+import { retainAttributions } from '../../functions/shared/creation-template.ts';
 import { renderGame } from '../../functions/shared/templates/index.ts';
 import type { Project, Store, TaskRecord, Version } from '../../functions/store.ts';
 import type { FileStore } from '../store_file.ts';
@@ -110,7 +112,7 @@ export class LocalAgent implements AgentService {
         const input: WorkerInput = {
           prompt: task.prompt, spec: task.baseSpec || project.spec,
           html: base?.html || renderGame(task.baseSpec || project.spec),
-          directory: join(this.directory, task.id), config: this.config,
+          directory: join(this.directory, task.id), config: this.config, templateOrigin: project.templateOrigin,
         };
         await this.execute(task, input);
       } catch {
@@ -187,10 +189,10 @@ export class LocalAgent implements AgentService {
     const now = new Date().toISOString();
     const version: Version = {
       id: crypto.randomUUID(), projectId: current.id, parentId: task.baseVersionId || null,
-      prompt: task.prompt, spec, html: result.html,
+      prompt: task.prompt, spec, html: retainAttributions(result.html, current.templateOrigin),
       note: 'v' + ((await this.store.listVersions(current.id)).length + 1),
-      generationMode: 'agent', createdAt: now, artifactHash: result.artifactHash,
-      checks: result.checks, agentName: this.name,
+      generationMode: 'agent', createdAt: now, artifactHash: createHash('sha256').update(retainAttributions(result.html, current.templateOrigin)).digest('hex'),
+      checks: result.checks, agentName: this.name, templateOrigin: current.templateOrigin,
     };
     const updated = { ...current, currentVersionId: version.id, spec, title: spec.title, updatedAt: now };
     const done: TaskRecord = { ...task, status: 'succeeded', versionId: version.id, finishedAt: now,

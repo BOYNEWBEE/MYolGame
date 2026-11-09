@@ -1,6 +1,7 @@
 // 领域模型与存储接口：本地文件存储与云端 Supabase 存储实现同一接口，
 // 业务路由（handler.ts）只依赖该接口，保证部署到 Qoder Sites 时行为一致。
 
+import type { CreationTemplate, CreationTemplateFilter, TemplateOrigin } from './shared/creation-template.ts';
 import type { Difficulty, GameSpec, GenerationMode, TemplateId, ThemeId } from './shared/spec.ts';
 
 export interface Session {
@@ -21,6 +22,7 @@ export interface Project {
   allowDownload: boolean;
   createdAt: string;
   updatedAt: string;
+  templateOrigin?: TemplateOrigin;
 }
 
 export interface Version {
@@ -36,6 +38,7 @@ export interface Version {
   artifactHash?: string;
   checks?: ArtifactChecks;
   agentName?: string;
+  templateOrigin?: TemplateOrigin;
 }
 
 export interface ArtifactChecks {
@@ -117,6 +120,7 @@ export interface Store {
   getSession(token: string): Promise<Session | null>;
 
   createProject(project: Project): Promise<void>;
+  createProjectFromTemplate(project: Project, version: Version, message: Message): Promise<void>;
   getProject(id: string): Promise<Project | null>;
   updateProject(project: Project): Promise<void>;
   listProjects(ownerToken: string): Promise<Project[]>;
@@ -146,4 +150,9 @@ export interface Store {
   isFavorite(token: string, gameId: string): Promise<boolean>;
   listFavoriteGameIds(token: string): Promise<string[]>;
   countFavorites(gameId: string): Promise<number>;
+
+  createCreationTemplate(template: CreationTemplate): Promise<void>;
+  getCreationTemplate(id: string): Promise<CreationTemplate | null>;
+  listCreationTemplates(filter: CreationTemplateFilter): Promise<{ items: CreationTemplate[]; total: number }>;
+  setCreationTemplatePublished(id: string, published: boolean): Promise<void>;
 }

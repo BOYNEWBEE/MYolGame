@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { createHandler, type HandlerEnv } from '../functions/handler.ts';
 import { FileStore } from './store_file.ts';
 import { runSeed } from './seed.ts';
+import { runTemplateSeed } from './template-seed.ts';
 import type { Store } from '../functions/store.ts';
 import { LocalAgent, recoverAgentTasks } from './agent/controller.ts';
 import { loadAgentConfig } from './agent/config.ts';
@@ -173,7 +174,7 @@ export async function startLocalServer(options: LocalServerOptions = {}): Promis
   try {
     // 先占用监听端口；重复启动失败时，不触碰正在使用的数据和任务。
     await store.init();
-    if (options.seed !== false) await runSeed(store);
+    if (options.seed !== false) { await runSeed(store); await runTemplateSeed(store); }
     if (agent) await agent.init();
     else await recoverAgentTasks(store);
     ready = true;
