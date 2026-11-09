@@ -11,7 +11,10 @@
     "dev:web": "npm --prefix web run dev",
     "build": "npm --prefix web run build",
     "typecheck": "tsc -p tsconfig.check.json && npm --prefix web run typecheck",
-    "test": "node --experimental-strip-types --test tests/*.test.ts"
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "check:cloud": "npm run typecheck && npm run build && node dev/check-cloud.ts",
+    "worker:m0": "node dev/m0-worker.ts",
+    "package:cloud": "npm run check:cloud && node dev/package-cloud.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

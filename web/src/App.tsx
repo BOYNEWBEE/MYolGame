@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { NavLink, Link, Route, Routes } from 'react-router-dom';
 import { useSession } from './session.tsx';
+import M0 from './pages/M0.tsx';
 import Account from './pages/Account.tsx';
 import Home from './pages/Home.tsx';
 import GameDetail from './pages/GameDetail.tsx';
@@ -43,6 +44,7 @@ export default function App(): ReactNode {
             <NavLink to="/" end>社区首页</NavLink>
             <NavLink to="/templates">社区模板</NavLink>
             <NavLink to="/create">创作游戏</NavLink>
+            {session.cloudM0 && <NavLink to="/m0">云端任务</NavLink>}
             <NavLink to="/projects">我的项目</NavLink>
             <NavLink to="/favorites">我的收藏</NavLink>
           </nav>
@@ -55,13 +57,15 @@ export default function App(): ReactNode {
       </header>
 
       <main className="main">
+        {session.cloudM0 && <div className="page" role="status">当前为云端 M0：任务仅模拟基础设施执行，不调用 AI、不生成游戏。<Link to="/m0">进入云端任务</Link></div>}
         <Routes>
+          <Route path="/m0" element={<M0 />} />
           <Route path="/account" element={<Account />} />
           <Route path="/" element={<Home />} />
           <Route path="/games/:id" element={<GameDetail />} />
           <Route path="/templates" element={<Templates />} />
           <Route path="/templates/:id" element={<TemplateDetail />} />
-          <Route path="/create" element={<Create />} />
+          <Route path="/create" element={session.cloudM0 ? <M0 /> : <Create />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/projects/:id" element={<Workbench />} />
           <Route path="/favorites" element={<Favorites />} />
@@ -86,7 +90,7 @@ export default function App(): ReactNode {
             生成结果需试玩确认后再发布。
           </p>
           <p>
-            本地支持账号注册与登录，游客身份保存在本浏览器；
+            {session.cloudM0 ? '云端 M0 支持邮箱账号与模拟任务；' : '本地支持账号注册与登录，游客身份保存在本浏览器；'}
             社区公开游戏与收藏保存在服务端，草稿项目私有，仅创建者可见。
           </p>
         </div>

@@ -6,6 +6,8 @@ import { ApiError, getNickname, getToken, requestJson, saveToken } from './api.t
 interface SessionState {
   account?: { username: string; nickname: string } | null;
   localAccounts?: boolean;
+  accountKind?: 'email';
+  cloudM0?: boolean;
   token: string | null;
   nickname: string;
   ready: boolean;
@@ -37,10 +39,14 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
     async function ensure(): Promise<void> {
       try {
         try {
-          const status = await requestJson<{ enabled: boolean; account: { username: string; nickname: string } | null }>('/account', { auth: false });
-          if (!cancelled) setState(prev => ({ ...prev, localAccounts: status.enabled, account: status.account }));
+          const status = await requestJson<{ enabled: boolean; kind?: 'email'; cloudM0?: boolean; account: { username: string; nickname: string } | null }>('/account', { auth: false });
+          if (!cancelled) setState(prev => ({ ...prev, localAccounts: status.enabled, account: status.account, accountKind: status.kind, cloudM0: status.cloudM0 }));
+          if (status.cloudM0 && !status.account) {
+            if (!cancelled) setState({ token: null, nickname: '未登录', ready: true, error: null, account: null, localAccounts: true, accountKind: 'email', cloudM0: true });
+            return;
+          }
           if (status.account) {
-            if (!cancelled) setState({ token: 'cookie', nickname: status.account.nickname, ready: true, error: null, account: status.account, localAccounts: true });
+            if (!cancelled) setState({ token: 'cookie', nickname: status.account.nickname, ready: true, error: null, account: status.account, localAccounts: true, accountKind: status.kind, cloudM0: status.cloudM0 });
             return;
           }
         } catch (error) {

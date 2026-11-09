@@ -4,6 +4,7 @@ import { useSession } from '../session.tsx';
 
 export default function Account() {
   const session = useSession();
+  const cloud = session.accountKind === 'email';
   const [register, setRegister] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -17,7 +18,7 @@ export default function Account() {
         localStorage.removeItem('myol.token');
         localStorage.removeItem('myol.nickname');
       }
-      window.location.assign(action === 'password' ? '/account' : '/projects');
+      window.location.assign(action === 'password' ? '/account' : cloud ? '/m0' : '/projects');
     } catch (e) { setError(e instanceof Error ? e.message : '操作失败'); setBusy(false); }
   }
   function submit(e: FormEvent<HTMLFormElement>) {
@@ -27,12 +28,12 @@ export default function Account() {
     void act(session.account ? 'password' : register ? 'register' : 'login', data);
   }
   if (!session.ready) return <div className="page">连接中…</div>;
-  if (!session.localAccounts) return <div className="page">当前运行环境未启用本地账号管理。</div>;
+  if (!session.localAccounts) return <div className="page">{session.error ?? '当前运行环境未启用账号管理。'}</div>;
   return <div className="page" style={{ maxWidth: 520, margin: '0 auto' }}>
-    <h1>{session.account ? '账号管理' : register ? '注册本地账号' : '登录本地账号'}</h1>
-    <p>{session.account ? `当前账号：${session.account.username}` : '登录后可在连接同一本地服务的浏览器中访问作品。当前游客的项目和收藏会自动合并到账号。'}</p>
+    <h1>{session.account ? '账号管理' : register ? (cloud ? '注册邮箱账号' : '注册本地账号') : (cloud ? '登录邮箱账号' : '登录本地账号')}</h1>
+    <p>{session.account ? `当前账号：${session.account.username}` : cloud ? '注册或登录后可提交云端 M0 模拟任务，并在刷新或重新登录后查看进度。' : '登录后可在连接同一本地服务的浏览器中访问作品。当前游客的项目和收藏会自动合并到账号。'}</p>
     <form onSubmit={submit} style={{ display: 'grid', gap: 16 }}>
-      {!session.account && <label>用户名<input name="username" required minLength={3} maxLength={32} pattern="[A-Za-z0-9_]+" autoComplete="username" placeholder="3–32 位字母、数字或下划线" /></label>}
+      {!session.account && <label>{cloud ? '邮箱' : '用户名'}<input name="username" type={cloud ? 'email' : 'text'} required minLength={3} maxLength={cloud ? 254 : 32} pattern={cloud ? undefined : '[A-Za-z0-9_]+'} autoComplete="username" placeholder={cloud ? '请输入邮箱' : '3–32 位字母、数字或下划线'} /></label>}
       {!session.account && register && <label>昵称<input name="nickname" maxLength={20} autoComplete="nickname" /></label>}
       <label>{session.account ? '当前密码' : '密码'}<input name="password" type="password" required minLength={8} maxLength={128} autoComplete={register ? 'new-password' : 'current-password'} /></label>
       {register && !session.account && <label>确认密码<input name="confirmPassword" type="password" required minLength={8} maxLength={128} autoComplete="new-password" /></label>}
@@ -41,6 +42,6 @@ export default function Account() {
       <button className="btn primary" disabled={busy}>{busy ? '处理中…' : session.account ? '修改密码并退出所有登录' : register ? '注册并登录' : '登录'}</button>
     </form>
     {session.account ? <button className="btn" disabled={busy} onClick={() => void act('logout', {})}>退出登录</button> : <button className="btn" disabled={busy} onClick={() => { setRegister(!register); setError(''); }}>{register ? '已有账号，去登录' : '没有账号，去注册'}</button>}
-    <p>账号和作品保存在这台服务所在电脑。密码至少 8 位；本地版暂不提供邮件找回密码。</p>
+    <p>{cloud ? '邮箱用于登录，当前尚未发送验证邮件；暂不支持邮件找回密码。' : '账号和作品保存在这台服务所在电脑。密码至少 8 位；本地版暂不提供邮件找回密码。'}</p>
   </div>;
 }
