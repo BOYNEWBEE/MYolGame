@@ -11,7 +11,7 @@ export type ThemeId =
   | 'ink'
   | 'sunset';
 export type Difficulty = 'easy' | 'normal' | 'hard';
-export type GenerationMode = 'template' | 'model';
+export type GenerationMode = 'template' | 'model' | 'agent';
 
 export const MUSIC_NAMES = { 'neon-arcade': '霓虹街机', none: '无配乐' } as const;
 export type MusicPreset = keyof typeof MUSIC_NAMES;

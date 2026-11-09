@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { getToken } from '../api.ts';
+import { embedGamePolicy } from '@shared/artifact.ts';
 
 interface SandboxFrameProps {
   src: string;
@@ -94,7 +95,7 @@ export default function SandboxFrame({ src, title, authenticated = false, reload
           <iframe
             key={frameKey}
             src={authenticated ? undefined : src}
-            srcDoc={authenticated ? current?.html : undefined}
+            srcDoc={authenticated ? embedGamePolicy(current?.html ?? '') : undefined}
             title={title}
             sandbox="allow-scripts"
             referrerPolicy="no-referrer"

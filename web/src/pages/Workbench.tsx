@@ -15,6 +15,10 @@ import type {
   VersionSummary,
 } from '../types.ts';
 
+const activeTask = (task: TaskItem) => ['queued', 'running', 'checking', 'repairing'].includes(task.status);
+const taskLabels: Record<TaskItem['status'], string> = { queued: '排队中', running: '开发中', checking: '检查中', repairing: '修复中', succeeded: '成功', failed: '失败', cancelled: '已取消', timed_out: '已超时' };
+const modeLabel = (mode: string) => mode === 'agent' ? 'Agent 源码开发' : mode === 'model' ? '模型辅助' : '模板生成';
+
 interface ProjectDetail {
   project: ProjectSummary;
   versions: VersionSummary[];
@@ -35,6 +39,10 @@ export default function Workbench(): ReactNode {
   const [description, setDescription] = useState('');
   const [allowDownload, setAllowDownload] = useState(true);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const pendingRef = useRef(false);
+  const observedTask = useRef<string | null>(null);
+  const requestInFlight = useRef(false);
+  const [processing, setProcessing] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -43,7 +51,21 @@ export default function Workbench(): ReactNode {
       const data = await requestJson<ProjectDetail>('/projects/' + id);
       setDetail(data);
       setAllowDownload(data.project.allowDownload);
-      setPreviewVersionId((prev) => prev ?? data.project.currentVersionId);
+      const pending = data.tasks.some(activeTask);
+      pendingRef.current = pending;
+      setProcessing(pending);
+      const completed = data.tasks.find((task) => task.id === observedTask.current);
+      if (completed && !activeTask(completed)) {
+        observedTask.current = null;
+        if (completed.status === 'succeeded' && completed.versionId) {
+          setPreviewVersionId(completed.versionId);
+          setNotice('新版本已生成，请试玩确认需求。');
+        } else {
+          setError(completed.error || taskLabels[completed.status]);
+        }
+      }
+      if (pending && !observedTask.current) observedTask.current = data.tasks.find(activeTask)!.id;
+      setPreviewVersionId((prev) => prev || data.project.currentVersionId || null);
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         setError(err.message + '（项目仅创建者可访问）');
@@ -54,7 +76,14 @@ export default function Workbench(): ReactNode {
   }, [id]);
 
   useEffect(() => {
-    void load();
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      await load();
+      if (!disposed) timer = setTimeout(() => void poll(), pendingRef.current ? 750 : 3000);
+    };
+    void poll();
+    return () => { disposed = true; clearTimeout(timer); };
   }, [load]);
 
   useEffect(() => {
@@ -67,24 +96,36 @@ export default function Workbench(): ReactNode {
   }
 
   async function generate(basePrompt: string): Promise<void> {
-    if (!id || generating || !basePrompt.trim()) return;
+    if (!id || requestInFlight.current || processing || !basePrompt.trim()) return;
+    requestInFlight.current = true;
     setGenerating(true);
     setError(null);
     setNotice(null);
     try {
-      const result = await requestJson<{ version: VersionSummary }>(
+      const result = await requestJson<{ version?: VersionSummary; task: TaskItem }>(
         '/projects/' + id + '/tasks',
         { method: 'POST', body: { prompt: basePrompt } },
       );
-      setPreviewVersionId(result.version.id);
+      if (result.version) setPreviewVersionId(result.version.id);
+      else observedTask.current = result.task.id;
       setPrompt((draft) => (draft === basePrompt ? '' : draft));
-      await refreshAfterMutation(result.version.note + ' 已生成，可在试玩区查看。');
+      await refreshAfterMutation(result.version ? result.version.note + ' 已生成，可在试玩区查看。' : '任务已提交，可离开页面，稍后回来查看。');
     } catch (err) {
       setError(err instanceof Error ? err.message : '生成失败');
       await load();
     } finally {
+      requestInFlight.current = false;
       setGenerating(false);
     }
+  }
+
+  async function cancel(): Promise<void> {
+    const task = detail?.tasks.find(activeTask);
+    if (!id || !task) return;
+    try {
+      await requestJson('/projects/' + id + '/tasks/' + task.id + '/cancel', { method: 'POST', body: {} });
+      await load();
+    } catch (err) { setError(err instanceof Error ? err.message : '取消失败'); }
   }
 
   async function restore(versionId: string, note: string): Promise<void> {
@@ -186,7 +227,7 @@ export default function Workbench(): ReactNode {
               {project.visibility === 'public' ? '已发布到社区' : '私有草稿'}
             </span>
             <GenerationBadge mode={previewVersion?.generationMode ?? 'template'} />
-            {meta?.generationMode !== 'model' && (
+            {meta?.generationMode === 'template' && (
               <span className="muted small">平台处于模板模式（未配置真实模型）</span>
             )}
           </div>
@@ -226,7 +267,7 @@ export default function Workbench(): ReactNode {
                 <time>{new Date(m.createdAt).toLocaleString('zh-CN')}</time>
               </div>
             ))}
-            {generating && (
+            {(generating || processing) && (
               <div className="msg system" role="status">
                 <span className="msg-role">系统</span>
                 <p>正在生成新版本。完成后可在「最近任务」查看处理记录。</p>
@@ -249,20 +290,22 @@ export default function Workbench(): ReactNode {
               <button
                 type="button"
                 className="btn primary"
-                disabled={generating || !prompt.trim()}
+                disabled={generating || processing || !prompt.trim()}
                 onClick={() => void generate(prompt)}
               >
-                {generating ? '生成中…' : '生成新版本'}
+                {generating || processing ? '生成中…' : '生成新版本'}
               </button>
             </div>
           </div>
           {lastTask && (
-            <details className="task-detail">
+            <details className="task-detail" open={processing || undefined}>
               <summary>
-                最近任务：{lastTask.status === 'succeeded' ? '成功' : '失败'} ·{' '}
-                {lastTask.generationMode === 'model' ? '模型辅助' : '模板生成'} ·{' '}
+                最近任务：{taskLabels[lastTask.status]} ·{' '}
+                {modeLabel(lastTask.generationMode)} ·{' '}
                 {new Date(lastTask.createdAt).toLocaleString('zh-CN')}
               </summary>
+              {processing && <button className="btn small" type="button" onClick={() => void cancel()}>取消任务</button>}
+              {lastTask.error && <p role="alert">{lastTask.error}</p>}
               <ol>
                 {lastTask.stages.map((stage, i) => (
                   <li key={i} className={stage.ok ? 'ok' : 'bad'}>
@@ -314,6 +357,7 @@ export default function Workbench(): ReactNode {
             </div>
           )}
           <div className="panel preview-spec">
+            {previewVersion?.generationMode === 'agent' && <span className="muted small">起始配置参考，实际玩法见试玩。</span>}
             <SpecBadges spec={(previewVersion ?? project).spec} />
             <button type="button" className="btn small" onClick={() => setReloadKey((k) => k + 1)}>
               重新加载
@@ -337,10 +381,11 @@ export default function Workbench(): ReactNode {
                       <span className="muted small" title={v.prompt}>“{v.prompt}”</span>
                       <span className="muted small">
                         {new Date(v.createdAt).toLocaleString('zh-CN')} ·{' '}
-                        {v.generationMode === 'model' ? '模型辅助' : '模板生成'}
+                        {modeLabel(v.generationMode)}
                       </span>
                     </div>
                   </div>
+                  {v.checks && <p className="muted small">浏览器烟测通过：画布、按键、重启</p>}
                   <div className="version-actions">
                     <button type="button" className="btn tiny" onClick={() => setPreviewVersionId(v.id)}>
                       预览
@@ -391,10 +436,11 @@ export default function Workbench(): ReactNode {
                 type="button"
                 className="btn"
                 onClick={() =>
-                  void downloadAuthorized('/projects/' + project.id + '/source', project.title + '-source.zip')
+                  void downloadAuthorized('/projects/' + project.id + '/source?versionId=' + (previewVersion?.id ?? ''), project.title + '-source.zip')
                 }
+                disabled={!previewVersion}
               >
-                下载源码包（ZIP）
+                下载源码包（当前预览版本）
               </button>
             </div>
             <p className="panel-note">

@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "node dev/run-dev.ts",
+    "dev:agent": "MYOLGAME_AGENT_PROVIDER=qoder node dev/run-dev.ts",
     "dev:api": "node dev/local-server.ts",
     "dev:web": "npm --prefix web run dev",
     "build": "npm --prefix web run build",

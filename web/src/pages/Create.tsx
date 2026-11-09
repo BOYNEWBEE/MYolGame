@@ -112,7 +112,9 @@ export default function Create(): ReactNode {
         <h1>创作新游戏</h1>
         <p className="muted">
           选择玩法与参数，也可以填写提示词补充需求。
-          {meta?.generationMode === 'model'
+          {meta?.generationMode === 'agent'
+            ? 'Agent 将根据需求开发源码，完成后请试玩确认。'
+            : meta?.generationMode === 'model'
             ? '当前已配置真实模型辅助调整规格。'
             : '当前使用内置模板生成。'}
         </p>
@@ -156,7 +158,7 @@ export default function Create(): ReactNode {
           </div>
 
           <div className="field">
-            <span className="field-label">玩法模板</span>
+            <span className="field-label">{meta?.generationMode === 'agent' ? '起始玩法（Agent 可修改源码）' : '玩法模板'}</span>
             <div className="template-cards">
               {TEMPLATES.map((t) => (
                 <button
@@ -290,7 +292,7 @@ export default function Create(): ReactNode {
             disabled={submitting || !session.ready}
             onClick={() => void submit()}
           >
-            {submitting ? '正在生成…（解析需求 → 渲染模板 → 校验 → 保存版本）' : '生成游戏并进入工作台'}
+            {submitting ? '正在提交…' : '生成游戏并进入工作台'}
           </button>
           <p className="panel-note">
             生成在服务端完成并保存为独立版本；项目默认为私有草稿，发布与否由你决定。
@@ -300,7 +302,7 @@ export default function Create(): ReactNode {
         <aside className="panel preview-panel">
           <h2>生成预览</h2>
           <p className="panel-note">
-            以下为浏览器端用与服务器相同的规则实时解析的结果，最终以服务端生成为准。
+            {meta?.generationMode === 'agent' ? '以下为起始模板参考，最终玩法以 Agent 开发后的试玩结果为准。' : '以下为浏览器端用与服务器相同的规则实时解析的结果，最终以服务端生成为准。'}
           </p>
           <Cover spec={parsed.spec} className="cover preview-cover" />
           <h3>{parsed.spec.title}</h3>
@@ -315,7 +317,7 @@ export default function Create(): ReactNode {
               {parsed.notes.map((note, i) => <p key={i} className="warn">{note}</p>)}
             </div>
           )}
-          <GenerationBadge mode={meta?.generationMode === 'model' ? 'model' : 'template'} />
+          <GenerationBadge mode={meta?.generationMode ?? 'template'} />
         </aside>
       </div>
     </div>

@@ -25,11 +25,15 @@ const web = spawn('npm', ['--prefix', 'web', 'run', 'dev'], { cwd: rootDir, shel
 pipe(web, '[web]');
 children.push(web);
 
+let stopping = false;
 function shutdown(): void {
+  if (stopping) return;
+  stopping = true;
   for (const child of children) {
     if (!child.killed) child.kill('SIGTERM');
   }
-  process.exit(0);
+  // 等待 API 记录取消并清理 Worker，避免父进程提前退出留下后台任务。
+  setTimeout(() => process.exit(0), 5000).unref();
 }
 
 process.on('SIGINT', shutdown);

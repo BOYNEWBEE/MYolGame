@@ -33,6 +33,18 @@ export interface Version {
   note: string;
   generationMode: GenerationMode;
   createdAt: string;
+  artifactHash?: string;
+  checks?: ArtifactChecks;
+  agentName?: string;
+}
+
+export interface ArtifactChecks {
+  browser: 'passed';
+  canvas: boolean;
+  input: boolean;
+  restart: boolean;
+  screenshotHash: string;
+  checkedAt: string;
 }
 
 export interface Message {
@@ -55,13 +67,16 @@ export interface TaskRecord {
   id: string;
   projectId: string;
   prompt: string;
-  status: 'succeeded' | 'failed';
+  status: 'queued' | 'running' | 'checking' | 'repairing' | 'succeeded' | 'failed' | 'cancelled' | 'timed_out';
   stages: TaskStage[];
   versionId: string | null;
   error: string | null;
   generationMode: GenerationMode;
   createdAt: string;
   finishedAt: string | null;
+  baseVersionId?: string;
+  baseUpdatedAt?: string;
+  baseSpec?: GameSpec;
 }
 
 export interface Game {
@@ -118,6 +133,7 @@ export interface Store {
   updateTask(task: TaskRecord): Promise<void>;
   getTask(id: string): Promise<TaskRecord | null>;
   listTasks(projectId: string): Promise<TaskRecord[]>;
+  listPendingTasks(): Promise<TaskRecord[]>;
 
   upsertGame(game: Game): Promise<void>;
   getGame(id: string): Promise<Game | null>;

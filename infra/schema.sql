@@ -32,6 +32,9 @@ CREATE TABLE app.myol_versions (
   html text NOT NULL,
   note text NOT NULL,
   generation_mode text NOT NULL,
+  artifact_hash text,
+  checks jsonb,
+  agent_name text,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -54,7 +57,10 @@ CREATE TABLE app.myol_tasks (
   error text,
   generation_mode text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
-  finished_at timestamptz
+  finished_at timestamptz,
+  base_version_id text,
+  base_updated_at timestamptz,
+  base_spec jsonb
 );
 
 CREATE TABLE app.myol_games (

@@ -10,6 +10,9 @@ import { createHandler, type HandlerEnv } from '../functions/handler.ts';
 import { FileStore } from './store_file.ts';
 import { runSeed } from './seed.ts';
 import type { Store } from '../functions/store.ts';
+import { LocalAgent, recoverAgentTasks } from './agent/controller.ts';
+import { loadAgentConfig } from './agent/config.ts';
+import type { AgentConfig } from './agent/protocol.ts';
 
 export interface LocalServerOptions {
   port?: number;
@@ -18,6 +21,8 @@ export interface LocalServerOptions {
   store?: Store;
   env?: HandlerEnv;
   seed?: boolean;
+  agent?: AgentConfig | false;
+  sandboxDir?: string;
 }
 
 const MIME: Record<string, string> = {
@@ -122,12 +127,14 @@ export async function startLocalServer(options: LocalServerOptions = {}): Promis
   const dataFile = options.dataFile ?? join(rootDir, 'data', 'db.json');
   const distDir = options.distDir ?? join(rootDir, 'web', 'dist');
   const store = options.store ?? new FileStore(dataFile);
-  await store.init();
-  if (options.seed !== false) await runSeed(store);
-
-  const handler = createHandler({ store, env: options.env ?? modelEnvFromProcess() });
+  const config = options.agent === false ? undefined : options.agent ?? loadAgentConfig();
+  if (config && !(store instanceof FileStore)) throw new Error('本地 Agent 需要使用 FileStore');
+  const agent = config ? new LocalAgent(store as FileStore, config, options.sandboxDir ?? join(rootDir, '.sandboxes')) : undefined;
+  const handler = createHandler({ store, env: options.env ?? modelEnvFromProcess(), agent });
+  let ready = false;
 
   const server = createHttpServer(async (req, res) => {
+    if (!ready) { res.statusCode = 503; res.end('服务初始化中'); return; }
     const pathname = (req.url ?? '/').split('?')[0]!;
     try {
       if (pathname.startsWith('/functions/')) {
@@ -159,15 +166,31 @@ export async function startLocalServer(options: LocalServerOptions = {}): Promis
   });
 
   const port = options.port ?? Number(process.env.PORT ?? 8787);
-  await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, '127.0.0.1', () => { server.off('error', reject); resolve(); });
+  });
+  try {
+    // 先占用监听端口；重复启动失败时，不触碰正在使用的数据和任务。
+    await store.init();
+    if (options.seed !== false) await runSeed(store);
+    if (agent) await agent.init();
+    else await recoverAgentTasks(store);
+    ready = true;
+  } catch (error) {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    throw error;
+  }
   const actualPort = (server.address() as { port: number }).port;
   return {
     port: actualPort,
     url: 'http://127.0.0.1:' + actualPort,
-    close: () =>
-      new Promise<void>((resolve, reject) =>
+    close: async () => {
+      await agent?.close();
+      return new Promise<void>((resolve, reject) =>
         server.close((err) => (err ? reject(err) : resolve())),
-      ),
+      );
+    },
   };
 }
 
@@ -178,4 +201,7 @@ if (isMain) {
   const started = await startLocalServer();
   console.log('[api] MYolGame 本地 API 服务已启动：' + started.url + '/functions/v1/app/api/meta');
   console.log('[api] 数据文件：data/db.json（真实持久化）');
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(signal, () => { void started.close().then(() => process.exit(0)); });
+  }
 }

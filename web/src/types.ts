@@ -38,6 +38,9 @@ export interface VersionSummary {
   note: string;
   generationMode: GenerationMode;
   createdAt: string;
+  artifactHash?: string;
+  checks?: { browser: 'passed'; canvas: boolean; input: boolean; restart: boolean };
+  agentName?: string;
 }
 
 export interface MessageItem {
@@ -60,7 +63,7 @@ export interface TaskItem {
   id: string;
   projectId: string;
   prompt: string;
-  status: 'succeeded' | 'failed';
+  status: 'queued' | 'running' | 'checking' | 'repairing' | 'succeeded' | 'failed' | 'cancelled' | 'timed_out';
   stages: TaskStage[];
   versionId: string | null;
   error: string | null;

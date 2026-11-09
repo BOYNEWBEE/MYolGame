@@ -112,7 +112,7 @@ describe('浏览器端到端测试', () => {
       throw new Error('web/dist/index.html 不存在，请先运行 npm run build');
     }
     dataDir = mkdtempSync(join(tmpdir(), 'myol-e2e-'));
-    server = await startLocalServer({
+    server = await startLocalServer({ agent: false,
       port: 0,
       dataFile: join(dataDir, 'db.json'),
       distDir,
@@ -302,7 +302,7 @@ describe('浏览器端到端测试', () => {
       // 4. 下载当前版本的源码包 ZIP
       const [zipDownload] = await Promise.all([
         page.waitForEvent('download'),
-        page.getByRole('button', { name: '下载源码包（ZIP）' }).click(),
+        page.getByRole('button', { name: '下载源码包（当前预览版本）' }).click(),
       ]);
       const zipPath = await zipDownload.path();
       assert.ok(zipPath);

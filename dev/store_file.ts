@@ -158,6 +158,19 @@ export class FileStore implements Store {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
+  async listPendingTasks(): Promise<TaskRecord[]> {
+    return this.db.tasks.filter((t) => !t.finishedAt && t.generationMode === 'agent');
+  }
+
+  async commitAgentResult(project: Project, version: Version, task: TaskRecord, message: Message): Promise<void> {
+    // 同一次原子文件替换保存版本、项目指针与任务终态，避免重启后出现半完成提交。
+    this.db.versions.push(version);
+    this.db.projects = this.db.projects.map((p) => p.id === project.id ? project : p);
+    this.db.tasks = this.db.tasks.map((t) => t.id === task.id ? task : t);
+    this.db.messages.push(message);
+    await this.persist();
+  }
+
   async upsertGame(game: Game): Promise<void> {
     const index = this.db.games.findIndex((g) => g.id === game.id);
     if (index >= 0) this.db.games[index] = game;

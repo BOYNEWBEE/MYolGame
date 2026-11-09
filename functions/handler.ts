@@ -1,8 +1,10 @@
 // 业务路由：与运行时无关（Web Request/Response），本地 Node 与云端 Deno Edge Function 共用。
 // 身份模型：匿名会话 + 创作者令牌（原型级，非完整账号系统，界面与文档均已注明）。
-// 安全约束：所有输入白名单校验；游戏 HTML 只由内置模板生成；绝不执行或转发用户脚本。
+// 生成游戏通过独立沙箱页面预览；业务进程不执行生成的脚本。
 
 import { generateGame } from './generate.ts';
+import type { AgentService } from './agent.ts';
+import { GAME_CSP } from './shared/artifact.ts';
 import { buildSourcePackage } from './shared/source.ts';
 import {
   DIFFICULTIES,
@@ -36,14 +38,13 @@ export interface HandlerEnv {
 export interface HandlerDeps {
   store: Store;
   env: HandlerEnv;
+  agent?: AgentService;
 }
 
 const ID_RE = /^[0-9a-fA-F-]{8,64}$/;
 const MAX_BODY = 64 * 1024;
 const MAX_PROMPT = 2000;
 const MAX_DESCRIPTION = 500;
-const GAME_CSP =
-  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'";
 
 interface HttpError {
   status: number;
@@ -175,6 +176,9 @@ function versionSummary(version: Version): Record<string, unknown> {
     spec: version.spec,
     note: version.note,
     generationMode: version.generationMode,
+    artifactHash: version.artifactHash,
+    checks: version.checks,
+    agentName: version.agentName,
     createdAt: version.createdAt,
   };
 }
@@ -323,7 +327,8 @@ function buildRoutes(): Route[] {
       handle: async ({ deps }) =>
         json({
           siteName: 'MYolGame',
-          generationMode: modelConfigured(deps.env.model) ? 'model' : 'template',
+          generationMode: deps.agent ? 'agent' : modelConfigured(deps.env.model) ? 'model' : 'template',
+          agent: { configured: Boolean(deps.agent), name: deps.agent?.name ?? null },
           model: {
             configured: modelConfigured(deps.env.model),
             name: deps.env.model.name ?? null,
@@ -507,12 +512,16 @@ function buildRoutes(): Route[] {
           id: crypto.randomUUID(),
           projectId: project.id,
           role: 'system',
-          content: '项目已创建（私有草稿）。' + (modelConfigured(deps.env.model) ? '' : '当前平台未配置真实模型，处于模板模式。'),
+          content: '项目已创建（私有草稿）。' + (deps.agent ? 'Agent 将在后台开发并检查游戏。' : modelConfigured(deps.env.model) ? '' : '当前平台未配置真实模型，处于模板模式。'),
           taskId: null,
           createdAt: now,
         });
 
         try {
+          if (deps.agent) {
+            const task = await deps.agent.submit(project, prompt, initialSpec);
+            return json({ project: projectSummary(project), task }, 202);
+          }
           const { task, version } = await runGenerationTask(deps, project, prompt, body.spec);
           return json(
             { project: projectSummary(project), version: versionSummary(version), task },
@@ -548,6 +557,11 @@ function buildRoutes(): Route[] {
       handle: async ({ deps, req, params }) => {
         const session = await authenticate(deps, req, true);
         const project = await getOwnedProject(deps, params[0]!, session!);
+        if (deps.agent) {
+          for (const task of await deps.store.listTasks(project.id)) {
+            if (!task.finishedAt) await deps.agent.cancel(task);
+          }
+        }
         if (project.gameId) await deps.store.deleteGame(project.gameId);
         await deps.store.deleteProject(project.id);
         return json({ ok: true });
@@ -561,6 +575,10 @@ function buildRoutes(): Route[] {
         const project = await getOwnedProject(deps, params[0]!, session!);
         const body = await readBody(req);
         const prompt = requireString(body.prompt, '提示词', MAX_PROMPT);
+        if (deps.agent) {
+          const task = await deps.agent.submit(project, prompt, sanitizeSpec(body.spec, project.spec));
+          return json({ project: projectSummary(project), task }, 202);
+        }
         const { task, version } = await runGenerationTask(deps, project, prompt, body.spec);
         return json(
           { project: projectSummary(project), version: versionSummary(version), task },
@@ -598,6 +616,29 @@ function buildRoutes(): Route[] {
       },
     },
     {
+      method: 'GET',
+      pattern: /^\/api\/projects\/([^/]+)\/tasks\/([^/]+)$/,
+      handle: async ({ deps, req, params }) => {
+        const session = await authenticate(deps, req, true);
+        const project = await getOwnedProject(deps, params[0]!, session!);
+        const task = await deps.store.getTask(params[1]!);
+        if (!task || task.projectId !== project.id) throw httpError(404, 'task_not_found', '任务不存在');
+        return json({ task });
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/projects\/([^/]+)\/tasks\/([^/]+)\/cancel$/,
+      handle: async ({ deps, req, params }) => {
+        const session = await authenticate(deps, req, true);
+        const project = await getOwnedProject(deps, params[0]!, session!);
+        const task = await deps.store.getTask(params[1]!);
+        if (!task || task.projectId !== project.id) throw httpError(404, 'task_not_found', '任务不存在');
+        if (deps.agent) await deps.agent.cancel(task);
+        return json({ task });
+      },
+    },
+    {
       method: 'POST',
       pattern: /^\/api\/projects\/([^/]+)\/publish$/,
       handle: async ({ deps, req, params }) => {
@@ -605,7 +646,7 @@ function buildRoutes(): Route[] {
         const project = await getOwnedProject(deps, params[0]!, session!);
         const body = await readBody(req).catch(() => ({}) as Record<string, unknown>);
         const description = optionalString(body.description, '介绍', MAX_DESCRIPTION) ??
-          project.spec.title + '：由 MYolGame 模板引擎生成的网页小游戏（玩法：' +
+          project.spec.title + '：由 MYolGame 创作的网页小游戏（基础玩法：' +
           (TEMPLATES.find((t) => t.id === project.spec.template)?.name ?? project.spec.template) +
           '），欢迎试玩。';
         const allowDownload = body.allowDownload === undefined ? project.allowDownload : body.allowDownload === true;
@@ -750,12 +791,17 @@ export function createHandler(deps: HandlerDeps): (req: Request) => Promise<Resp
         const match = route.pattern.exec(path);
         if (!match) continue;
         if (route.method !== req.method) continue;
-        return await route.handle({
+        const context = {
           deps,
           req,
           params: match.slice(1),
           query: url.searchParams,
-        });
+        };
+        // 项目变更与 Worker 的最终提交共用锁，避免回退、删除和提交交错覆盖。
+        if (deps.agent && req.method !== 'GET' && path.startsWith('/api/projects/')) {
+          return await deps.agent.exclusive(match[1]!, () => route.handle(context));
+        }
+        return await route.handle(context);
       }
       // 路径匹配但方法不允许
       for (const route of ROUTES) {

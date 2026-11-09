@@ -171,6 +171,12 @@ export function createSupabaseStore(client: DatabaseClient): Store {
       return fromRows<TaskRecord>(rows);
     },
 
+    async listPendingTasks() {
+      const rows = check(await client.from('myol_tasks').select('*')
+        .eq('generation_mode', 'agent').is('finished_at', null)) as Row[];
+      return fromRows<TaskRecord>(rows);
+    },
+
     async upsertGame(game) {
       check(
         await client
