@@ -1,9 +1,11 @@
-// 匿名会话上下文：创作者令牌保存在浏览器 localStorage（原型身份，非完整账号系统）。
+// 账号会话使用 Cookie；未登录时保留游客创作身份。
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { ApiError, getNickname, getToken, requestJson, saveToken } from './api.ts';
 
 interface SessionState {
+  account?: { username: string; nickname: string } | null;
+  localAccounts?: boolean;
   token: string | null;
   nickname: string;
   ready: boolean;
@@ -34,13 +36,23 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
 
     async function ensure(): Promise<void> {
       try {
+        try {
+          const status = await requestJson<{ enabled: boolean; account: { username: string; nickname: string } | null }>('/account', { auth: false });
+          if (!cancelled) setState(prev => ({ ...prev, localAccounts: status.enabled, account: status.account }));
+          if (status.account) {
+            if (!cancelled) setState({ token: 'cookie', nickname: status.account.nickname, ready: true, error: null, account: status.account, localAccounts: true });
+            return;
+          }
+        } catch (error) {
+          if (!(error instanceof ApiError) || error.status !== 404) throw error;
+        }
         const existing = getToken();
         if (existing) {
           try {
             const me = await requestJson<{ nickname: string }>('/session');
             if (!cancelled) {
               saveToken(existing, me.nickname);
-              setState({ token: existing, nickname: me.nickname, ready: true, error: null });
+              setState(prev => ({ ...prev, token: existing, nickname: me.nickname, ready: true, error: null }));
             }
             return;
           } catch (error) {
@@ -54,7 +66,7 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
         );
         saveToken(created.token, created.nickname);
         if (!cancelled) {
-          setState({ token: created.token, nickname: created.nickname, ready: true, error: null });
+          setState(prev => ({ ...prev, token: created.token, nickname: created.nickname, ready: true, error: null }));
         }
       } catch (error) {
         if (!cancelled) {

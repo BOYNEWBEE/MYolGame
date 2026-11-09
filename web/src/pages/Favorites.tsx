@@ -40,7 +40,7 @@ export default function Favorites(): ReactNode {
       <div className="page-head">
         <h1>我的收藏</h1>
         <p className="muted">
-          收藏保存在服务端，与当前浏览器的匿名会话令牌绑定；换浏览器后不会跟随（原型身份限制）。
+          收藏保存在服务端；登录本地账号后可在同一服务的其他浏览器中访问，游客收藏仅关联当前浏览器。
         </p>
       </div>
 

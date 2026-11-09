@@ -7,6 +7,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHandler, type HandlerEnv } from '../functions/handler.ts';
+import { withLocalAccounts } from './local-accounts.ts';
 import { FileStore } from './store_file.ts';
 import { runSeed } from './seed.ts';
 import { runTemplateSeed } from './template-seed.ts';
@@ -131,7 +132,8 @@ export async function startLocalServer(options: LocalServerOptions = {}): Promis
   const config = options.agent === false ? undefined : options.agent ?? loadAgentConfig();
   if (config && !(store instanceof FileStore)) throw new Error('本地 Agent 需要使用 FileStore');
   const agent = config ? new LocalAgent(store as FileStore, config, options.sandboxDir ?? join(rootDir, '.sandboxes')) : undefined;
-  const handler = createHandler({ store, env: options.env ?? modelEnvFromProcess(), agent });
+  const businessHandler = createHandler({ store, env: options.env ?? modelEnvFromProcess(), agent });
+  const handler = store instanceof FileStore ? withLocalAccounts(store, businessHandler) : businessHandler;
   let ready = false;
 
   const server = createHttpServer(async (req, res) => {
@@ -148,7 +150,7 @@ export async function startLocalServer(options: LocalServerOptions = {}): Promis
         const raw = req.url ?? '/';
         const query = raw.includes('?') ? raw.slice(raw.indexOf('?')) : '';
         const response = await handler(
-          await toWebRequest(req, 'http://127.0.0.1/functions/v1/app' + pathname + query),
+          await toWebRequest(req, 'http://' + (req.headers.host ?? '127.0.0.1') + '/functions/v1/app' + pathname + query),
         );
         await writeWebResponse(res, response);
         return;

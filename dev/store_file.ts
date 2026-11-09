@@ -15,7 +15,14 @@ import type {
   Version,
 } from '../functions/store.ts';
 
+export interface LocalAccount {
+  id: string; username: string; nickname: string; passwordHash: string; salt: string; ownerToken: string;
+}
+export interface AccountSession { hash: string; accountId: string; expiresAt: number }
+
 interface DbShape {
+  accounts: LocalAccount[];
+  accountSessions: AccountSession[];
   creationTemplates: CreationTemplate[];
   sessions: Session[];
   projects: Project[];
@@ -28,6 +35,8 @@ interface DbShape {
 
 function emptyDb(): DbShape {
   return {
+    accounts: [],
+    accountSessions: [],
     creationTemplates: [],
     sessions: [],
     projects: [],
@@ -70,10 +79,54 @@ export class FileStore implements Store {
     this.writeQueue = this.writeQueue.then(async () => {
       await mkdir(dirname(this.filePath), { recursive: true });
       const tmp = this.filePath + '.tmp';
-      await writeFile(tmp, JSON.stringify(this.db), 'utf8');
+      await writeFile(tmp, JSON.stringify(this.db), { encoding: 'utf8', mode: 0o600 });
       await rename(tmp, this.filePath);
     });
     return this.writeQueue;
+  }
+
+  findAccount(username: string): LocalAccount | undefined {
+    return this.db.accounts.find(a => a.username === username);
+  }
+
+  accountForSession(hash: string): LocalAccount | undefined {
+    const session = this.db.accountSessions.find(s => s.hash === hash && s.expiresAt > Date.now());
+    return session && this.db.accounts.find(a => a.id === session.accountId);
+  }
+
+  async saveAccount(account: LocalAccount, session: AccountSession, guestToken?: string): Promise<void> {
+    if (!this.db.accounts.some(a => a.id === account.id)) this.db.accounts.push(account);
+    this.db.accountSessions = this.db.accountSessions.filter(s => s.expiresAt > Date.now());
+    this.db.accountSessions.push(session);
+    if (!this.db.sessions.some(s => s.token === account.ownerToken)) {
+      this.db.sessions.push({ token: account.ownerToken, nickname: account.nickname, official: false, createdAt: new Date().toISOString() });
+    }
+    // 仅迁移真实游客的归属，并撤销旧令牌；账号归属标识永远不交给浏览器。
+    const guest = this.db.sessions.find(s => s.token === guestToken && !s.official && !s.token.startsWith('account:'));
+    if (guest) {
+      for (const p of this.db.projects) if (p.ownerToken === guest.token) p.ownerToken = account.ownerToken;
+      for (const t of this.db.creationTemplates) if (t.ownerToken === guest.token) t.ownerToken = account.ownerToken;
+      for (const f of [...this.db.favorites]) {
+        if (f.token === guest.token && !this.db.favorites.some(x => x.token === account.ownerToken && x.gameId === f.gameId)) {
+          this.db.favorites.push({ ...f, token: account.ownerToken });
+        }
+      }
+      this.db.favorites = this.db.favorites.filter(f => f.token !== guest.token);
+      this.db.sessions = this.db.sessions.filter(s => s.token !== guest.token);
+    }
+    await this.persist();
+  }
+
+  async revokeAccountSession(hash: string): Promise<void> {
+    this.db.accountSessions = this.db.accountSessions.filter(s => s.hash !== hash);
+    await this.persist();
+  }
+
+  async changeAccountPassword(account: LocalAccount, passwordHash: string, salt: string): Promise<void> {
+    account.passwordHash = passwordHash;
+    account.salt = salt;
+    this.db.accountSessions = this.db.accountSessions.filter(s => s.accountId !== account.id);
+    await this.persist();
   }
 
   async createSession(session: Session): Promise<void> {

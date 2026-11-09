@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { NavLink, Link, Route, Routes } from 'react-router-dom';
 import { useSession } from './session.tsx';
+import Account from './pages/Account.tsx';
 import Home from './pages/Home.tsx';
 import GameDetail from './pages/GameDetail.tsx';
 import Create from './pages/Create.tsx';
@@ -45,15 +46,17 @@ export default function App(): ReactNode {
             <NavLink to="/projects">我的项目</NavLink>
             <NavLink to="/favorites">我的收藏</NavLink>
           </nav>
-          <div className="nav-user" title="初版为匿名会话（原型身份），令牌保存在本浏览器中">
+          <div className="nav-user">
             <span className="dot" aria-hidden="true" />
             {session.ready ? session.nickname : '连接中…'}
+            {session.localAccounts && <Link to="/account">{session.account ? '账号管理' : '登录 / 注册'}</Link>}
           </div>
         </div>
       </header>
 
       <main className="main">
         <Routes>
+          <Route path="/account" element={<Account />} />
           <Route path="/" element={<Home />} />
           <Route path="/games/:id" element={<GameDetail />} />
           <Route path="/templates" element={<Templates />} />
@@ -83,7 +86,7 @@ export default function App(): ReactNode {
             生成结果需试玩确认后再发布。
           </p>
           <p>
-            身份为匿名会话与创作者令牌（保存在本浏览器），不是完整账号系统；
+            本地支持账号注册与登录，游客身份保存在本浏览器；
             社区公开游戏与收藏保存在服务端，草稿项目私有，仅创建者可见。
           </p>
         </div>
