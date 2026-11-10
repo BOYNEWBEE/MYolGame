@@ -29,6 +29,11 @@ test('M0 邮箱认证、重启、CSRF、改密撤销和双账号隔离', async (
   assert.equal((await ctx.request('/qca/jobs')).status, 404);
   const a = await ctx.register('Alice@Example.com'); const b = await ctx.register('bob@example.com');
   ctx.restart();
+  const status = await ctx.request('/account/status', { cookie: a, body: {} });
+  assert.equal(status.status, 200);
+  assert.equal((await status.json()).account.email, 'alice@example.com');
+  assert.equal((await ctx.request('/account/status', { cookie: a, body: {}, source: 'https://evil.example' })).status, 403);
+  assert.equal((await ctx.request('/account/status', { cookie: a })).status, 405);
   assert.equal((await (await ctx.request('/me', { cookie: a })).json()).account.email, 'alice@example.com');
   assert.equal((await ctx.request('/account/login', { body: { email: 'alice@example.com', password: 'synthetic-password' }, source: 'https://evil.example' })).status, 403);
   assert.equal((await ctx.request('/account/login', { body: { email: 'alice@example.com', password: 'wrong-password' } })).status, 401);

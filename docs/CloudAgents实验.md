@@ -67,3 +67,13 @@ npm run dev:qca-lab
 - 页面默认需求缩小为左右键移动方块、空格变色、R 重置的最小 Canvas HTML，用于降低首轮试验规模。
 - 原站点 action `8c135fd1-d0fc-45fe-a784-93a9bde11dd3` 仍为当前发布、selected，没有被实验版本替换。工作区 `.qoder.site` 已由平台切换到测试目标；切换 Git 分支不会自动切换站点绑定，后续部署必须核对 Project/Site ID，不可直接假定当前描述文件就是原站点。原描述文件另备份在 `.runtime/qca-live/original-site-descriptor.bak`。
 - 本轮配置调整后 6 项定向测试通过，类型检查、普通和云端构建、函数包检查通过。尚无真实实验任务，已请用户通过普通浏览器在 `/#/account` 注册，再到 `/#/experiments/qca` 点击一次“开始实验”；不绕过平台此前的 BOT_DETECTED 限制。后台开通、发布和实际 Agent 完成是三个不同证据。
+
+## 2026-11-10：登录身份失配修复
+
+用户截图显示前端为未登录，而登录 POST 返回“请先退出当前账号”。已确认前端只在初始化时读身份，且冲突后不复核会话；尚未通过远端日志确认导致最初失配的具体缓存／Cookie 转发原因，不能把它定性为已证实的平台缓存故障。
+
+- 新增只读 POST `/api/account/status`，继续使用 Cookie 和固定来源校验；GET 状态接口保留兼容。返回 Cache-Control private/no-store 与 Vary Cookie/Authorization，浏览器 API 明确使用 same-origin 凭据和 no-store。
+- SessionProvider 提供可调用的 refresh，并用请求代次忽略过期初始化结果。注册、登录、退出、改密后重新读取真实会话；收到 409 时只复核身份，不重发密码或自动切换账号。
+- 账号页增加“刷新登录状态”，避免已经有 Cookie 时仍卡在登录表单而无法退出。
+- 新的真实 HTTPS Chrome 回归测试模拟“页面匿名、服务端已有 Cookie”，验证冲突后恢复账号管理、刷新保持身份、退出变为未登录，且密码请求只发送一次。完整回归 43 项通过，类型检查和云端构建／函数检查通过。
+- 修复版本 action `d8f750b9-81d8-4690-9219-7e3118d25c99` 已在独立测试站点 published=true，访问保持 private；未更改原 M0 站点。真实浏览器修复效果及 Cloud Agents 生成仍待用户继续确认。

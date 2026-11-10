@@ -16,8 +16,8 @@ export async function currentUser(db: DatabaseClient, req: Request): Promise<Clo
   return user && user.credential_version === session.credential_version ? user : null;
 }
 export async function accountRoute(db: DatabaseClient, req: Request, path: string, user: CloudUser | null): Promise<Response | null> {
-  if (['/api/account', '/api/me'].includes(path)) {
-    if (req.method !== 'GET') return fail(405, 'method_not_allowed', '不支持的请求方法');
+  if (['/api/account', '/api/me', '/api/account/status'].includes(path)) {
+    if (req.method !== (path === '/api/account/status' ? 'POST' : 'GET')) return fail(405, 'method_not_allowed', '不支持的请求方法');
     if (path === '/api/me' && !user) return fail(401, 'auth_required', '请先登录');
     return json({ enabled: true, kind: 'email', cloudM0: true, account: user ? profile(user) : null });
   }

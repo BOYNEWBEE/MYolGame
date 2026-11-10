@@ -44,6 +44,8 @@ export async function requestJson<T>(path: string, options: RequestOptions = {})
   }
   const response = await fetch(API_BASE + path, {
     method: options.method ?? 'GET',
+    credentials: 'same-origin',
+    cache: 'no-store',
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });

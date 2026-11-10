@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { appHref } from '../routing.ts';
-import { requestJson } from '../api.ts';
+import { ApiError, requestJson } from '../api.ts';
 import { useSession } from '../session.tsx';
 
 export default function Account() {
@@ -19,8 +19,18 @@ export default function Account() {
         localStorage.removeItem('myol.token');
         localStorage.removeItem('myol.nickname');
       }
+      const current = await session.refresh();
+      if (['login', 'register'].includes(action) && !current) throw new Error('操作已受理，但尚未恢复登录身份，请点击刷新登录状态；不要重复注册');
       window.location.assign(appHref(action === 'password' ? '/account' : cloud ? '/m0' : '/projects'));
-    } catch (e) { setError(e instanceof Error ? e.message : '操作失败'); setBusy(false); }
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        try {
+          const current = await session.refresh();
+          if (current) { setError('已恢复当前登录状态；如需切换账号，请先退出。'); return; }
+        } catch { /* 保留原操作错误，不自动重发登录请求。 */ }
+      }
+      setError(e instanceof Error ? e.message : '操作失败');
+    } finally { setBusy(false); }
   }
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -43,6 +53,10 @@ export default function Account() {
       <button className="btn primary" disabled={busy}>{busy ? '处理中…' : session.account ? '修改密码并退出所有登录' : register ? '注册并登录' : '登录'}</button>
     </form>
     {session.account ? <button className="btn" disabled={busy} onClick={() => void act('logout', {})}>退出登录</button> : <button className="btn" disabled={busy} onClick={() => { setRegister(!register); setError(''); }}>{register ? '已有账号，去登录' : '没有账号，去注册'}</button>}
+    <button className="btn" disabled={busy} onClick={() => {
+      setBusy(true); setError('');
+      void session.refresh().catch(e => setError(e instanceof Error ? e.message : '身份刷新失败')).finally(() => setBusy(false));
+    }}>刷新登录状态</button>
     <p>{cloud ? '邮箱用于登录，当前尚未发送验证邮件；暂不支持邮件找回密码。' : '账号和作品保存在这台服务所在电脑。密码至少 8 位；本地版暂不提供邮件找回密码。'}</p>
   </div>;
 }

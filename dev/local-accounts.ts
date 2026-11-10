@@ -29,7 +29,7 @@ export function withLocalAccounts(store: FileStore, next: (req: Request) => Prom
       const origin = req.headers.get('origin');
       if ((origin && origin !== url.origin) || req.headers.get('sec-fetch-site') === 'cross-site') return fail('不允许跨站请求', 403);
     }
-    if (path === '/account' && req.method === 'GET') return json({ enabled: true, account: account ? info(account) : null });
+    if ((path === '/account' && req.method === 'GET') || (path === '/account/status' && req.method === 'POST')) return json({ enabled: true, account: account ? info(account) : null });
     if (path.startsWith('/account/')) {
       if (req.method !== 'POST') return fail('不支持的请求方法', 405);
       if (!['/account/register', '/account/login', '/account/logout', '/account/password'].includes(path)) return fail('接口不存在', 404);

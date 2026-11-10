@@ -23,7 +23,7 @@ export function createM0Application(options: M0Options) {
       const user = await currentUser(options.db, req);
       const auth = await accountRoute(options.db, req, path, user);
       if (auth) {
-        if (req.method === 'GET' && ['/api/account', '/api/me'].includes(path)) {
+        if ((req.method === 'GET' && ['/api/account', '/api/me'].includes(path)) || (req.method === 'POST' && path === '/api/account/status')) {
           return json({ ...await auth.json(), workerConfigured: options.workerKey().length >= 32, qcaExperiment: Boolean(options.experiment) });
         }
         return auth;

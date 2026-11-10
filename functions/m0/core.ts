@@ -14,7 +14,7 @@ export function rows<T = Record<string, any>>(result: { data: T[] | null; error?
   return result.data;
 }
 export const json = (value: unknown, status = 200, extra: Record<string, string> = {}) => Response.json(value, {
-  status, headers: { 'cache-control': 'private, no-store', 'referrer-policy': 'no-referrer', ...extra },
+  status, headers: { 'cache-control': 'private, no-store', 'referrer-policy': 'no-referrer', vary: 'Cookie, Authorization', ...extra },
 });
 export async function input(req: Request): Promise<Record<string, unknown>> {
   if (req.headers.get('content-type')?.split(';')[0].trim() !== 'application/json') return fail(415, 'invalid_input', '请使用 JSON 请求');
