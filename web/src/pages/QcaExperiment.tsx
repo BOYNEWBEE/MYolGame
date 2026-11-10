@@ -11,7 +11,7 @@ export default function QcaExperiment() {
   const session = useSession();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [job, setJob] = useState<Job | null>(null);
-  const [prompt, setPrompt] = useState('生成一个可用空格开始、方向键操作、R 重启的 Canvas 贪吃蛇小游戏。');
+  const [prompt, setPrompt] = useState('生成一个最小可运行的 Canvas 小游戏：左右键移动方块，空格改变颜色，R 重置。只返回完整 HTML。');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [configured, setConfigured] = useState(false);

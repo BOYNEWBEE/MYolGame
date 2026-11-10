@@ -2,6 +2,7 @@
 import type { DatabaseClient } from '../store_supabase.ts';
 import type { CloudUser } from '../m0/auth.ts';
 import { fail, input, json, quota, rows, sha256 } from '../m0/core.ts';
+import { QCA_SCOPE } from './config.ts';
 import type { CloudClient } from './client.ts';
 
 export interface QcaJob {
@@ -10,7 +11,7 @@ export interface QcaJob {
   execution: 'cloud' | 'fixture'; accepted_events: string[]; output: string; created_at: string;
 }
 interface Options { db: DatabaseClient; cloud: CloudClient; model: () => string; ready: () => boolean; fixture?: boolean }
-const SCOPE = 'myolgame.01a1c071-576b-751a-9220-2186b1a6e0de.qca-experiment-v1';
+const SCOPE = QCA_SCOPE;
 const initial = 'new';
 const plan: Record<string, { pending: string; ready: string; resource: string }> = {
   new: { pending: 'creating_agent', ready: 'agent_ready', resource: 'agents' },

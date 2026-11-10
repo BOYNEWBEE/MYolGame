@@ -93,4 +93,4 @@ npm run test:qca       # 受控 API 和真实 HTTPS Chrome，不调用真实模�
 npm run dev:qca-lab    # 本机受控演示，默认 https://127.0.0.1:8790/account
 ```
 
-本轮 42 项完整测试通过；尚未启用 Cloud Agents、创建 PAT、执行实验表迁移或发布分支。配置、成本限制和故障边界见 [Cloud Agents 实验](docs/CloudAgents实验.md)。
+初始分支 42 项完整测试通过。经用户授权，已发布[独立私有测试站点](https://myolgame-qca-lab-bq5p9vqwgrc.qoder.zone/#/experiments/qca)，开通平台托管 Cloud Agents 凭据并应用独立实验库；真实需求提交和生成验收尚待普通浏览器发起。原 M0 站点未更新。配置、成本限制和故障边界见 [Cloud Agents 实验](docs/CloudAgents实验.md)。
