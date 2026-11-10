@@ -25,7 +25,9 @@ function setup(db = new M0TestDatabase()) {
 }
 
 test('M0 邮箱认证、重启、CSRF、改密撤销和双账号隔离', async () => {
-  const ctx = setup(); const a = await ctx.register('Alice@Example.com'); const b = await ctx.register('bob@example.com');
+  const ctx = setup();
+  assert.equal((await ctx.request('/qca/jobs')).status, 404);
+  const a = await ctx.register('Alice@Example.com'); const b = await ctx.register('bob@example.com');
   ctx.restart();
   assert.equal((await (await ctx.request('/me', { cookie: a })).json()).account.email, 'alice@example.com');
   assert.equal((await ctx.request('/account/login', { body: { email: 'alice@example.com', password: 'synthetic-password' }, source: 'https://evil.example' })).status, 403);

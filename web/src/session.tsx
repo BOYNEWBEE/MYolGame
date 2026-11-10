@@ -8,6 +8,7 @@ interface SessionState {
   localAccounts?: boolean;
   accountKind?: 'email';
   cloudM0?: boolean;
+  qcaExperiment?: boolean;
   cloudWorkerConfigured?: boolean;
   token: string | null;
   nickname: string;
@@ -40,14 +41,14 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
     async function ensure(): Promise<void> {
       try {
         try {
-          const status = await requestJson<{ enabled: boolean; kind?: 'email'; cloudM0?: boolean; workerConfigured?: boolean; account: { username: string; nickname: string } | null }>('/account', { auth: false });
-          if (!cancelled) setState(prev => ({ ...prev, localAccounts: status.enabled, account: status.account, accountKind: status.kind, cloudM0: status.cloudM0, cloudWorkerConfigured: status.workerConfigured }));
+          const status = await requestJson<{ enabled: boolean; kind?: 'email'; cloudM0?: boolean; workerConfigured?: boolean; qcaExperiment?: boolean; account: { username: string; nickname: string } | null }>('/account', { auth: false });
+          if (!cancelled) setState(prev => ({ ...prev, localAccounts: status.enabled, account: status.account, accountKind: status.kind, cloudM0: status.cloudM0, cloudWorkerConfigured: status.workerConfigured, qcaExperiment: status.qcaExperiment }));
           if (status.cloudM0 && !status.account) {
-            if (!cancelled) setState({ token: null, nickname: '未登录', ready: true, error: null, account: null, localAccounts: true, accountKind: 'email', cloudM0: true, cloudWorkerConfigured: status.workerConfigured });
+            if (!cancelled) setState({ token: null, nickname: '未登录', ready: true, error: null, account: null, localAccounts: true, accountKind: 'email', cloudM0: true, cloudWorkerConfigured: status.workerConfigured, qcaExperiment: status.qcaExperiment });
             return;
           }
           if (status.account) {
-            if (!cancelled) setState({ token: 'cookie', nickname: status.account.nickname, ready: true, error: null, account: status.account, localAccounts: true, accountKind: status.kind, cloudM0: status.cloudM0, cloudWorkerConfigured: status.workerConfigured });
+            if (!cancelled) setState({ token: 'cookie', nickname: status.account.nickname, ready: true, error: null, account: status.account, localAccounts: true, accountKind: status.kind, cloudM0: status.cloudM0, cloudWorkerConfigured: status.workerConfigured, qcaExperiment: status.qcaExperiment });
             return;
           }
         } catch (error) {

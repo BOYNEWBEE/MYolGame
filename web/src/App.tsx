@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { NavLink, Link, Route, Routes } from 'react-router-dom';
 import { useSession } from './session.tsx';
+import QcaExperiment from './pages/QcaExperiment.tsx';
 import M0 from './pages/M0.tsx';
 import Account from './pages/Account.tsx';
 import Home from './pages/Home.tsx';
@@ -47,6 +48,7 @@ export default function App(): ReactNode {
             {session.cloudM0 && <NavLink to="/m0">云端任务</NavLink>}
             <NavLink to="/projects">我的项目</NavLink>
             <NavLink to="/favorites">我的收藏</NavLink>
+            {session.qcaExperiment && <NavLink to="/experiments/qca">新路线实验</NavLink>}
           </nav>
           <div className="nav-user">
             <span className="dot" aria-hidden="true" />
@@ -57,8 +59,9 @@ export default function App(): ReactNode {
       </header>
 
       <main className="main">
-        {session.cloudM0 && <div className="page" role="status">当前为云端 M0：任务仅模拟基础设施执行，不调用 AI、不生成游戏。<Link to="/m0">进入云端任务</Link></div>}
+        {session.cloudM0 && <div className="page" role="status">{session.qcaExperiment ? '当前部署提供新路线实验；M0 任务仍为模拟，实验执行方式以实验页标记为准。' : '当前为云端 M0：任务仅模拟基础设施执行，不调用 AI、不生成游戏。'}<Link to="/m0">进入云端任务</Link></div>}
         <Routes>
+          <Route path="/experiments/qca" element={<QcaExperiment />} />
           <Route path="/m0" element={<M0 />} />
           <Route path="/account" element={<Account />} />
           <Route path="/" element={<Home />} />

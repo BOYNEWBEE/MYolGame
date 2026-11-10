@@ -4,12 +4,19 @@ import { createDatabaseClient, createSiteContext, errorResponse } from './_qoder
 import { createHandler } from './handler.ts';
 import { createSupabaseStore } from './store_supabase.ts';
 import { createM0Application } from './m0/app.ts';
+import { createQcaExperiment } from './qca/experiment.ts';
+import { liveClient } from './qca/client.ts';
 import { PUBLIC_ORIGIN } from './site-config.ts';
 
 const db = createDatabaseClient();
 const store = createSupabaseStore(db);
 const handle = createM0Application({
   db,
+  experiment: Deno.env.get('APP_QCA_EXPERIMENT_ENABLED') === 'true' ? createQcaExperiment({
+    db, cloud: liveClient(() => Deno.env.get('QODER_PAT')),
+    model: () => Deno.env.get('APP_QCA_MODEL') ?? '',
+    ready: () => Boolean(Deno.env.get('QODER_PAT')),
+  }) : undefined,
   business: (request, principal) => createHandler({
     store: { ...store, getSession: async token => principal?.token === token ? principal : null },
     env: { model: {} },

@@ -83,3 +83,14 @@ npm test
 - 本地版支持**用户名＋密码**注册登录，入口为顶部“登录 / 注册”或 `/account`；游客项目、收藏及模板在注册或登录时自动合并，旧游客令牌撤销。同一本地服务内可跨浏览器登录。账号、密码哈希和会话保存在 `data/db.json`，请保护并备份该文件；不要提交到 Git。密码为 8–128 位，使用带随机盐的 scrypt 哈希；登录 Cookie 为 HttpOnly、SameSite=Strict，有效期 7 天。支持退出当前登录、修改密码并撤销所有登录；暂不提供邮件验证、忘记密码恢复、管理员账号面板。云端入口使用独立的邮箱账号模块，两个账号存储不自动同步。
 - 云端 M0 需 Qoder `function_backend`、当前注入 SDK 和应用凭据透传支持；独立云端调度调用消费接口。迁移和发布已完成；公网双账号业务验收和后台调度运行仍待完成。
 - 运行数据、截图、构建产物与依赖目录均不进入 Git。
+
+## Cloud Agents 实验分支
+
+`experiment/cloud-agents-route` 保留原 M0，新增 `/experiments/qca` 和默认关闭的实验接口，验证单轮 HTML 生成、独立会话和结果恢复。
+
+```bash
+npm run test:qca       # 受控 API 和真实 HTTPS Chrome，不调用真实模型
+npm run dev:qca-lab    # 本机受控演示，默认 https://127.0.0.1:8790/account
+```
+
+本轮 42 项完整测试通过；尚未启用 Cloud Agents、创建 PAT、执行实验表迁移或发布分支。配置、成本限制和故障边界见 [Cloud Agents 实验](docs/CloudAgents实验.md)。

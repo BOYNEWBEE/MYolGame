@@ -1,11 +1,11 @@
 // Qoder 云端 M0 入口适配：公网写入须登录且来自固定来源，后台消费单独鉴权。
 import type { Session } from '../store.ts';
 import type { DatabaseClient } from '../store_supabase.ts';
-import { accountRoute, currentUser } from './auth.ts';
+import { accountRoute, currentUser, type CloudUser } from './auth.ts';
 import { equal, fail, json, M0Error, pathOf, publicOrigin, trustedWrite } from './core.ts';
 import { taskRoute, tick } from './tasks.ts';
 
-export interface M0Options { db: DatabaseClient; origin: () => string; workerKey: () => string; business?: (req: Request, principal?: Session) => Promise<Response> }
+export interface M0Options { db: DatabaseClient; origin: () => string; workerKey: () => string; experiment?: (req: Request, path: string, user: CloudUser | null) => Promise<Response | null>; business?: (req: Request, principal?: Session) => Promise<Response> }
 export function createM0Application(options: M0Options) {
   return async (req: Request): Promise<Response> => {
     try {
@@ -24,9 +24,13 @@ export function createM0Application(options: M0Options) {
       const auth = await accountRoute(options.db, req, path, user);
       if (auth) {
         if (req.method === 'GET' && ['/api/account', '/api/me'].includes(path)) {
-          return json({ ...await auth.json(), workerConfigured: options.workerKey().length >= 32 });
+          return json({ ...await auth.json(), workerConfigured: options.workerKey().length >= 32, qcaExperiment: Boolean(options.experiment) });
         }
         return auth;
+      }
+      if (path.startsWith('/api/qca/')) {
+        if (!options.experiment) return fail(404, 'experiment_disabled', '此部署未启用新路线实验');
+        return await options.experiment(req, path, user) ?? fail(404, 'not_found', '实验接口不存在');
       }
       if (path === '/api/meta' && req.method === 'GET' && options.business) {
         const response = await options.business(req);
