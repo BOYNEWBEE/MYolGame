@@ -91,3 +91,12 @@ npm run dev:qca-lab
 - 新增 2 项测试：后端验证显式选择与模型锁定，真实 HTTPS Chrome 验证“两条旧任务继续、不新增第三条”。完整回归 45 项全部通过，类型检查、普通与云端构建、函数包静态检查通过。
 
 模型修复版已在独立测试站点发布，action `0a2a919a-85ec-443e-9430-542199135d88`，平台确认 published=true。新增目录表使测试库共 14 张表；未改变原 M0 数据库。用户需要刷新实验页使其读取目录快照，再明确选模型继续原任务；截至本轮记录尚未取得新目录快照或真实生成结果，因此不能宣称已验证具体可用模型或模型生成成功。
+
+## 2026-11-10：首次真实单轮生成与保存确认
+
+- 普通浏览器刷新后，模型目录快照已取得：目标账号返回 12 个模型，启用字段为 is_enabled，auto、fast、dfmodel 等均为 true，目录中没有 ultimate。已确认之前阻塞源于预设模型 ID 与实际目录不匹配，而不是启用字段解析问题；不能据此推断账号套餐或额度异常。
+- 用户明确选择 DeepSeek-Flash（dfmodel），继续原先任务；Owner 只读查询确认该任务 state=completed、execution=cloud、model=dfmodel、revision=17，另一条重复任务为 cancelled，任务总数仍为两条。
+- 单条任务结果读取确认已保存完整 HTML：4076 字节，包含 doctype、canvas 和结束 html 标签，通过现有 validateArtifact 结构检查；SHA-256 为 `3cc493b1c9c4105f45b9e75dba9eabeaf9f11a9bc1f5ed38fbf323875aa48ec8`。生成产物仅保存在被 Git 忽略的 `.runtime/qca-live/verified-candidate.html`，不提交源码仓库。
+- Agent、Environment、Session 映射均存在，固定 Agent 版本为 1，数据库记录受理事件 1 个。没有读取或输出 PAT。
+- 用户截图确认“结果已保存”，并在隔离试玩中渲染了 Canvas 画布与方块。由此完成一次真实“应用提交 → Cloud Agents 执行 → 候选源码归档 → 网页预览”的验证。
+- 证据边界：没有把截图当作键盘控制和完整玩法验收；真实运行时关闭网页再恢复、持续修改、多文件构建、自动 Chrome 检查、资源清理和完整故障恢复仍未验收。此前本地受控测试的关闭页面恢复证据与本轮真实结果分开记录。
