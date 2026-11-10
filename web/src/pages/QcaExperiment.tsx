@@ -4,7 +4,8 @@ import { Link } from 'react-router-dom';
 import { requestJson } from '../api.ts';
 import { useSession } from '../session.tsx';
 import { embedGamePolicy } from '@shared/artifact.ts';
-interface Job { id: string; prompt: string; state: string; revision: number; output: string; execution: 'fixture' | 'cloud' }
+interface Job { id: string; prompt: string; state: string; revision: number; model: string; output: string; execution: 'fixture' | 'cloud' }
+interface AvailableModel { id: string; name: string; enabled: boolean; availability: string }
 const steps = new Set(['new', 'agent_ready', 'environment_ready', 'session_ready']);
 const labels: Record<string, string> = { new: '待初始化', creating_agent: 'Agent 创建结果待确认', agent_ready: 'Agent 已准备', creating_environment: '独立环境创建结果待确认', environment_ready: '环境已准备', creating_session: '会话创建结果待确认', session_ready: '会话已准备', dispatching: '需求派发结果待确认', submitted: '云端运行中', completed: '结果已保存', failed: '云端执行失败', cancelling: '取消结果待确认', cancel_requested: '已请求取消，等待确认', cancelled: '已取消' };
 export default function QcaExperiment() {
@@ -16,6 +17,8 @@ export default function QcaExperiment() {
   const [busy, setBusy] = useState(false);
   const [configured, setConfigured] = useState(false);
   const [execution, setExecution] = useState('cloud');
+  const [models, setModels] = useState<AvailableModel[]>([]);
+  const [selectedModel, setSelectedModel] = useState('');
   const [preview, setPreview] = useState(false);
   const inFlight = useRef(false);
   const owner = session.account?.username;
@@ -35,6 +38,23 @@ export default function QcaExperiment() {
       }).catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : '读取失败'); });
     return () => { cancelled = true; };
   }, [session.qcaExperiment, owner, storageKey]);
+  async function readModels() {
+    const result = await requestJson<{ models: AvailableModel[]; configuredModel: string }>('/qca/models', { method: 'POST', body: {} });
+    setModels(result.models);
+    setSelectedModel(current => result.models.some(m => m.id === current && m.enabled) ? current : result.models.some(m => m.id === result.configuredModel && m.enabled) ? result.configuredModel : '');
+  }
+  useEffect(() => {
+    if (!configured || !owner) return;
+    void readModels().catch(e => setError(e instanceof Error ? e.message : '模型目录读取失败'));
+  }, [configured, owner]);
+  async function prepareAndAdvance(value: Job) {
+    let current = value;
+    if (current.state === 'new' && selectedModel && current.model !== selectedModel) {
+      const changed = await requestJson<{ job: Job }>('/qca/jobs/' + current.id + '/model', { method: 'POST', body: { model: selectedModel, revision: current.revision } });
+      save(changed.job); current = changed.job;
+    }
+    await advance(current);
+  }
   // 只在已确认被云端受理后轮询读取和归档，不派发消息；关闭网页不会终止云端任务。
   useEffect(() => {
     if (!job || !['submitted', 'cancel_requested'].includes(job.state)) return;
@@ -63,11 +83,12 @@ export default function QcaExperiment() {
     e.preventDefault(); if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setError(''); setPreview(false);
     try {
+      if (job?.state === 'new' && job.prompt === prompt.trim()) { await prepareAndAdvance(job); return; }
       const saved = JSON.parse(sessionStorage.getItem(storageKey) ?? 'null');
-      const command = saved ?? { key: crypto.randomUUID(), prompt: prompt.trim() };
+      const command = saved ?? { key: crypto.randomUUID(), prompt: prompt.trim(), model: selectedModel };
       if (saved && saved.prompt !== prompt.trim()) throw new Error('请先恢复原提交，避免结果未知时创建另一任务');
       sessionStorage.setItem(storageKey, JSON.stringify(command));
-      const result = await requestJson<{ job: Job }>('/qca/jobs', { method: 'POST', body: { prompt: command.prompt }, headers: { 'idempotency-key': command.key } });
+      const result = await requestJson<{ job: Job }>('/qca/jobs', { method: 'POST', body: { prompt: command.prompt, model: command.model ?? selectedModel }, headers: { 'idempotency-key': command.key } });
       save(result.job); sessionStorage.removeItem(storageKey);
       await advance(result.job);
     } catch (e) { setError(e instanceof Error ? e.message : '提交失败，请查看原任务状态'); }
@@ -77,7 +98,7 @@ export default function QcaExperiment() {
     if (!job || inFlight.current) return;
     inFlight.current = true; setBusy(true); setError('');
     try {
-      if (name === 'advance') await advance(job);
+      if (name === 'advance') await prepareAndAdvance(job);
       else {
         const result = await requestJson<{ job: Job; pending?: boolean }>('/qca/jobs/' + job.id + '/' + name, { method: 'POST', body: {} });
         save(result.job);
@@ -93,15 +114,21 @@ export default function QcaExperiment() {
     <h1>Cloud Agents 新路线实验</h1>
     <p>{execution === 'fixture' ? '本地受控接口演示，不调用真实模型。' : '此实验调用真实 Cloud Agents，可能消耗额度。'}仅验证单轮 HTML 生成与恢复，不代表游戏玩法、构建或浏览器检查通过。</p>
     {!configured && <p role="status">Cloud Agents 尚未配置，真实执行未启用。</p>}
+    <label>可用模型<select aria-label="可用模型" value={selectedModel} disabled={busy} onChange={e => setSelectedModel(e.target.value)}>
+      <option value="">请选择账号已启用模型</option>
+      {models.map(m => <option key={m.id} value={m.id} disabled={!m.enabled}>{m.name}（{m.id}）{m.enabled ? '' : m.availability === 'unknown' ? ' · 启用标记未确认' : ' · 未启用'}</option>)}
+    </select></label>
+    <button className="btn" disabled={busy || !configured} onClick={() => void readModels().catch(e => setError(e instanceof Error ? e.message : '模型读取失败'))}>刷新模型目录</button>
+    {configured && models.length > 0 && !models.some(m => m.enabled) && <p role="status">目录中没有通过启用校验的模型，尚未分配任何云端资源。</p>}
     <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
       <label>实验需求<textarea required maxLength={2000} value={prompt} onChange={e => setPrompt(e.target.value)} /></label>
-      <button className="btn primary" disabled={!configured || busy || !prompt.trim()}>开始实验</button>
+      <button className="btn primary" disabled={!configured || busy || !prompt.trim() || !selectedModel}>{job?.state === 'new' && job.prompt === prompt.trim() ? '使用所选模型继续当前实验' : '开始实验'}</button>
     </form>
     {error && <p role="alert">{error}</p>}
     <h2>我的实验任务</h2>
     <ul>{jobs.map(j => <li key={j.id}><button className="btn" onClick={() => { setJob(j); setPreview(false); }}>{j.prompt} · {labels[j.state] ?? j.state}</button></li>)}</ul>
-    {job && <section><h2>状态：{labels[job.state] ?? job.state}</h2>
-      {steps.has(job.state) && <button className="btn" disabled={busy} onClick={() => void action('advance')}>继续初始化</button>}
+    {job && <section><h2>状态：{labels[job.state] ?? job.state}</h2><p>此任务模型：{job.model}</p>
+      {steps.has(job.state) && <button className="btn" disabled={busy || (job.state === 'new' && !selectedModel)} onClick={() => void action('advance')}>{job.state === 'new' ? '使用所选模型继续此任务' : '继续初始化'}</button>}
       {!steps.has(job.state) && !['submitted', 'completed', 'failed', 'cancelled', 'cancel_requested'].includes(job.state) && <button className="btn" disabled={busy} onClick={() => void action('reconcile')}>核对原操作结果</button>}
       {!['completed', 'failed', 'cancelled', 'cancel_requested'].includes(job.state) && <button className="btn" disabled={busy} onClick={() => void action('cancel')}>取消实验任务</button>}
       {job.output && <><h3>保存的候选源码／回复</h3><textarea aria-label="候选结果" readOnly value={job.output} style={{ width: '100%', minHeight: 220 }} />

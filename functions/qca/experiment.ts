@@ -19,12 +19,30 @@ const plan: Record<string, { pending: string; ready: string; resource: string }>
   environment_ready: { pending: 'creating_session', ready: 'session_ready', resource: 'sessions' },
   session_ready: { pending: 'dispatching', ready: 'submitted', resource: '' },
 };
-export const jobView = (job: QcaJob) => ({ id: job.id, prompt: job.prompt, state: job.state, revision: job.revision, output: job.output, createdAt: job.created_at, experimental: true, execution: job.execution });
+export const jobView = (job: QcaJob) => ({ id: job.id, prompt: job.prompt, state: job.state, revision: job.revision, model: job.model, output: job.output, createdAt: job.created_at, experimental: true, execution: job.execution });
 const metadata = (job: QcaJob, role: string) => ({ app_scope: SCOPE, app_job: job.id, app_role: role });
 const stableStates = new Set([...Object.keys(plan), 'submitted', 'completed', 'failed', 'cancelled']);
 
 export function createQcaExperiment(options: Options) {
   const { db, cloud } = options;
+  async function catalog() {
+    if (!options.ready()) return fail(503, 'qca_not_configured', 'Cloud Agents 凭据尚未配置');
+    const result = await cloud.request('/api/v1/cloud/models');
+    if (!Array.isArray(result?.data) || result.has_more === true) return fail(503, 'qca_model_catalog_invalid', '模型目录格式与已核对的接口契约不符，未自动放行任何模型');
+    // 私有目录快照仅供核对接口差异，不作为权限或模型校验缓存，且不写入日志。
+    const snapshot = { id: SCOPE, models: result.data, observed_at: new Date().toISOString() };
+    const inserted = rows(await db.from('myol_qca_model_catalog').insertIfAbsent(snapshot, { onConflict: 'id' }).select('id'));
+    if (!inserted.length) rows(await db.from('myol_qca_model_catalog').update(snapshot).eq('id', SCOPE).select('id'));
+    return result.data.filter((m: any) => typeof m?.id === 'string' && m.id.length <= 200).map((m: any) => ({
+      id: m.id as string, name: typeof m.display_name === 'string' ? m.display_name : m.id as string,
+      enabled: m.is_enabled === true, availability: typeof m.is_enabled === 'boolean' ? (m.is_enabled ? 'enabled' : 'disabled') : 'unknown',
+    }));
+  }
+  async function requireModel(id: string, owner: string) {
+    await quota(db, 'qca-model-check:' + owner, 60, 3600000);
+    const models = await catalog();
+    if (!models.some((m: any) => m.id === id && m.enabled)) return fail(503, 'qca_model_unavailable', '当前模型未通过启用校验，请读取模型目录并明确选择已启用模型，再继续原任务');
+  }
   async function owned(id: string, owner: string): Promise<QcaJob> {
     const job = rows<QcaJob>(await db.from('myol_qca_jobs').select('*').eq('id', id).eq('owner_id', owner).limit(1))[0];
     if (!job) return fail(404, 'job_not_found', '实验任务不存在或无权访问');
@@ -98,7 +116,11 @@ export function createQcaExperiment(options: Options) {
     if (!path.startsWith('/api/qca/')) return null;
     if (!user) return fail(401, 'auth_required', '请先登录实验账号');
     if (path === '/api/qca/config' && req.method === 'GET') return json({ enabled: true, configured: Boolean(options.model()) && options.ready(), experimental: true, execution: options.fixture ? 'fixture' : 'cloud' });
-    const match = /^\/api\/qca\/jobs(?:\/([a-f0-9]{64})(?:\/(advance|refresh|reconcile|cancel))?)?$/.exec(path);
+    if (path === '/api/qca/models' && req.method === 'POST') {
+      await quota(db, 'qca-models:' + user.id, 60, 3600000);
+      return json({ models: await catalog(), configuredModel: options.model() });
+    }
+    const match = /^\/api\/qca\/jobs(?:\/([a-f0-9]{64})(?:\/(advance|refresh|reconcile|cancel|model))?)?$/.exec(path);
     if (!match) return fail(404, 'not_found', '实验接口不存在');
     const id = match[1], action = match[2];
     if (req.method === 'GET') {
@@ -111,23 +133,34 @@ export function createQcaExperiment(options: Options) {
     if (!id) {
       const value = await input(req);
       const prompt = typeof value.prompt === 'string' ? value.prompt.trim() : '';
+      const selectedModel = typeof value.model === 'string' ? value.model : options.model();
       const key = req.headers.get('idempotency-key') ?? '';
       if (!prompt || prompt.length > 2000 || !/^[a-f0-9-]{36}$/i.test(key)) return fail(400, 'invalid_input', '需求须为 1–2000 字并提供 UUID 提交标识');
       const jobId = await sha256(SCOPE + ':' + user.id + ':' + key);
       const existing = rows<QcaJob>(await db.from('myol_qca_jobs').select('*').eq('id', jobId).eq('owner_id', user.id).limit(1))[0];
       if (existing) {
-        if (existing.prompt !== prompt) return fail(409, 'idempotency_conflict', '提交标识已用于另一需求');
+        if (existing.prompt !== prompt || existing.model !== selectedModel) return fail(409, 'idempotency_conflict', '提交标识已用于另一需求');
         return json({ job: jobView(existing) });
       }
+      await requireModel(selectedModel, user.id);
       await quota(db, 'qca:' + user.id, 3, 86400000);
-      const job: QcaJob = { id: jobId, owner_id: user.id, prompt, model: options.model(), state: initial, revision: 1,
+      const job: QcaJob = { id: jobId, owner_id: user.id, prompt, model: selectedModel, state: initial, revision: 1,
         execution: options.fixture ? 'fixture' : 'cloud', agent_id: '', agent_version: 0, environment_id: '', session_id: '', accepted_events: [], output: '', created_at: new Date().toISOString() };
       const inserted = rows(await db.from('myol_qca_jobs').insertIfAbsent(job, { onConflict: 'id' }).select('id'));
       const saved = inserted.length ? job : await owned(jobId, user.id);
-      if (saved.prompt !== prompt) return fail(409, 'idempotency_conflict', '提交标识冲突');
+      if (saved.prompt !== prompt || saved.model !== selectedModel) return fail(409, 'idempotency_conflict', '提交标识冲突');
       return json({ job: jobView(saved) }, inserted.length ? 201 : 200);
     }
     let job = await owned(id, user.id);
+    if (action === 'model') {
+      const value = await input(req);
+      if (job.state !== 'new' || job.agent_id || job.environment_id || job.session_id) return fail(409, 'qca_model_pinned', '资源创建后不能切换模型，请继续核对原任务');
+      if (value.revision !== job.revision || typeof value.model !== 'string') return fail(409, 'write_conflict', '任务状态已变化，请刷新后重试');
+      await requireModel(value.model, user.id);
+      const updated = await change(job, { model: value.model });
+      if (!updated) return fail(409, 'write_conflict', '任务已被其他请求更新');
+      return json({ job: jobView(updated) });
+    }
     if (action === 'refresh') {
       if (['submitted', 'cancel_requested'].includes(job.state)) job = await collect(job);
       return json({ job: jobView(job) });
@@ -163,12 +196,7 @@ export function createQcaExperiment(options: Options) {
     const step = plan[job.state];
     if (value.revision !== job.revision) return json({ job: jobView(job), changed: false });
     if (!step) return json({ job: jobView(job), changed: false });
-    if (job.state === 'new') {
-      const models = await cloud.request('/api/v1/cloud/models');
-      if (!Array.isArray(models?.data) || !models.data.some((model: any) => model.id === job.model && model.is_enabled === true)) {
-        return fail(503, 'qca_model_unavailable', '配置模型不在当前账号的启用列表中，不会自动切换模型');
-      }
-    }
+    if (job.state === 'new') await requireModel(job.model, user.id);
     await quota(db, 'qca-advance:' + user.id, 30, 3600000);
     const claim = await change(job, { state: step.pending });
     if (!claim) return json({ job: jobView(await owned(id, user.id)), changed: false });

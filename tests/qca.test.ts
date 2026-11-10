@@ -108,3 +108,27 @@ test('QCA 传输不跟随重定向、不重试写入、不向错误输出泄露 
   await assert.rejects(client.request('https://untrusted.invalid/api/v1/cloud/agents'));
   assert.equal(requests, 1);
 });
+
+test('QCA 读取真实目录、显式换用已启用模型并恢复原任务，创建资源后锁定模型', async () => {
+  const c = setup(); let job = await c.create();
+  c.cloud.models = [{ id: 'available-model', display_name: '可用测试模型', is_enabled: true }, { id: 'disabled-model', is_enabled: false }, { id: 'unknown-model' }];
+  const unavailable = await c.call('/jobs/' + job.id + '/advance', { revision: job.revision });
+  assert.equal(unavailable.status, 503);
+  assert.equal(c.cloud.resources.agents.length, 0);
+  const catalog = await c.call('/models', {});
+  assert.equal(catalog.status, 200);
+  assert.equal(catalog.body.models[0].enabled, true);
+  assert.equal(catalog.body.models[1].enabled, false);
+  assert.equal(catalog.body.models[2].availability, 'unknown');
+  assert.equal((await c.call('/models', {}, null)).status, 401);
+  assert.equal((await c.call('/jobs/' + job.id + '/model', { model: 'disabled-model', revision: job.revision })).status, 503);
+  assert.equal((await c.call('/jobs/' + job.id + '/model', { model: 'unknown-model', revision: job.revision })).status, 503);
+  const changed = await c.call('/jobs/' + job.id + '/model', { model: 'available-model', revision: job.revision });
+  assert.equal(changed.status, 200); job = changed.body.job;
+  assert.equal(c.db.tables.get('myol_qca_jobs')!.length, 1);
+  assert.equal(job.model, 'available-model');
+  assert.equal((await c.call('/jobs/' + job.id + '/model', { model: 'available-model', revision: 1 })).status, 409);
+  job = await c.advance(job);
+  assert.equal(c.cloud.resources.agents[0].model, 'available-model');
+  assert.equal((await c.call('/jobs/' + job.id + '/model', { model: 'available-model', revision: job.revision })).status, 409);
+});

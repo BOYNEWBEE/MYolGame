@@ -7,6 +7,7 @@ export class QcaFixture implements CloudClient {
   events = new Map<string, any[]>();
   failAfter = '';
   autoComplete = false;
+  models: { id: string; is_enabled?: boolean; display_name?: string }[] = [{ id: 'fixture-model', is_enabled: true }];
   completeAll() {
     for (const s of this.resources.sessions) {
       s.status = 'idle';
@@ -19,7 +20,7 @@ export class QcaFixture implements CloudClient {
     const url = new URL(path, 'https://fixture.invalid');
     const suffix = url.pathname.slice('/api/v1/cloud/'.length).split('/');
     const kind = suffix[0]!, id = suffix[1], action = suffix[2];
-    if (method === 'GET' && kind === 'models') return { data: [{ id: 'fixture-model', is_enabled: true }], has_more: false };
+    if (method === 'GET' && kind === 'models') return { data: structuredClone(this.models), has_more: false };
     if (method === 'POST' && !id) {
       const resource = { ...structuredClone(options.body), id: (kind === 'agents' ? 'agent_' : kind === 'environments' ? 'env_' : 'sess_') + crypto.randomUUID().replaceAll('-', ''), version: 1, status: 'idle' };
       this.resources[kind]!.push(resource);

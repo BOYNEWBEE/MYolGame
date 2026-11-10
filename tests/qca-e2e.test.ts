@@ -74,3 +74,33 @@ test('已有 Cookie 但页面误判未登录时，登录冲突会同步真实身
     assert.equal(loginCalls, 1);
   } finally { await browser.close(); await lab.close(); await rm(dir, { recursive: true, force: true }); }
 });
+
+test('旧任务模型不可用时，选择目录模型继续原任务，不创建第三个任务', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'myol-qca-model-'));
+  const lab = await startQcaLab({ directory: dir, autoComplete: false });
+  const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', headless: true });
+  try {
+    const context = await browser.newContext({ ignoreHTTPSErrors: true });
+    const auth = await context.request.post(lab.origin + '/functions/v1/app/api/auth/register', {
+      headers: { origin: lab.origin }, data: { email: 'catalog@example.invalid', password: 'synthetic-catalog-password' },
+    });
+    assert.equal(auth.status(), 201);
+    for (let i = 0; i < 2; i++) {
+      const created = await context.request.post(lab.origin + '/functions/v1/app/api/qca/jobs', {
+        headers: { origin: lab.origin, 'idempotency-key': crypto.randomUUID() }, data: { prompt: '生成一个 Canvas 候选' },
+      });
+      assert.equal(created.status(), 201);
+    }
+    lab.cloud.models = [{ id: 'actual-enabled-model', display_name: '实际可用模型', is_enabled: true }];
+    const page = await context.newPage(); await page.goto(lab.origin + '/experiments/qca');
+    await page.getByRole('option', { name: '实际可用模型（actual-enabled-model）', exact: true }).waitFor({ state: 'attached' });
+    await page.getByLabel('可用模型', { exact: true }).selectOption('actual-enabled-model');
+    await page.getByRole('button', { name: '使用所选模型继续此任务', exact: true }).click();
+    await page.getByRole('heading', { name: '状态：云端运行中', exact: true }).waitFor();
+    assert.equal(lab.db.tables.get('myol_qca_jobs')!.length, 2);
+    assert.equal(lab.cloud.resources.agents.length, 1);
+    assert.equal(lab.cloud.resources.agents[0].model, 'actual-enabled-model');
+    lab.cloud.completeAll();
+    await page.getByRole('heading', { name: '状态：结果已保存', exact: true }).waitFor();
+  } finally { await browser.close(); await lab.close(); await rm(dir, { recursive: true, force: true }); }
+});
