@@ -30,10 +30,76 @@ export interface GameOptions {
   fiveGrid?: boolean; // 2048：5×5 棋盘
 }
 
+export type SynthWave = 'sine' | 'square' | 'sawtooth' | 'triangle';
+export type ChordProgression = 'minor' | 'major' | 'dorian' | 'suspended';
+
+// 浏览器内置合成配乐的可调参数；只允许这组受限字段，模型不能注入代码。
+export interface MusicStyle {
+  bpm: number; // 70 ~ 160
+  progression: ChordProgression;
+  transpose: number; // -5 ~ 5 半音
+  leadWave: SynthWave;
+  bassWave: SynthWave;
+  kickWave: SynthWave;
+  density: number; // 0.3 ~ 1，旋律音符出现概率
+  swing: number; // 0 ~ 0.3，奇数步延迟比例
+  octave: number; // -1 ~ 1，旋律八度
+  seed: number; // 1 ~ 9999，保证密度变化可复现
+}
+
+export const DEFAULT_MUSIC_STYLE: MusicStyle = {
+  bpm: 120,
+  progression: 'minor',
+  transpose: 0,
+  leadWave: 'triangle',
+  bassWave: 'triangle',
+  kickWave: 'sine',
+  density: 1,
+  swing: 0,
+  octave: 0,
+  seed: 1,
+};
+
+const SYNTH_WAVES: SynthWave[] = ['sine', 'square', 'sawtooth', 'triangle'];
+const PROGRESSIONS: ChordProgression[] = ['minor', 'major', 'dorian', 'suspended'];
+
+function clampInt(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function clampFloat(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(value * 100) / 100));
+}
+
+// 模型输出与外部输入一律先钳制；缺省字段回退到当前风格或默认霓虹参数。
+export function sanitizeMusicStyle(raw: unknown, fallback: MusicStyle = DEFAULT_MUSIC_STYLE): MusicStyle {
+  const base = fallback ?? DEFAULT_MUSIC_STYLE;
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { ...base };
+  const value = raw as Record<string, unknown>;
+  return {
+    bpm: clampInt(value.bpm, 70, 160, base.bpm),
+    progression: PROGRESSIONS.includes(value.progression as ChordProgression)
+      ? (value.progression as ChordProgression)
+      : base.progression,
+    transpose: clampInt(value.transpose, -5, 5, base.transpose),
+    leadWave: SYNTH_WAVES.includes(value.leadWave as SynthWave) ? (value.leadWave as SynthWave) : base.leadWave,
+    bassWave: SYNTH_WAVES.includes(value.bassWave as SynthWave) ? (value.bassWave as SynthWave) : base.bassWave,
+    kickWave: SYNTH_WAVES.includes(value.kickWave as SynthWave) ? (value.kickWave as SynthWave) : base.kickWave,
+    density: clampFloat(value.density, 0.3, 1, base.density),
+    swing: clampFloat(value.swing, 0, 0.3, base.swing),
+    octave: clampInt(value.octave, -1, 1, base.octave),
+    seed: clampInt(value.seed, 1, 9999, base.seed),
+  };
+}
+
 export interface GameSpec {
   music?: MusicPreset;
   // 用户附加的配乐风格描述，仅用于 AI 配乐提示词。
   musicPrompt?: string;
+  // 内置合成配乐的风格参数；未设置时使用默认霓虹参数。
+  musicStyle?: MusicStyle;
   template: TemplateId;
   title: string;
   theme: ThemeId;
@@ -309,6 +375,10 @@ export function sanitizeSpec(input: unknown, fallback?: GameSpec): GameSpec {
       ? raw.music
       : base.music;
   const musicPrompt = 'musicPrompt' in raw ? sanitizeMusicPrompt(raw.musicPrompt) : base.musicPrompt;
+  const styleInput = 'musicStyle' in raw ? raw.musicStyle : base.musicStyle;
+  const musicStyle = styleInput === undefined || styleInput === null
+    ? base.musicStyle
+    : sanitizeMusicStyle(styleInput, base.musicStyle ?? DEFAULT_MUSIC_STYLE);
 
   const template = TEMPLATE_IDS.includes(raw.template as TemplateId)
     ? (raw.template as TemplateId)
@@ -336,6 +406,7 @@ export function sanitizeSpec(input: unknown, fallback?: GameSpec): GameSpec {
     template,
     ...(music ? { music } : {}),
     ...(musicPrompt ? { musicPrompt } : {}),
+    ...(musicStyle ? { musicStyle } : {}),
     title: sanitizeTitle(raw.title, defaultTitle(template, theme)),
     theme,
     speed,

@@ -9,6 +9,7 @@ import type {
   GameFilter,
   Message,
   MusicSettings,
+  MusicStyleSettings,
   Project,
   Session,
   Store,
@@ -26,6 +27,7 @@ interface DbShape {
   accountSessions: AccountSession[];
   creationTemplates: CreationTemplate[];
   musicSettings: MusicSettings[];
+  musicStyleSettings: MusicStyleSettings[];
   sessions: Session[];
   projects: Project[];
   versions: Version[];
@@ -41,6 +43,7 @@ function emptyDb(): DbShape {
     accountSessions: [],
     creationTemplates: [],
     musicSettings: [],
+    musicStyleSettings: [],
     sessions: [],
     projects: [],
     versions: [],
@@ -122,6 +125,13 @@ export class FileStore implements Store {
           this.db.musicSettings.push({ ...guestSettings, ownerToken: account.ownerToken });
         }
       }
+      const guestStyle = this.db.musicStyleSettings.find(s => s.ownerToken === guest.token);
+      if (guestStyle) {
+        this.db.musicStyleSettings = this.db.musicStyleSettings.filter(s => s.ownerToken !== guest.token);
+        if (!this.db.musicStyleSettings.some(s => s.ownerToken === account.ownerToken)) {
+          this.db.musicStyleSettings.push({ ...guestStyle, ownerToken: account.ownerToken });
+        }
+      }
       this.db.sessions = this.db.sessions.filter(s => s.token !== guest.token);
     }
     await this.persist();
@@ -160,6 +170,21 @@ export class FileStore implements Store {
 
   async deleteMusicSettings(ownerToken: string): Promise<void> {
     this.db.musicSettings = this.db.musicSettings.filter((s) => s.ownerToken !== ownerToken);
+    await this.persist();
+  }
+
+  async getMusicStyleSettings(ownerToken: string): Promise<MusicStyleSettings | null> {
+    return this.db.musicStyleSettings.find((s) => s.ownerToken === ownerToken) ?? null;
+  }
+
+  async saveMusicStyleSettings(settings: MusicStyleSettings): Promise<void> {
+    this.db.musicStyleSettings = this.db.musicStyleSettings.filter((s) => s.ownerToken !== settings.ownerToken);
+    this.db.musicStyleSettings.push(settings);
+    await this.persist();
+  }
+
+  async deleteMusicStyleSettings(ownerToken: string): Promise<void> {
+    this.db.musicStyleSettings = this.db.musicStyleSettings.filter((s) => s.ownerToken !== ownerToken);
     await this.persist();
   }
 

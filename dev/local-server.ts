@@ -52,6 +52,11 @@ function handlerEnvFromProcess(): HandlerEnv {
       apiKey: process.env.MYOLGAME_MUSIC_API_KEY || undefined,
       name: process.env.MYOLGAME_MUSIC_NAME || undefined,
     },
+    musicStyle: {
+      apiUrl: process.env.MYOLGAME_MUSIC_STYLE_API_URL || undefined,
+      apiKey: process.env.MYOLGAME_MUSIC_STYLE_API_KEY || undefined,
+      model: process.env.MYOLGAME_MUSIC_STYLE_MODEL || undefined,
+    },
   };
 }
 

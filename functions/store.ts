@@ -20,6 +20,15 @@ export interface MusicSettings {
   updatedAt: string;
 }
 
+// 账号级 OpenAI 兼容编曲模型配置；同样只在服务端保存密钥。
+export interface MusicStyleSettings {
+  ownerToken: string;
+  apiUrl: string;
+  apiKey: string;
+  model: string;
+  updatedAt: string;
+}
+
 export interface Project {
   id: string;
   ownerToken: string;
@@ -131,6 +140,10 @@ export interface Store {
   getMusicSettings(ownerToken: string): Promise<MusicSettings | null>;
   saveMusicSettings(settings: MusicSettings): Promise<void>;
   deleteMusicSettings(ownerToken: string): Promise<void>;
+
+  getMusicStyleSettings(ownerToken: string): Promise<MusicStyleSettings | null>;
+  saveMusicStyleSettings(settings: MusicStyleSettings): Promise<void>;
+  deleteMusicStyleSettings(ownerToken: string): Promise<void>;
 
   createProject(project: Project): Promise<void>;
   createProjectFromTemplate(project: Project, version: Version, message: Message): Promise<void>;

@@ -83,9 +83,9 @@ test('账号页保存音乐 API 后创作页启用 AI 配乐并生成成功', as
 
     await page.goto(app.url + '/account');
     await page.getByRole('heading', { name: 'AI 配乐 API' }).waitFor({ timeout: 15000 });
-    await page.getByLabel('接口地址').fill(apiUrl);
+    await page.getByLabel('接口地址', { exact: true }).fill(apiUrl);
     await page.getByLabel('显示名称（可选，作为 model 传给接口）').fill('e2e-music');
-    await page.getByLabel('API 密钥').fill(secret);
+    await page.getByLabel('API 密钥', { exact: true }).fill(secret);
     await page.getByRole('button', { name: '保存配乐接口' }).click();
     await page.getByText('已保存。创作页会优先使用这个接口生成 AI 配乐。').waitFor({ timeout: 15000 });
     assert.ok((await page.textContent('body'))?.includes('账号配置：' + apiUrl));
@@ -94,7 +94,7 @@ test('账号页保存音乐 API 后创作页启用 AI 配乐并生成成功', as
     // 刷新后配置仍在，且密钥输入框不再显示明文。
     await page.reload();
     await page.getByText('账号配置：' + apiUrl).waitFor({ timeout: 15000 });
-    assert.equal(await page.getByLabel('API 密钥').inputValue(), '');
+    assert.equal(await page.getByLabel('API 密钥', { exact: true }).inputValue(), '');
     // 密钥留空时，测试连接沿用服务端已保存的密钥。
     await page.getByRole('button', { name: '测试连接' }).click();
     await page.getByText('连接正常：返回 audio/wav').waitFor({ timeout: 15000 });

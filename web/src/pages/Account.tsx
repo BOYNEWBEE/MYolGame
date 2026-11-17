@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { appHref } from '../routing.ts';
 import { ApiError, requestJson } from '../api.ts';
 import { fetchMusicSettings, musicErrorText, testMusicSettings, type MusicSettingsView } from '../music-settings.ts';
+import { fetchMusicStyleSettings, type MusicStyleSettingsView } from '../music-style-settings.ts';
 import { useSession } from '../session.tsx';
 
 export default function Account() {
@@ -21,6 +22,15 @@ export default function Account() {
   const [musicError, setMusicError] = useState('');
   const [musicNotice, setMusicNotice] = useState('');
 
+  const [styleStatus, setStyleStatus] = useState<MusicStyleSettingsView | null>(null);
+  const [styleUrl, setStyleUrl] = useState('');
+  const [styleModel, setStyleModel] = useState('');
+  const [styleKey, setStyleKey] = useState('');
+  const [styleLoading, setStyleLoading] = useState(false);
+  const [styleBusy, setStyleBusy] = useState(false);
+  const [styleError, setStyleError] = useState('');
+  const [styleNotice, setStyleNotice] = useState('');
+
   useEffect(() => {
     if (!session.ready || !session.account || session.cloudM0) return;
     let cancelled = false;
@@ -38,6 +48,27 @@ export default function Account() {
       })
       .finally(() => {
         if (!cancelled) setMusicLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [session.ready, session.account?.username, session.cloudM0]);
+
+  useEffect(() => {
+    if (!session.ready || !session.account || session.cloudM0) return;
+    let cancelled = false;
+    setStyleLoading(true);
+    setStyleError('');
+    fetchMusicStyleSettings()
+      .then((view) => {
+        if (cancelled) return;
+        setStyleStatus(view);
+        setStyleUrl(view.account?.apiUrl ?? '');
+        setStyleModel(view.account?.model ?? '');
+      })
+      .catch((e) => {
+        if (!cancelled) setStyleError(e instanceof Error ? e.message : '编曲模型配置读取失败');
+      })
+      .finally(() => {
+        if (!cancelled) setStyleLoading(false);
       });
     return () => { cancelled = true; };
   }, [session.ready, session.account?.username, session.cloudM0]);
@@ -105,6 +136,45 @@ export default function Account() {
     }
   }
 
+  async function saveStyle(e: FormEvent<HTMLFormElement>): Promise<void> {
+    e.preventDefault();
+    if (styleBusy) return;
+    setStyleBusy(true);
+    setStyleError('');
+    setStyleNotice('');
+    try {
+      const body: Record<string, unknown> = { apiUrl: styleUrl, model: styleModel };
+      if (styleKey.trim()) body.apiKey = styleKey;
+      const view = await requestJson<MusicStyleSettingsView>('/music/style-model', { method: 'PUT', body });
+      setStyleStatus(view);
+      setStyleKey('');
+      setStyleNotice('已保存。生成「霓虹街机」配乐时会由该模型调整风格。');
+    } catch (e) {
+      setStyleError(e instanceof Error ? e.message : '保存失败');
+    } finally {
+      setStyleBusy(false);
+    }
+  }
+
+  async function clearStyle(): Promise<void> {
+    if (styleBusy) return;
+    setStyleBusy(true);
+    setStyleError('');
+    setStyleNotice('');
+    try {
+      const view = await requestJson<MusicStyleSettingsView>('/music/style-model', { method: 'DELETE' });
+      setStyleStatus(view);
+      setStyleUrl('');
+      setStyleModel('');
+      setStyleKey('');
+      setStyleNotice(view.server ? '已清除账号配置，将改用服务端配置。' : '已清除账号配置。');
+    } catch (e) {
+      setStyleError(e instanceof Error ? e.message : '清除失败');
+    } finally {
+      setStyleBusy(false);
+    }
+  }
+
   async function act(action: string, body: Record<string, unknown>) {
     setBusy(true);
     setError('');
@@ -154,6 +224,7 @@ export default function Account() {
       void session.refresh().catch(e => setError(e instanceof Error ? e.message : '身份刷新失败')).finally(() => setBusy(false));
     }}>刷新登录状态</button>
     {session.account && (
+      <>
       <section className="panel" style={{ marginTop: 20, textAlign: 'left', display: 'grid', gap: 12 }}>
         <h2>AI 配乐 API</h2>
         <p className="panel-note" style={{ margin: 0 }}>
@@ -197,6 +268,49 @@ export default function Account() {
           </>
         )}
       </section>
+      <section className="panel" style={{ marginTop: 20, textAlign: 'left', display: 'grid', gap: 12 }}>
+        <h2>AI 编曲模型（OpenAI 兼容）</h2>
+        <p className="panel-note" style={{ margin: 0 }}>
+          用于调整浏览器内置「霓虹街机」实时合成配乐的速度、和弦、音色与节奏。填写 OpenAI 兼容的接口地址和模型名，例如 DeepSeek：https://api.deepseek.com + deepseek-chat。模型只返回受限参数，不会生成或执行浏览器代码；调用失败时回退默认配乐。密钥只保存在服务端。
+        </p>
+        {session.cloudM0 ? <p className="panel-note" style={{ margin: 0 }}>
+          当前部署为云端 M0 模拟阶段，写入接口尚未开放；账号级编曲模型设置暂不可用。
+        </p> : styleLoading ? <p className="muted">正在读取配置…</p> : (
+          <>
+            <p className="muted small" role="status" style={{ margin: 0 }}>
+              {styleStatus?.account
+                ? '账号配置：' + styleStatus.account.apiUrl + '（模型 ' + styleStatus.account.model + '）'
+                : styleStatus?.server
+                  ? '未保存账号配置，当前使用服务端统一配置。'
+                  : '当前未配置编曲模型，将使用默认霓虹配乐。'}
+            </p>
+            <form onSubmit={saveStyle} style={{ display: 'grid', gap: 12 }}>
+              <label className="field">
+                <span className="field-label">编曲接口地址</span>
+                <input type="text" inputMode="url" required maxLength={512} value={styleUrl} onChange={(e) => setStyleUrl(e.target.value)} placeholder="https://api.deepseek.com" autoComplete="off" />
+              </label>
+              <label className="field">
+                <span className="field-label">编曲模型名</span>
+                <input type="text" required maxLength={64} value={styleModel} onChange={(e) => setStyleModel(e.target.value)} placeholder="deepseek-chat" autoComplete="off" />
+              </label>
+              <label className="field">
+                <span className="field-label">编曲 API 密钥</span>
+                <input type="password" maxLength={512} value={styleKey} onChange={(e) => setStyleKey(e.target.value)} placeholder={styleStatus?.account?.hasKey ? '已保存；留空则保持不变' : '输入服务提供的密钥'} autoComplete="new-password" />
+              </label>
+              <p className="panel-note" style={{ margin: 0 }}>
+                仅支持 HTTPS；本机调试可用 http://127.0.0.1 或 http://localhost。留空密钥表示沿用已保存的密钥。
+              </p>
+              {styleError && <p role="alert" style={{ margin: 0 }}>{styleError}</p>}
+              {styleNotice && <p role="status" style={{ margin: 0 }}>{styleNotice}</p>}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className="btn primary" disabled={styleBusy}>{styleBusy ? '处理中…' : '保存编曲模型'}</button>
+                <button type="button" className="btn danger" disabled={styleBusy || !styleStatus?.account} onClick={() => void clearStyle()}>清除编曲配置</button>
+              </div>
+            </form>
+          </>
+        )}
+      </section>
+      </>
     )}
     <p>{cloud ? '邮箱用于登录，当前尚未发送验证邮件；暂不支持邮件找回密码。' : '账号和作品保存在这台服务所在电脑。密码至少 8 位；本地版暂不提供邮件找回密码。'}</p>
   </div>;

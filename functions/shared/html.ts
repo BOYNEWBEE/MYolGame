@@ -94,7 +94,7 @@ ${hasTrack ? `<audio id="music-track" src="${escapeHtml(musicTrack!)}" loop prel
 <script>const CFG = ${safeJson(config)};</script>
 <script>
 ${hasSound ? ARCADE_AUDIO_SCRIPT : ''}
-const GAME_AUDIO = ${hasSound ? (hasTrack ? `createArcadeAudio('music-track')` : 'createArcadeAudio()') : 'null'};
+const GAME_AUDIO = ${hasSound ? (hasTrack ? `createArcadeAudio('music-track')` : `createArcadeAudio(null, ${safeJson(spec.musicStyle ?? null)})`) : 'null'};
 ${gameScript}
 </script>
 </body>

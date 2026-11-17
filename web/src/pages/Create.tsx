@@ -7,6 +7,7 @@ import { ApiError, requestJson } from '../api.ts';
 import { useSession } from '../session.tsx';
 import { useMeta } from '../meta.ts';
 import { fetchMusicSettings } from '../music-settings.ts';
+import { fetchMusicStyleSettings } from '../music-style-settings.ts';
 import Cover from '../components/Cover.tsx';
 import { GenerationBadge, SpecBadges } from '../components/Badges.tsx';
 import { MUSIC_PREVIEW_HTML } from '@shared/audio.ts';
@@ -51,6 +52,7 @@ export default function Create(): ReactNode {
   const [music, setMusic] = useState<MusicPreset>();
   const [musicPrompt, setMusicPrompt] = useState('');
   const [musicSource, setMusicSource] = useState<'account' | 'server' | 'none' | null>(null);
+  const [styleModelSource, setStyleModelSource] = useState<'account' | 'server' | 'none' | null>(null);
   const [speed, setSpeed] = useState(1.4);
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [options, setOptions] = useState<Record<string, boolean>>({ widePaddle: true });
@@ -68,10 +70,18 @@ export default function Create(): ReactNode {
         // 未登录或接口不可用时沿用平台元信息中的服务端配置状态。
         if (!cancelled) setMusicSource(null);
       });
+    fetchMusicStyleSettings()
+      .then((view) => {
+        if (!cancelled) setStyleModelSource(view.effective);
+      })
+      .catch(() => {
+        if (!cancelled) setStyleModelSource(null);
+      });
     return () => { cancelled = true; };
   }, [session.ready, session.account?.username]);
 
   const musicApiReady = musicSource ? musicSource !== 'none' : Boolean(meta?.music.configured);
+  const styleModelReady = styleModelSource ? styleModelSource !== 'none' : false;
 
   // 结构化选择作为基底，提示词关键词覆盖其上（服务器生成时使用相同规则）
   const baseSpec = useMemo<GameSpec>(
@@ -252,9 +262,11 @@ export default function Create(): ReactNode {
                       ? '生成时将使用账号里保存的音乐 API，制作 20 秒循环配乐并内嵌到游戏；失败会回退为无配乐。'
                       : '生成时调用服务端音乐 API，制作 20 秒循环配乐并内嵌到游戏；失败会回退为无配乐。'
                     : <>AI 配乐未启用：请先到 <Link to="/account">账号管理</Link> 填写音乐生成 API，或由服务端统一配置。</>
-                  : '当前配乐为「霓虹街机」。点试听播放，再点一次停止。'}
+                  : styleModelReady
+                    ? '当前配乐为「霓虹街机」。生成时会由已配置的 AI 编曲模型调整风格；下方试听为默认风格。'
+                    : <>当前配乐为「霓虹街机」。点试听播放，再点一次停止；到 <Link to="/account">账号管理</Link> 配置 OpenAI 兼容编曲模型后，可按提示词调整风格。</>}
             </p>
-            {resolvedMusic === 'ai-generated' && (
+            {(resolvedMusic === 'ai-generated' || resolvedMusic === 'neon-arcade') && (
               <label className="field" style={{ marginTop: 10 }}>
                 <span className="field-label">配乐提示词（可选）</span>
                 <textarea
@@ -262,10 +274,12 @@ export default function Create(): ReactNode {
                   maxLength={MAX_MUSIC_PROMPT}
                   value={musicPrompt}
                   onChange={(e) => setMusicPrompt(e.target.value)}
-                  placeholder="例如：温柔的钢琴与雨声，节奏舒缓，不要鼓点"
+                  placeholder={resolvedMusic === 'neon-arcade' ? '例如：更慢、更悬疑，少一点鼓点' : '例如：温柔的钢琴与雨声，节奏舒缓，不要鼓点'}
                 />
                 <span className="panel-note" style={{ margin: 0 }}>
-                  会与模板、主题和速度自动生成的描述一起发送给音乐接口；留空则只用自动描述。
+                  {resolvedMusic === 'neon-arcade'
+                    ? '配置编曲模型后，这段描述会与玩法、主题、速度一起用于调整 BPM、和弦与音色；未配置时仅随版本保存。'
+                    : '会与模板、主题和速度自动生成的描述一起发送给音乐接口；留空则只用自动描述。'}
                 </span>
               </label>
             )}

@@ -23,6 +23,7 @@ import {
 } from './shared/spec.ts';
 import { modelConfigured, type ModelEnv } from './shared/model.ts';
 import { musicConfigured, parseMusicSettingsInput, probeMusicGateway, type MusicEnv } from './shared/music.ts';
+import { musicStyleConfigured, parseMusicStyleSettingsInput, type MusicStyleEnv } from './shared/music-style.ts';
 import type {
   Game,
   GameFilter,
@@ -37,6 +38,7 @@ import type {
 export interface HandlerEnv {
   model: ModelEnv;
   music?: MusicEnv;
+  musicStyle?: MusicStyleEnv;
 }
 
 export interface HandlerDeps {
@@ -174,6 +176,26 @@ async function musicSettingsView(deps: HandlerDeps, session: Session): Promise<R
   };
 }
 
+// 账号保存的编曲模型优先于服务端环境变量；显式配置失败时回退默认合成配乐。
+async function musicStyleForSession(deps: HandlerDeps, session: Session): Promise<MusicStyleEnv | undefined> {
+  const settings = await deps.store.getMusicStyleSettings(session.token);
+  if (settings) return { apiUrl: settings.apiUrl, apiKey: settings.apiKey, model: settings.model };
+  return deps.env.musicStyle;
+}
+
+async function musicStyleSettingsView(deps: HandlerDeps, session: Session): Promise<Record<string, unknown>> {
+  const settings = await deps.store.getMusicStyleSettings(session.token);
+  const account = settings && settings.apiKey
+    ? { apiUrl: settings.apiUrl, model: settings.model, hasKey: true }
+    : null;
+  const server = musicStyleConfigured(deps.env.musicStyle);
+  return {
+    account,
+    server: server ? { model: deps.env.musicStyle?.model ?? null } : null,
+    effective: account ? 'account' : server ? 'server' : 'none',
+  };
+}
+
 function publicGame(game: Game, favorited: boolean): Record<string, unknown> {
   return {
     id: game.id,
@@ -240,6 +262,7 @@ async function runGenerationTask(
   prompt: string,
   specOverride: unknown,
   music?: MusicEnv,
+  styleModel?: MusicStyleEnv,
 ): Promise<{ task: TaskRecord; version: Version; notes: string[] }> {
   if (project.templateOrigin) throw httpError(409, 'agent_required', '此项目基于社区源码模板，修改需要启用 Agent 源码开发');
   const baseSpec = specOverride
@@ -269,7 +292,7 @@ async function runGenerationTask(
     createdAt: now,
   });
 
-  const result = await generateGame({ prompt, baseSpec, env: deps.env.model, music });
+  const result = await generateGame({ prompt, baseSpec, env: deps.env.model, music, styleModel });
   task.stages = result.stages;
   task.generationMode = result.mode;
   task.finishedAt = new Date().toISOString();
@@ -436,6 +459,42 @@ function buildRoutes(): Route[] {
         const headers = { 'cache-control': 'no-store' };
         if (!result.ok) return json({ ok: false, error: result.error, elapsedMs }, 200, headers);
         return json({ ok: true, mimeType: result.mimeType, bytes: result.bytes, elapsedMs }, 200, headers);
+      },
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/music\/style-model$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        return json(await musicStyleSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
+      },
+    },
+    {
+      method: 'PUT',
+      pattern: /^\/api\/music\/style-model$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        const body = await readBody(req);
+        const previous = await deps.store.getMusicStyleSettings(session!.token);
+        const parsed = parseMusicStyleSettingsInput(body, previous?.apiKey);
+        if (!parsed.ok) return fail(400, 'invalid_music_style_settings', parsed.error);
+        await deps.store.saveMusicStyleSettings({
+          ownerToken: session!.token,
+          apiUrl: parsed.apiUrl,
+          apiKey: parsed.apiKey,
+          model: parsed.model,
+          updatedAt: new Date().toISOString(),
+        });
+        return json(await musicStyleSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
+      },
+    },
+    {
+      method: 'DELETE',
+      pattern: /^\/api\/music\/style-model$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        await deps.store.deleteMusicStyleSettings(session!.token);
+        return json(await musicStyleSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
       },
     },
     {
@@ -617,7 +676,7 @@ function buildRoutes(): Route[] {
             const task = await deps.agent.submit(project, prompt, initialSpec);
             return json({ project: projectSummary(project), task }, 202);
           }
-          const { task, version } = await runGenerationTask(deps, project, prompt, body.spec, await musicForSession(deps, session!));
+          const { task, version } = await runGenerationTask(deps, project, prompt, body.spec, await musicForSession(deps, session!), await musicStyleForSession(deps, session!));
           return json(
             { project: projectSummary(project), version: versionSummary(version), task },
             201,
@@ -674,7 +733,7 @@ function buildRoutes(): Route[] {
           const task = await deps.agent.submit(project, prompt, sanitizeSpec(body.spec, project.spec));
           return json({ project: projectSummary(project), task }, 202);
         }
-        const { task, version } = await runGenerationTask(deps, project, prompt, body.spec, await musicForSession(deps, session!));
+        const { task, version } = await runGenerationTask(deps, project, prompt, body.spec, await musicForSession(deps, session!), await musicStyleForSession(deps, session!));
         return json(
           { project: projectSummary(project), version: versionSummary(version), task },
           201,

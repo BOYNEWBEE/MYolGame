@@ -3,9 +3,10 @@
 
 import { modelAdjustSpec, modelConfigured, type ModelEnv } from './shared/model.ts';
 import { generateMusicTrack, musicConfigured, type MusicEnv } from './shared/music.ts';
+import { generateMusicStyle, musicStyleConfigured, type MusicStyleEnv } from './shared/music-style.ts';
 import { parsePrompt, type ParseMatched } from './shared/prompt.ts';
 import { renderGame } from './shared/templates/index.ts';
-import { sanitizeSpec, type GameSpec, type GenerationMode } from './shared/spec.ts';
+import { getMusicPreset, sanitizeSpec, type GameSpec, type GenerationMode } from './shared/spec.ts';
 import type { TaskStage } from './store.ts';
 
 export interface GenerateInput {
@@ -13,6 +14,7 @@ export interface GenerateInput {
   baseSpec?: GameSpec;
   env: ModelEnv;
   music?: MusicEnv;
+  styleModel?: MusicStyleEnv;
 }
 
 export interface GenerateOutput {
@@ -76,7 +78,20 @@ export async function generateGame(input: GenerateInput): Promise<GenerateOutput
   spec = sanitizeSpec(spec);
   markStage('校验规格', true, spec.template + '/' + spec.theme + '/' + spec.difficulty);
 
-  // 阶段三：按需调用服务端音乐生成 API；失败或未配置时回退为无配乐，不伪造结果。
+  // 阶段三：编曲模型只输出受限参数，用于调整浏览器内置合成配乐的风格。
+  if (getMusicPreset(spec) === 'neon-arcade' && musicStyleConfigured(input.styleModel)) {
+    const styled = await generateMusicStyle(input.prompt, spec, input.styleModel!);
+    if (styled) {
+      spec = sanitizeSpec({ ...spec, musicStyle: styled.style }, spec);
+      notes.push('内置合成配乐由 ' + styled.model + ' 调整风格（' + styled.style.bpm + ' BPM，' + styled.style.progression + '）。');
+      markStage('调整配乐风格（模型辅助）', true, styled.model);
+    } else {
+      notes.push('编曲模型调用失败或输出不合法，已回退为默认霓虹配乐。');
+      markStage('调整配乐风格（回退默认）', false, 'style_model_failed');
+    }
+  }
+
+  // 阶段四：按需调用服务端音乐生成 API；失败或未配置时回退为无配乐，不伪造结果。
   let musicTrack: string | undefined;
   if (spec.music === 'ai-generated') {
     if (!musicConfigured(input.music)) {
@@ -97,7 +112,7 @@ export async function generateGame(input: GenerateInput): Promise<GenerateOutput
     }
   }
 
-  // 阶段四：渲染内置模板
+  // 阶段五：渲染内置模板
   let html = '';
   try {
     html = renderGame(spec, musicTrack);

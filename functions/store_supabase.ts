@@ -10,6 +10,7 @@ import type {
   GameFilter,
   Message,
   MusicSettings,
+  MusicStyleSettings,
   Project,
   Session,
   Store,
@@ -87,6 +88,25 @@ export function createSupabaseStore(client: DatabaseClient): Store {
     },
     async deleteMusicSettings(ownerToken) {
       check(await client.from('myol_music_settings').delete().eq('owner_token', ownerToken).select('owner_token'));
+    },
+
+    async getMusicStyleSettings(ownerToken) {
+      const rows = check(
+        await client.from('myol_music_style_settings').select('*').eq('owner_token', ownerToken).limit(1),
+      ) as Row[];
+      return rows[0] ? fromRow<MusicStyleSettings>(rows[0]) : null;
+    },
+    async saveMusicStyleSettings(settings) {
+      check(
+        await client
+          .from('myol_music_style_settings')
+          .upsert(toRow(settings), { onConflict: 'owner_token' })
+          .select('owner_token')
+          .single(),
+      );
+    },
+    async deleteMusicStyleSettings(ownerToken) {
+      check(await client.from('myol_music_style_settings').delete().eq('owner_token', ownerToken).select('owner_token'));
     },
 
     async createProject(project) {

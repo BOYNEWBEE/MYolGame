@@ -27,6 +27,11 @@ const handle = createM0Application({
           apiKey: Deno.env.get('APP_MUSIC_API_KEY') || undefined,
           name: Deno.env.get('APP_MUSIC_NAME') || undefined,
         },
+        musicStyle: {
+          apiUrl: Deno.env.get('APP_MUSIC_STYLE_API_URL') || undefined,
+          apiKey: Deno.env.get('APP_MUSIC_STYLE_API_KEY') || undefined,
+          model: Deno.env.get('APP_MUSIC_STYLE_MODEL') || undefined,
+        },
       },
   })(request),
   origin: () => Deno.env.get('APP_ORIGIN') ?? PUBLIC_ORIGIN,

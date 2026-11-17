@@ -20,7 +20,12 @@ export function soundControls(music: boolean, effects: boolean, preview = false)
 }
 
 export const ARCADE_AUDIO_SCRIPT = `
-  function createArcadeAudio(trackId) {
+  function createArcadeAudio(trackId, rawStyle) {
+    const style = Object.assign({
+      bpm: 120, progression: 'minor', transpose: 0,
+      leadWave: 'triangle', bassWave: 'triangle', kickWave: 'sine',
+      density: 1, swing: 0, octave: 0, seed: 1
+    }, rawStyle || {});
     const enable = document.getElementById('sound-enable');
     const musicButton = document.getElementById('sound-music');
     const effectsButton = document.getElementById('sound-effects');
@@ -65,12 +70,13 @@ export const ARCADE_AUDIO_SCRIPT = `
 
     function renderLoop() {
       const rate = context.sampleRate;
-      const engine = new OfflineAudio(1, 32 * rate, rate);
-      const out = engine.destination;
-      const chords = [
-        [45, 57, 60, 64, 67], [41, 57, 60, 65, 69],
-        [48, 55, 60, 64, 67], [43, 55, 59, 62, 67]
-      ];
+      const chords = {
+        minor: [[45, 57, 60, 64, 67], [41, 57, 60, 65, 69], [48, 55, 60, 64, 67], [43, 55, 59, 62, 67]],
+        major: [[48, 60, 64, 67, 72], [43, 55, 59, 62, 67], [45, 57, 61, 64, 69], [41, 53, 57, 60, 65]],
+        dorian: [[45, 57, 60, 64, 67], [48, 60, 64, 67, 72], [43, 55, 59, 62, 67], [41, 53, 57, 60, 65]],
+        suspended: [[45, 57, 62, 64, 67], [43, 55, 60, 62, 67], [48, 60, 65, 67, 72], [41, 53, 58, 60, 65]]
+      };
+      const progression = chords[style.progression] || chords.minor;
       const phrases = [
         [null, 1, 2, null, 3, 2, null, 4],
         [3, null, 2, 1, null, 2, 1, null],
@@ -78,19 +84,29 @@ export const ARCADE_AUDIO_SCRIPT = `
         [4, null, 3, 2, 1, null, null, 2]
       ];
       const hz = function (note) { return 440 * Math.pow(2, (note - 69) / 12); };
-      for (let bar = 0; bar < 16; bar++) {
-        const chord = chords[bar % chords.length];
+      const stepDur = 30 / style.bpm;
+      const barDur = stepDur * 8;
+      const bars = 16;
+      const engine = new OfflineAudio(1, Math.ceil(bars * barDur * rate), rate);
+      const out = engine.destination;
+      let randomState = (style.seed * 2654435761) >>> 0;
+      function random() {
+        randomState = (randomState * 1664525 + 1013904223) >>> 0;
+        return randomState / 4294967296;
+      }
+      for (let bar = 0; bar < bars; bar++) {
+        const chord = progression[bar % progression.length];
         const phrase = phrases[(bar + Math.floor(bar / 4)) % phrases.length];
-        for (let step = 0; step < 8; step++) {
-          const at = bar * 2 + step / 4;
-          if (step % 2 === 0) {
-            tone(engine, out, at, 0.18, 'sine', 105, 40, 0.14);
-            const bass = hz(chord[0] + (step === 6 ? 12 : 0));
-            tone(engine, out, at + 0.035, 0.29, 'triangle', bass, bass, 0.15);
+        for (let s = 0; s < 8; s++) {
+          const at = bar * barDur + s * stepDur + (s % 2 === 1 ? style.swing * stepDur : 0);
+          if (s % 2 === 0) {
+            tone(engine, out, at, 0.18, style.kickWave, 105, 40, 0.14);
+            const bass = hz(chord[0] + style.transpose + (s === 6 ? 12 : 0));
+            tone(engine, out, at + 0.035, 0.29, style.bassWave, bass, bass, 0.15);
           }
-          if (phrase[step] !== null) {
-            const lead = hz(chord[phrase[step]] + (bar >= 8 ? 12 : 0));
-            tone(engine, out, at, 0.19, 'triangle', lead, lead, 0.095);
+          if (phrase[s] !== null && (style.density >= 1 || s === 0 || random() < style.density)) {
+            const lead = hz(chord[phrase[s]] + style.transpose + style.octave * 12 + (bar >= 8 ? 12 : 0));
+            tone(engine, out, at, 0.19, style.leadWave, lead, lead, 0.095);
             tone(engine, out, at + 0.125, 0.105, 'sine', lead, lead, 0.024);
           }
         }
