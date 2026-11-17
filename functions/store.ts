@@ -11,6 +11,15 @@ export interface Session {
   createdAt: string;
 }
 
+// 账号级音乐生成网关配置；密钥只保存在服务端，读取接口不会回传。
+export interface MusicSettings {
+  ownerToken: string;
+  apiUrl: string;
+  apiKey: string;
+  name: string | null;
+  updatedAt: string;
+}
+
 export interface Project {
   id: string;
   ownerToken: string;
@@ -118,6 +127,10 @@ export interface Store {
 
   createSession(session: Session): Promise<void>;
   getSession(token: string): Promise<Session | null>;
+
+  getMusicSettings(ownerToken: string): Promise<MusicSettings | null>;
+  saveMusicSettings(settings: MusicSettings): Promise<void>;
+  deleteMusicSettings(ownerToken: string): Promise<void>;
 
   createProject(project: Project): Promise<void>;
   createProjectFromTemplate(project: Project, version: Version, message: Message): Promise<void>;

@@ -8,6 +8,7 @@ import type {
   Game,
   GameFilter,
   Message,
+  MusicSettings,
   Project,
   Session,
   Store,
@@ -24,6 +25,7 @@ interface DbShape {
   accounts: LocalAccount[];
   accountSessions: AccountSession[];
   creationTemplates: CreationTemplate[];
+  musicSettings: MusicSettings[];
   sessions: Session[];
   projects: Project[];
   versions: Version[];
@@ -38,6 +40,7 @@ function emptyDb(): DbShape {
     accounts: [],
     accountSessions: [],
     creationTemplates: [],
+    musicSettings: [],
     sessions: [],
     projects: [],
     versions: [],
@@ -112,6 +115,13 @@ export class FileStore implements Store {
         }
       }
       this.db.favorites = this.db.favorites.filter(f => f.token !== guest.token);
+      const guestSettings = this.db.musicSettings.find(s => s.ownerToken === guest.token);
+      if (guestSettings) {
+        this.db.musicSettings = this.db.musicSettings.filter(s => s.ownerToken !== guest.token);
+        if (!this.db.musicSettings.some(s => s.ownerToken === account.ownerToken)) {
+          this.db.musicSettings.push({ ...guestSettings, ownerToken: account.ownerToken });
+        }
+      }
       this.db.sessions = this.db.sessions.filter(s => s.token !== guest.token);
     }
     await this.persist();
@@ -136,6 +146,21 @@ export class FileStore implements Store {
 
   async getSession(token: string): Promise<Session | null> {
     return this.db.sessions.find((s) => s.token === token) ?? null;
+  }
+
+  async getMusicSettings(ownerToken: string): Promise<MusicSettings | null> {
+    return this.db.musicSettings.find((s) => s.ownerToken === ownerToken) ?? null;
+  }
+
+  async saveMusicSettings(settings: MusicSettings): Promise<void> {
+    this.db.musicSettings = this.db.musicSettings.filter((s) => s.ownerToken !== settings.ownerToken);
+    this.db.musicSettings.push(settings);
+    await this.persist();
+  }
+
+  async deleteMusicSettings(ownerToken: string): Promise<void> {
+    this.db.musicSettings = this.db.musicSettings.filter((s) => s.ownerToken !== ownerToken);
+    await this.persist();
   }
 
   async createProject(project: Project): Promise<void> {

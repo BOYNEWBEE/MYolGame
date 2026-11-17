@@ -1,11 +1,12 @@
 // 创作入口：提示词 + 结构化选择，本地实时预览解析结果（与服务器同一套规则），
 // 提交后由服务端真正生成并进入工作台。
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ApiError, requestJson } from '../api.ts';
 import { useSession } from '../session.tsx';
 import { useMeta } from '../meta.ts';
+import { fetchMusicSettings } from '../music-settings.ts';
 import Cover from '../components/Cover.tsx';
 import { GenerationBadge, SpecBadges } from '../components/Badges.tsx';
 import { MUSIC_PREVIEW_HTML } from '@shared/audio.ts';
@@ -47,11 +48,28 @@ export default function Create(): ReactNode {
   const [template, setTemplate] = useState<TemplateId>('breakout');
   const [theme, setTheme] = useState<ThemeId>('neon');
   const [music, setMusic] = useState<MusicPreset>();
+  const [musicSource, setMusicSource] = useState<'account' | 'server' | 'none' | null>(null);
   const [speed, setSpeed] = useState(1.4);
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [options, setOptions] = useState<Record<string, boolean>>({ widePaddle: true });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!session.ready) return;
+    let cancelled = false;
+    fetchMusicSettings()
+      .then((view) => {
+        if (!cancelled) setMusicSource(view.effective);
+      })
+      .catch(() => {
+        // 未登录或接口不可用时沿用平台元信息中的服务端配置状态。
+        if (!cancelled) setMusicSource(null);
+      });
+    return () => { cancelled = true; };
+  }, [session.ready, session.account?.username]);
+
+  const musicApiReady = musicSource ? musicSource !== 'none' : Boolean(meta?.music.configured);
 
   // 结构化选择作为基底，提示词关键词覆盖其上（服务器生成时使用相同规则）
   const baseSpec = useMemo<GameSpec>(
@@ -206,7 +224,7 @@ export default function Create(): ReactNode {
             <span id="create-music-label" className="field-label">背景音乐</span>
             <div className="segmented wrap" role="group" aria-labelledby="create-music-label">
               {MUSIC_CHOICES.map(({ value, label, needsMusicApi }) => {
-                const unavailable = Boolean(needsMusicApi && !meta?.music.configured);
+                const unavailable = Boolean(needsMusicApi && !musicApiReady);
                 return (
                   <button
                     key={label}
@@ -214,7 +232,7 @@ export default function Create(): ReactNode {
                     className={music === value ? 'active' : ''}
                     aria-pressed={music === value}
                     disabled={unavailable}
-                    title={unavailable ? '需在服务端配置音乐生成 API' : undefined}
+                    title={unavailable ? '需在账号管理中填写音乐生成 API，或由服务端统一配置' : undefined}
                     onClick={() => setMusic(value)}
                   >
                     {label}
@@ -226,9 +244,11 @@ export default function Create(): ReactNode {
               {resolvedMusic === 'none'
                 ? '当前游戏无配乐。选择「霓虹街机」即可试听。'
                 : resolvedMusic === 'ai-generated'
-                  ? meta?.music.configured
-                    ? '生成时调用服务端音乐 API，制作 20 秒循环配乐并内嵌到游戏；失败会回退为无配乐。'
-                    : 'AI 配乐未启用：需在服务端配置音乐生成 API。'
+                  ? musicApiReady
+                    ? musicSource === 'account'
+                      ? '生成时将使用账号里保存的音乐 API，制作 20 秒循环配乐并内嵌到游戏；失败会回退为无配乐。'
+                      : '生成时调用服务端音乐 API，制作 20 秒循环配乐并内嵌到游戏；失败会回退为无配乐。'
+                    : <>AI 配乐未启用：请先到 <Link to="/account">账号管理</Link> 填写音乐生成 API，或由服务端统一配置。</>
                   : '当前配乐为「霓虹街机」。点试听播放，再点一次停止。'}
             </p>
             {resolvedMusic === 'neon-arcade' && !submitting && (

@@ -9,6 +9,7 @@ import type {
   Game,
   GameFilter,
   Message,
+  MusicSettings,
   Project,
   Session,
   Store,
@@ -67,6 +68,25 @@ export function createSupabaseStore(client: DatabaseClient): Store {
         await client.from('myol_sessions').select('*').eq('token', token).limit(1),
       ) as Row[];
       return rows[0] ? fromRow<Session>(rows[0]) : null;
+    },
+
+    async getMusicSettings(ownerToken) {
+      const rows = check(
+        await client.from('myol_music_settings').select('*').eq('owner_token', ownerToken).limit(1),
+      ) as Row[];
+      return rows[0] ? fromRow<MusicSettings>(rows[0]) : null;
+    },
+    async saveMusicSettings(settings) {
+      check(
+        await client
+          .from('myol_music_settings')
+          .upsert(toRow(settings), { onConflict: 'owner_token' })
+          .select('owner_token')
+          .single(),
+      );
+    },
+    async deleteMusicSettings(ownerToken) {
+      check(await client.from('myol_music_settings').delete().eq('owner_token', ownerToken).select('owner_token'));
     },
 
     async createProject(project) {

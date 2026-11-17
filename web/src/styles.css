@@ -627,7 +627,7 @@ h1, h2, h3 { line-height: 1.3; margin: 0 0 8px; }
 .field-label { font-size: 13px; color: var(--muted); font-weight: 600; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
-textarea, input[type="text"] {
+textarea, input[type="text"], input[type="password"], input[type="email"] {
   width: 100%;
   background: var(--bg-soft);
   border: 1px solid var(--border);
@@ -639,7 +639,7 @@ textarea, input[type="text"] {
   resize: vertical;
   outline: none;
 }
-textarea:focus { border-color: var(--violet); }
+textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[type="email"]:focus { border-color: var(--violet); }
 
 .prompt-help { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
 .prompt-help .panel-note { flex: 1 1 230px; margin: 0; }

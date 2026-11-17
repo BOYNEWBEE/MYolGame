@@ -1,8 +1,8 @@
-// 音乐生成网关：调用服务端配置的 HTTP 接口，把返回的音频内嵌到游戏 HTML。
+// 音乐生成网关：调用服务端配置（或账号保存）的 HTTP 接口，把返回的音频内嵌到游戏 HTML。
 // 契约：POST JSON { prompt, durationSeconds, format, loop, model? }
 //   → 响应 content-type 为 audio/* 时直接读取音频字节；
 //   → 响应 JSON { audioBase64, mimeType } 时解码 base64。
-// 服务端地址与密钥只来自运行环境，不接受用户输入；失败由生成管线回退。
+// 账号配置只保存于服务端，读取接口不回传密钥；失败由生成管线回退为无配乐。
 
 import type { GameSpec, TemplateId, ThemeId } from './spec.ts';
 
@@ -21,6 +21,9 @@ export interface MusicTrack {
 export type MusicResult = { ok: true; track: MusicTrack } | { ok: false; error: string };
 
 export const MUSIC_DURATION_SECONDS = 20;
+export const MAX_MUSIC_API_URL = 512;
+export const MAX_MUSIC_API_KEY = 512;
+export const MAX_MUSIC_NAME = 40;
 // 单文件 HTML 上限 512KB；音频编码后还要经过 base64 膨胀，限制原始字节留出余量。
 export const MAX_MUSIC_BYTES = 240 * 1024;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -58,6 +61,45 @@ const cache = new Map<string, MusicTrack>();
 
 export function musicConfigured(env: MusicEnv | undefined): boolean {
   return Boolean(env?.apiUrl && env.apiKey);
+}
+
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
+
+export type MusicSettingsParse =
+  | { ok: true; apiUrl: string; apiKey: string; name: string | null }
+  | { ok: false; error: string };
+
+// 账号配置会由服务端发起请求，因此限制为 HTTPS；本机调试放行回环地址的 HTTP。
+export function parseMusicSettingsInput(
+  raw: { apiUrl?: unknown; apiKey?: unknown; name?: unknown },
+  previousKey?: string,
+): MusicSettingsParse {
+  const apiUrl = typeof raw.apiUrl === 'string' ? raw.apiUrl.trim() : '';
+  if (!apiUrl || apiUrl.length > MAX_MUSIC_API_URL) {
+    return { ok: false, error: '接口地址不能为空，且不超过 ' + MAX_MUSIC_API_URL + ' 个字符' };
+  }
+  let url: URL;
+  try {
+    url = new URL(apiUrl);
+  } catch {
+    return { ok: false, error: '接口地址不是合法的 URL' };
+  }
+  if (url.username || url.password) return { ok: false, error: '接口地址不能包含账号密码' };
+  if (url.hash) return { ok: false, error: '接口地址不能包含 # 片段' };
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname))) {
+    return { ok: false, error: '接口地址须使用 HTTPS；本机调试可用 http://127.0.0.1 或 http://localhost' };
+  }
+
+  const rawKey = typeof raw.apiKey === 'string' ? raw.apiKey.trim() : '';
+  if (rawKey.length > MAX_MUSIC_API_KEY) return { ok: false, error: 'API 密钥过长（最多 ' + MAX_MUSIC_API_KEY + ' 个字符）' };
+  if (/[\u0000-\u001f\u007f]/.test(rawKey)) return { ok: false, error: 'API 密钥包含控制字符' };
+  const apiKey = rawKey || previousKey || '';
+  if (!apiKey) return { ok: false, error: '请填写 API 密钥' };
+
+  const name = typeof raw.name === 'string'
+    ? raw.name.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, MAX_MUSIC_NAME)
+    : '';
+  return { ok: true, apiUrl, apiKey, name: name || null };
 }
 
 export function musicPrompt(spec: GameSpec): string {
@@ -111,8 +153,18 @@ function bytesToBase64(bytes: Uint8Array): string {
 export async function generateMusicTrack(env: MusicEnv | undefined, spec: GameSpec): Promise<MusicResult> {
   if (!musicConfigured(env)) return { ok: false, error: 'music_not_configured' };
 
+  try {
+    const gateway = new URL(env!.apiUrl!);
+    if (!['http:', 'https:'].includes(gateway.protocol) || gateway.username || gateway.password) {
+      return { ok: false, error: 'music_invalid_url' };
+    }
+  } catch {
+    return { ok: false, error: 'music_invalid_url' };
+  }
+
   const prompt = musicPrompt(spec);
-  const cacheKey = [env!.apiUrl, env!.name ?? '', prompt, MUSIC_DURATION_SECONDS, 'mp3'].join('|');
+  // 密钥参与缓存键，避免不同账号使用同一网关时互相复用结果。
+  const cacheKey = [env!.apiUrl, env!.apiKey, env!.name ?? '', prompt, MUSIC_DURATION_SECONDS, 'mp3'].join('|');
   const cached = cache.get(cacheKey);
   if (cached) return { ok: true, track: cached };
 

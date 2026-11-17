@@ -22,7 +22,7 @@ import {
   type ThemeId,
 } from './shared/spec.ts';
 import { modelConfigured, type ModelEnv } from './shared/model.ts';
-import { musicConfigured, type MusicEnv } from './shared/music.ts';
+import { musicConfigured, parseMusicSettingsInput, type MusicEnv } from './shared/music.ts';
 import type {
   Game,
   GameFilter,
@@ -154,6 +154,26 @@ async function authenticate(deps: HandlerDeps, req: Request, required: boolean):
   return session;
 }
 
+// 账号保存的网关优先于服务端环境变量：显式配置失败时回退为无配乐，而不是悄悄换用运营方密钥。
+async function musicForSession(deps: HandlerDeps, session: Session): Promise<MusicEnv | undefined> {
+  const settings = await deps.store.getMusicSettings(session.token);
+  if (settings) return { apiUrl: settings.apiUrl, apiKey: settings.apiKey, name: settings.name ?? undefined };
+  return deps.env.music;
+}
+
+async function musicSettingsView(deps: HandlerDeps, session: Session): Promise<Record<string, unknown>> {
+  const settings = await deps.store.getMusicSettings(session.token);
+  const account = settings && settings.apiKey
+    ? { apiUrl: settings.apiUrl, name: settings.name, hasKey: true }
+    : null;
+  const server = musicConfigured(deps.env.music);
+  return {
+    account,
+    server: server ? { name: deps.env.music?.name ?? null } : null,
+    effective: account ? 'account' : server ? 'server' : 'none',
+  };
+}
+
 function publicGame(game: Game, favorited: boolean): Record<string, unknown> {
   return {
     id: game.id,
@@ -219,6 +239,7 @@ async function runGenerationTask(
   project: Project,
   prompt: string,
   specOverride: unknown,
+  music?: MusicEnv,
 ): Promise<{ task: TaskRecord; version: Version; notes: string[] }> {
   if (project.templateOrigin) throw httpError(409, 'agent_required', '此项目基于社区源码模板，修改需要启用 Agent 源码开发');
   const baseSpec = specOverride
@@ -248,7 +269,7 @@ async function runGenerationTask(
     createdAt: now,
   });
 
-  const result = await generateGame({ prompt, baseSpec, env: deps.env.model, music: deps.env.music });
+  const result = await generateGame({ prompt, baseSpec, env: deps.env.model, music });
   task.stages = result.stages;
   task.generationMode = result.mode;
   task.finishedAt = new Date().toISOString();
@@ -354,6 +375,42 @@ function buildRoutes(): Route[] {
           themeIds: THEME_IDS,
           limits: { promptMaxLength: MAX_PROMPT, descriptionMaxLength: MAX_DESCRIPTION },
         }),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/music\/settings$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        return json(await musicSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
+      },
+    },
+    {
+      method: 'PUT',
+      pattern: /^\/api\/music\/settings$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        const body = await readBody(req);
+        const previous = await deps.store.getMusicSettings(session!.token);
+        const parsed = parseMusicSettingsInput(body, previous?.apiKey);
+        if (!parsed.ok) return fail(400, 'invalid_music_settings', parsed.error);
+        await deps.store.saveMusicSettings({
+          ownerToken: session!.token,
+          apiUrl: parsed.apiUrl,
+          apiKey: parsed.apiKey,
+          name: parsed.name,
+          updatedAt: new Date().toISOString(),
+        });
+        return json(await musicSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
+      },
+    },
+    {
+      method: 'DELETE',
+      pattern: /^\/api\/music\/settings$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        await deps.store.deleteMusicSettings(session!.token);
+        return json(await musicSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
+      },
     },
     {
       method: 'POST',
@@ -534,7 +591,7 @@ function buildRoutes(): Route[] {
             const task = await deps.agent.submit(project, prompt, initialSpec);
             return json({ project: projectSummary(project), task }, 202);
           }
-          const { task, version } = await runGenerationTask(deps, project, prompt, body.spec);
+          const { task, version } = await runGenerationTask(deps, project, prompt, body.spec, await musicForSession(deps, session!));
           return json(
             { project: projectSummary(project), version: versionSummary(version), task },
             201,
@@ -591,7 +648,7 @@ function buildRoutes(): Route[] {
           const task = await deps.agent.submit(project, prompt, sanitizeSpec(body.spec, project.spec));
           return json({ project: projectSummary(project), task }, 202);
         }
-        const { task, version } = await runGenerationTask(deps, project, prompt, body.spec);
+        const { task, version } = await runGenerationTask(deps, project, prompt, body.spec, await musicForSession(deps, session!));
         return json(
           { project: projectSummary(project), version: versionSummary(version), task },
           201,
