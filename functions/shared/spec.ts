@@ -32,6 +32,8 @@ export interface GameOptions {
 
 export interface GameSpec {
   music?: MusicPreset;
+  // 用户附加的配乐风格描述，仅用于 AI 配乐提示词。
+  musicPrompt?: string;
   template: TemplateId;
   title: string;
   theme: ThemeId;
@@ -39,6 +41,8 @@ export interface GameSpec {
   difficulty: Difficulty;
   options: GameOptions;
 }
+
+export const MAX_MUSIC_PROMPT = 200;
 
 export function getMusicPreset(spec: GameSpec): MusicPreset {
   return spec.music ?? (spec.template === 'breakout' && spec.theme === 'neon' ? 'neon-arcade' : 'none');
@@ -269,6 +273,17 @@ export function sanitizeTitle(raw: unknown, fallback: string): string {
   return cleaned.length > 0 ? cleaned : fallback;
 }
 
+// 配乐提示词只作为文本传给音乐接口：去控制字符、压缩空白并截断。
+export function sanitizeMusicPrompt(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const cleaned = raw
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_MUSIC_PROMPT);
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
 export function defaultTitle(template: TemplateId, theme: ThemeId): string {
   return getTheme(theme).name + getTemplate(template).name;
 }
@@ -293,6 +308,7 @@ export function sanitizeSpec(input: unknown, fallback?: GameSpec): GameSpec {
     raw.music === 'neon-arcade' || raw.music === 'ai-generated' || raw.music === 'none'
       ? raw.music
       : base.music;
+  const musicPrompt = 'musicPrompt' in raw ? sanitizeMusicPrompt(raw.musicPrompt) : base.musicPrompt;
 
   const template = TEMPLATE_IDS.includes(raw.template as TemplateId)
     ? (raw.template as TemplateId)
@@ -319,6 +335,7 @@ export function sanitizeSpec(input: unknown, fallback?: GameSpec): GameSpec {
   return {
     template,
     ...(music ? { music } : {}),
+    ...(musicPrompt ? { musicPrompt } : {}),
     title: sanitizeTitle(raw.title, defaultTitle(template, theme)),
     theme,
     speed,

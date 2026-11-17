@@ -41,8 +41,16 @@ function wavFixture(seconds = 0.3): Uint8Array {
 test('账号页保存音乐 API 后创作页启用 AI 配乐并生成成功', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'myol-music-account-'));
   let requests = 0;
-  const gateway = createServer((_req, res) => {
+  let lastPrompt = '';
+  const gateway = createServer(async (req, res) => {
     requests += 1;
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk as Buffer);
+    try {
+      lastPrompt = String((JSON.parse(Buffer.concat(chunks).toString('utf8')) as { prompt?: unknown }).prompt ?? '');
+    } catch {
+      lastPrompt = '';
+    }
     res.setHeader('content-type', 'audio/wav');
     res.end(wavFixture());
   });
@@ -93,6 +101,7 @@ test('账号页保存音乐 API 后创作页启用 AI 配乐并生成成功', as
     await aiButton.waitFor({ timeout: 15000 });
     assert.equal(await aiButton.isEnabled(), true);
     await aiButton.click();
+    await page.getByLabel('配乐提示词（可选）').fill('温柔的钢琴与雨声');
     await page.getByLabel('需求提示词').fill('《账号配乐》：霓虹打砖块');
     await page.getByRole('button', { name: '生成游戏并进入工作台' }).click();
     await page.waitForURL('**/projects/**');
@@ -101,8 +110,10 @@ test('账号页保存音乐 API 后创作页启用 AI 配乐并生成成功', as
     const version = await store.getVersion(project!.currentVersionId);
     assert.equal(project?.ownerToken.startsWith('account:'), true);
     assert.equal(version?.spec.music, 'ai-generated');
+    assert.equal(version?.spec.musicPrompt, '温柔的钢琴与雨声');
     assert.ok(version?.html.includes('data:audio/wav;base64,'));
     assert.equal(requests, 1);
+    assert.ok(lastPrompt.includes('Additional direction: 温柔的钢琴与雨声'), '网关应收到配乐提示词');
 
     // 未登录的新会话不会继承该账号的接口配置。
     const guest = await browser.newPage();

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { generateGame } from '../functions/generate.ts';
-import { defaultSpec, sanitizeSpec, type GameSpec } from '../functions/shared/spec.ts';
+import { MAX_MUSIC_PROMPT, defaultSpec, sanitizeSpec, type GameSpec } from '../functions/shared/spec.ts';
 
 // 构造一小段可被浏览器解码的 WAV，避免测试依赖外部音频文件。
 function wavFixture(seconds = 0.2): Uint8Array {
@@ -64,19 +64,28 @@ describe('AI 配乐网关', () => {
     assert.equal(sanitizeSpec({ ...aiSpec(), music: 'unknown' }, aiSpec()).music, 'ai-generated');
   });
 
+  test('配乐提示词被清理、保留并在显式清空时移除', () => {
+    const saved = sanitizeSpec({ ...aiSpec(), musicPrompt: '  温柔\n钢琴   与雨声  ' });
+    assert.equal(saved.musicPrompt, '温柔 钢琴 与雨声');
+    assert.equal(sanitizeSpec({ ...aiSpec() }, saved).musicPrompt, '温柔 钢琴 与雨声');
+    assert.equal(sanitizeSpec({ ...aiSpec(), musicPrompt: '' }, saved).musicPrompt, undefined);
+    assert.equal(sanitizeSpec({ ...aiSpec(), musicPrompt: '音'.repeat(400) }).musicPrompt?.length, MAX_MUSIC_PROMPT);
+  });
+
   test('音频字节响应被内嵌到单文件 HTML', async () => {
     const wav = wavFixture();
     const gateway = await startGateway(() => ({ type: 'audio/wav', body: wav }));
     try {
       const result = await generateGame({
         prompt: '霓虹打砖块',
-        baseSpec: aiSpec(),
+        baseSpec: { ...aiSpec(), musicPrompt: '温柔的钢琴与雨声' },
         env: {},
         music: { apiUrl: gateway.url, apiKey: 'test-key', name: 'fake-music' },
       });
 
       assert.equal(result.ok, true);
       assert.equal(result.spec.music, 'ai-generated');
+      assert.equal(result.spec.musicPrompt, '温柔的钢琴与雨声');
       assert.ok(result.html.includes('id="music-track"'));
       assert.ok(result.html.includes('data:audio/wav;base64,'));
       assert.ok(result.html.includes("createArcadeAudio('music-track')"));
@@ -90,6 +99,7 @@ describe('AI 配乐网关', () => {
       assert.equal(sent.loop, true);
       assert.equal(sent.model, 'fake-music');
       assert.ok(typeof sent.prompt === 'string' && String(sent.prompt).includes('Seamless'));
+      assert.ok(String(sent.prompt).includes('Additional direction: 温柔的钢琴与雨声'));
     } finally {
       await gateway.close();
     }

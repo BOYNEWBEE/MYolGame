@@ -138,12 +138,13 @@ describe('账号级 AI 配乐设置', () => {
       // 生成时使用账号保存的网关，配置的 model 名称随请求发送。
       response = await f.request('/projects', 'POST', {
         prompt: '霓虹打砖块',
-        spec: aiSpec(),
+        spec: { ...aiSpec(), musicPrompt: '  温柔\n钢琴  ' },
       }, token);
       assert.equal(response.status, 201);
       const created = await response.json() as { version: { id: string }; task: TaskRecord };
       let version = await f.store.getVersion(created.version.id);
       assert.equal(version?.spec.music, 'ai-generated');
+      assert.equal(version?.spec.musicPrompt, '温柔 钢琴');
       assert.ok(version?.html.includes('data:audio/wav;base64,'));
       assert.equal(f.gateway.requests(), 1);
 

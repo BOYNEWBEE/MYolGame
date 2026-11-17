@@ -16,6 +16,7 @@ import {
   THEMES,
   DIFFICULTIES,
   MUSIC_NAMES,
+  MAX_MUSIC_PROMPT,
   defaultSpec,
   getMusicPreset,
   type GameSpec,
@@ -48,6 +49,7 @@ export default function Create(): ReactNode {
   const [template, setTemplate] = useState<TemplateId>('breakout');
   const [theme, setTheme] = useState<ThemeId>('neon');
   const [music, setMusic] = useState<MusicPreset>();
+  const [musicPrompt, setMusicPrompt] = useState('');
   const [musicSource, setMusicSource] = useState<'account' | 'server' | 'none' | null>(null);
   const [speed, setSpeed] = useState(1.4);
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
@@ -76,11 +78,12 @@ export default function Create(): ReactNode {
     () => ({
       ...defaultSpec(template, theme),
       music,
+      musicPrompt: musicPrompt.trim() || undefined,
       speed,
       difficulty,
       options,
     }),
-    [template, theme, music, speed, difficulty, options],
+    [template, theme, music, musicPrompt, speed, difficulty, options],
   );
 
   const parsed = useMemo(() => parsePrompt(prompt, baseSpec), [prompt, baseSpec]);
@@ -251,6 +254,21 @@ export default function Create(): ReactNode {
                     : <>AI 配乐未启用：请先到 <Link to="/account">账号管理</Link> 填写音乐生成 API，或由服务端统一配置。</>
                   : '当前配乐为「霓虹街机」。点试听播放，再点一次停止。'}
             </p>
+            {resolvedMusic === 'ai-generated' && (
+              <label className="field" style={{ marginTop: 10 }}>
+                <span className="field-label">配乐提示词（可选）</span>
+                <textarea
+                  rows={2}
+                  maxLength={MAX_MUSIC_PROMPT}
+                  value={musicPrompt}
+                  onChange={(e) => setMusicPrompt(e.target.value)}
+                  placeholder="例如：温柔的钢琴与雨声，节奏舒缓，不要鼓点"
+                />
+                <span className="panel-note" style={{ margin: 0 }}>
+                  会与模板、主题和速度自动生成的描述一起发送给音乐接口；留空则只用自动描述。
+                </span>
+              </label>
+            )}
             {resolvedMusic === 'neon-arcade' && !submitting && (
               <iframe
                 className="music-preview"

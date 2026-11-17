@@ -110,6 +110,7 @@ export function musicPrompt(spec: GameSpec): string {
     TEMPLATE_MOOD[spec.template] + ' game.',
     'Mood: ' + THEME_MOOD[spec.theme] + '.',
     bpm + ' BPM.',
+    ...(spec.musicPrompt ? ['Additional direction: ' + spec.musicPrompt + '.'] : []),
     MUSIC_DURATION_SECONDS + ' seconds, no vocals, no long intro, loop-friendly ending.',
   ].join(' ');
 }
