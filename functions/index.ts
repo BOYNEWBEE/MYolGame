@@ -20,7 +20,14 @@ const handle = createM0Application({
   }) : undefined,
   business: (request, principal) => createHandler({
     store: { ...store, getSession: async token => principal?.token === token ? principal : null },
-    env: { model: {} },
+    env: {
+        model: {},
+        music: {
+          apiUrl: Deno.env.get('APP_MUSIC_API_URL') || undefined,
+          apiKey: Deno.env.get('APP_MUSIC_API_KEY') || undefined,
+          name: Deno.env.get('APP_MUSIC_NAME') || undefined,
+        },
+      },
   })(request),
   origin: () => Deno.env.get('APP_ORIGIN') ?? PUBLIC_ORIGIN,
   workerKey: () => Deno.env.get('APP_M0_WORKER_KEY') ?? '',

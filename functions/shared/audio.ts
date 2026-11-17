@@ -20,16 +20,28 @@ export function soundControls(music: boolean, effects: boolean, preview = false)
 }
 
 export const ARCADE_AUDIO_SCRIPT = `
-  function createArcadeAudio() {
+  function createArcadeAudio(trackId) {
     const enable = document.getElementById('sound-enable');
     const musicButton = document.getElementById('sound-music');
     const effectsButton = document.getElementById('sound-effects');
+    const track = trackId ? document.getElementById(trackId) : null;
     const Audio = window.AudioContext || window.webkitAudioContext;
     const OfflineAudio = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     const bandEdges = [35, 100, 125, 155, 185, 225, 275, 335, 405, 490, 590, 725, 895, 1200];
     const bands = new Uint8Array(bandEdges.length - 1);
-    let context, effectsGain, musicBuffer, musicSource, musicAnalyser, frequencyData;
+    let context, effectsGain, musicBuffer, musicSource, musicGain, musicAnalyser, mediaSource, frequencyData;
     let musicOn = false, effectsOn = false;
+
+    if (track) {
+      track.addEventListener('error', function () {
+        musicOn = false;
+        if (musicButton) {
+          musicButton.disabled = true;
+          musicButton.setAttribute('aria-pressed', 'false');
+          musicButton.textContent = 'AI 配乐不可用';
+        }
+      });
+    }
 
     function tone(engine, output, at, length, wave, from, to, volume) {
       const oscillator = engine.createOscillator();
@@ -92,10 +104,25 @@ export const ARCADE_AUDIO_SCRIPT = `
 
     function syncMusic() {
       if (!canPlayMusic()) {
+        if (track && !track.paused) track.pause();
         if (musicSource) {
           musicSource.stop();
           musicSource.disconnect();
           musicSource = null;
+        }
+        return;
+      }
+      if (track) {
+        if (!mediaSource) {
+          mediaSource = context.createMediaElementSource(track);
+          musicGain = context.createGain();
+          musicGain.gain.value = 0.48;
+          mediaSource.connect(musicGain);
+          musicGain.connect(musicAnalyser);
+        }
+        if (track.paused) {
+          const playing = track.play();
+          if (playing && playing.catch) playing.catch(function () {});
         }
         return;
       }
@@ -143,7 +170,7 @@ export const ARCADE_AUDIO_SCRIPT = `
           document.addEventListener('visibilitychange', syncMusic);
         }
         await context.resume();
-        musicOn = Boolean(musicButton && OfflineAudio);
+        musicOn = Boolean(musicButton && (track || OfflineAudio));
         effectsOn = Boolean(effectsButton);
         if (musicButton) {
           musicButton.disabled = !musicOn;
@@ -199,7 +226,7 @@ export const ARCADE_AUDIO_SCRIPT = `
     }
 
     function readMusicBands() {
-      if (!musicSource || !canPlayMusic()) return null;
+      if (!musicAnalyser || (!musicSource && (!track || track.paused)) || !canPlayMusic()) return null;
       musicAnalyser.getByteFrequencyData(frequencyData);
       const binWidth = context.sampleRate / musicAnalyser.fftSize;
       for (let band = 0; band < bands.length; band++) {

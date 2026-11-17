@@ -2,6 +2,7 @@
 // 每一步记录真实阶段日志；未配置模型时全程为模板模式，并如实标记。
 
 import { modelAdjustSpec, modelConfigured, type ModelEnv } from './shared/model.ts';
+import { generateMusicTrack, musicConfigured, type MusicEnv } from './shared/music.ts';
 import { parsePrompt, type ParseMatched } from './shared/prompt.ts';
 import { renderGame } from './shared/templates/index.ts';
 import { sanitizeSpec, type GameSpec, type GenerationMode } from './shared/spec.ts';
@@ -11,6 +12,7 @@ export interface GenerateInput {
   prompt: string;
   baseSpec?: GameSpec;
   env: ModelEnv;
+  music?: MusicEnv;
 }
 
 export interface GenerateOutput {
@@ -74,10 +76,38 @@ export async function generateGame(input: GenerateInput): Promise<GenerateOutput
   spec = sanitizeSpec(spec);
   markStage('校验规格', true, spec.template + '/' + spec.theme + '/' + spec.difficulty);
 
-  // 阶段三：渲染内置模板
+  // 阶段三：按需调用服务端音乐生成 API；失败或未配置时回退为无配乐，不伪造结果。
+  let musicTrack: string | undefined;
+  if (spec.music === 'ai-generated') {
+    if (!musicConfigured(input.music)) {
+      spec = { ...spec, music: 'none' };
+      notes.push('音乐生成 API 未配置，已生成无配乐版本。');
+      markStage('生成 AI 配乐', false, 'music_not_configured');
+    } else {
+      const music = await generateMusicTrack(input.music, spec);
+      if (music.ok) {
+        musicTrack = music.track.dataUri;
+        notes.push('背景音乐由服务端音乐生成 API 生成，并内嵌到单文件 HTML。');
+        markStage('生成 AI 配乐', true, music.track.bytes + ' bytes');
+      } else {
+        spec = { ...spec, music: 'none' };
+        notes.push('AI 配乐生成失败，已回退为无配乐版本。');
+        markStage('生成 AI 配乐', false, music.error);
+      }
+    }
+  }
+
+  // 阶段四：渲染内置模板
   let html = '';
   try {
-    html = renderGame(spec);
+    html = renderGame(spec, musicTrack);
+    if (musicTrack && new TextEncoder().encode(html).length > MAX_HTML_BYTES) {
+      spec = { ...spec, music: 'none' };
+      musicTrack = undefined;
+      html = renderGame(spec);
+      notes.push('AI 配乐体积超出单文件上限，已回退为无配乐版本。');
+      markStage('内嵌 AI 配乐', false, 'artifact_too_large');
+    }
     markStage('渲染游戏模板', true, spec.template);
   } catch (error) {
     markStage('渲染游戏模板', false, 'render_failed');
@@ -87,7 +117,7 @@ export async function generateGame(input: GenerateInput): Promise<GenerateOutput
     };
   }
 
-  // 阶段四：产物完整性校验（必须包含画布与配置注入，且体积受限）
+  // 阶段五：产物完整性校验（必须包含画布与配置注入，且体积受限）
   const bytes = new TextEncoder().encode(html).length;
   if (!html.includes('<canvas') || !html.includes('const CFG =') || bytes > MAX_HTML_BYTES) {
     markStage('校验产物', false, 'invalid_artifact');

@@ -310,11 +310,12 @@ function script(): string {
 `;
 }
 
-export function renderSnake(spec: GameSpec): string {
+export function renderSnake(spec: GameSpec, musicTrack?: string): string {
   const palette = getTheme(spec.theme).palette;
   return gameShell({
     spec,
     gameScript: script(),
+    musicTrack,
     config: {
       title: spec.title,
       palette,

@@ -13,7 +13,7 @@ export type ThemeId =
 export type Difficulty = 'easy' | 'normal' | 'hard';
 export type GenerationMode = 'template' | 'model' | 'agent';
 
-export const MUSIC_NAMES = { 'neon-arcade': '霓虹街机', none: '无配乐' } as const;
+export const MUSIC_NAMES = { 'neon-arcade': '霓虹街机', 'ai-generated': 'AI 生成配乐', none: '无配乐' } as const;
 export type MusicPreset = keyof typeof MUSIC_NAMES;
 
 // 每种模板支持的可选玩法开关（由提示词或结构化选择控制）
@@ -289,7 +289,10 @@ export function sanitizeSpec(input: unknown, fallback?: GameSpec): GameSpec {
   const base = fallback ?? defaultSpec();
   if (typeof input !== 'object' || input === null) return base;
   const raw = input as Record<string, unknown>;
-  const music = raw.music === 'neon-arcade' || raw.music === 'none' ? raw.music : base.music;
+  const music =
+    raw.music === 'neon-arcade' || raw.music === 'ai-generated' || raw.music === 'none'
+      ? raw.music
+      : base.music;
 
   const template = TEMPLATE_IDS.includes(raw.template as TemplateId)
     ? (raw.template as TemplateId)

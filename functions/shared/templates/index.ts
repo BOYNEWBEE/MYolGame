@@ -7,18 +7,18 @@ import { renderTetris } from './tetris.ts';
 import { renderGame2048 } from './2048.ts';
 import type { GameSpec } from '../spec.ts';
 
-export function renderGame(spec: GameSpec): string {
+export function renderGame(spec: GameSpec, musicTrack?: string): string {
   switch (spec.template) {
     case 'breakout':
-      return renderBreakout(spec);
+      return renderBreakout(spec, musicTrack);
     case 'snake':
-      return renderSnake(spec);
+      return renderSnake(spec, musicTrack);
     case 'space-shooter':
-      return renderSpaceShooter(spec);
+      return renderSpaceShooter(spec, musicTrack);
     case 'tetris':
-      return renderTetris(spec);
+      return renderTetris(spec, musicTrack);
     case '2048':
-      return renderGame2048(spec);
+      return renderGame2048(spec, musicTrack);
     default:
       throw new Error('unknown_template');
   }

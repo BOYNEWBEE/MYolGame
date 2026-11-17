@@ -32,10 +32,11 @@ const SPEEDS = [
   { value: 1.8, label: '极速 1.8x' },
 ];
 
-const MUSIC_CHOICES: { value?: MusicPreset; label: string }[] = [
+const MUSIC_CHOICES: { value?: MusicPreset; label: string; needsMusicApi?: boolean }[] = [
   { label: '随玩法与主题' },
   { value: 'none', label: MUSIC_NAMES.none },
   { value: 'neon-arcade', label: MUSIC_NAMES['neon-arcade'] },
+  { value: 'ai-generated', label: MUSIC_NAMES['ai-generated'], needsMusicApi: true },
 ];
 
 export default function Create(): ReactNode {
@@ -204,22 +205,31 @@ export default function Create(): ReactNode {
           <div className="field">
             <span id="create-music-label" className="field-label">背景音乐</span>
             <div className="segmented wrap" role="group" aria-labelledby="create-music-label">
-              {MUSIC_CHOICES.map(({ value, label }) => (
-                <button
-                  key={label}
-                  type="button"
-                  className={music === value ? 'active' : ''}
-                  aria-pressed={music === value}
-                  onClick={() => setMusic(value)}
-                >
-                  {label}
-                </button>
-              ))}
+              {MUSIC_CHOICES.map(({ value, label, needsMusicApi }) => {
+                const unavailable = Boolean(needsMusicApi && !meta?.music.configured);
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    className={music === value ? 'active' : ''}
+                    aria-pressed={music === value}
+                    disabled={unavailable}
+                    title={unavailable ? '需在服务端配置音乐生成 API' : undefined}
+                    onClick={() => setMusic(value)}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
             </div>
             <p className="panel-note music-note">
               {resolvedMusic === 'none'
                 ? '当前游戏无配乐。选择「霓虹街机」即可试听。'
-                : '当前配乐为「霓虹街机」。点试听播放，再点一次停止。'}
+                : resolvedMusic === 'ai-generated'
+                  ? meta?.music.configured
+                    ? '生成时调用服务端音乐 API，制作 20 秒循环配乐并内嵌到游戏；失败会回退为无配乐。'
+                    : 'AI 配乐未启用：需在服务端配置音乐生成 API。'
+                  : '当前配乐为「霓虹街机」。点试听播放，再点一次停止。'}
             </p>
             {resolvedMusic === 'neon-arcade' && !submitting && (
               <iframe

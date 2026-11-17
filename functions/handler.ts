@@ -22,6 +22,7 @@ import {
   type ThemeId,
 } from './shared/spec.ts';
 import { modelConfigured, type ModelEnv } from './shared/model.ts';
+import { musicConfigured, type MusicEnv } from './shared/music.ts';
 import type {
   Game,
   GameFilter,
@@ -35,6 +36,7 @@ import type {
 
 export interface HandlerEnv {
   model: ModelEnv;
+  music?: MusicEnv;
 }
 
 export interface HandlerDeps {
@@ -246,7 +248,7 @@ async function runGenerationTask(
     createdAt: now,
   });
 
-  const result = await generateGame({ prompt, baseSpec, env: deps.env.model });
+  const result = await generateGame({ prompt, baseSpec, env: deps.env.model, music: deps.env.music });
   task.stages = result.stages;
   task.generationMode = result.mode;
   task.finishedAt = new Date().toISOString();
@@ -338,6 +340,10 @@ function buildRoutes(): Route[] {
           model: {
             configured: modelConfigured(deps.env.model),
             name: deps.env.model.name ?? null,
+          },
+          music: {
+            configured: musicConfigured(deps.env.music),
+            name: deps.env.music?.name ?? null,
           },
           identityNotice:
             '初版使用匿名会话与创作者令牌（保存在浏览器本地），不是完整账号系统：换浏览器或清除数据后无法找回项目。',

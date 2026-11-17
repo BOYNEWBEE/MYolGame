@@ -40,12 +40,17 @@ const MIME: Record<string, string> = {
   '.map': 'application/json',
 };
 
-function modelEnvFromProcess(): HandlerEnv {
+function handlerEnvFromProcess(): HandlerEnv {
   return {
     model: {
       apiUrl: process.env.MYOLGAME_MODEL_API_URL || undefined,
       apiKey: process.env.MYOLGAME_MODEL_API_KEY || undefined,
       name: process.env.MYOLGAME_MODEL_NAME || undefined,
+    },
+    music: {
+      apiUrl: process.env.MYOLGAME_MUSIC_API_URL || undefined,
+      apiKey: process.env.MYOLGAME_MUSIC_API_KEY || undefined,
+      name: process.env.MYOLGAME_MUSIC_NAME || undefined,
     },
   };
 }
@@ -132,7 +137,7 @@ export async function startLocalServer(options: LocalServerOptions = {}): Promis
   const config = options.agent === false ? undefined : options.agent ?? loadAgentConfig();
   if (config && !(store instanceof FileStore)) throw new Error('本地 Agent 需要使用 FileStore');
   const agent = config ? new LocalAgent(store as FileStore, config, options.sandboxDir ?? join(rootDir, '.sandboxes')) : undefined;
-  const businessHandler = createHandler({ store, env: options.env ?? modelEnvFromProcess(), agent });
+  const businessHandler = createHandler({ store, env: options.env ?? handlerEnvFromProcess(), agent });
   const handler = store instanceof FileStore ? withLocalAccounts(store, businessHandler) : businessHandler;
   let ready = false;
 

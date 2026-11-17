@@ -509,12 +509,13 @@ function script(): string {
 `;
 }
 
-export function renderTetris(spec: GameSpec): string {
+export function renderTetris(spec: GameSpec, musicTrack?: string): string {
   const palette = getTheme(spec.theme).palette;
   return gameShell({
     spec,
     gameScript: script(),
     soundEffects: true,
+    musicTrack,
     config: {
       title: spec.title,
       palette,

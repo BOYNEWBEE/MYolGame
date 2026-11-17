@@ -376,13 +376,14 @@ function script(): string {
 `;
 }
 
-export function renderBreakout(spec: GameSpec): string {
+export function renderBreakout(spec: GameSpec, musicTrack?: string): string {
   const palette = getTheme(spec.theme).palette;
   const neon = spec.theme === 'neon';
   return gameShell({
     spec,
     gameScript: script(),
     soundEffects: neon,
+    musicTrack,
     config: {
       title: spec.title,
       palette,
