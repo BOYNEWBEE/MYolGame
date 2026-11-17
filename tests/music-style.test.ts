@@ -10,7 +10,7 @@ import { startLocalServer } from '../dev/local-server.ts';
 import { FileStore } from '../dev/store_file.ts';
 import { generateGame } from '../functions/generate.ts';
 import { chatCompletionsUrl, chatCompletionsUrls, generateMusicStyle, parseMusicStyleSettingsInput, probeMusicStyle } from '../functions/shared/music-style.ts';
-import { DEFAULT_MUSIC_STYLE, defaultSpec, sanitizeMusicStyle } from '../functions/shared/spec.ts';
+import { DEFAULT_MUSIC_STYLE, applyPromptStyle, defaultSpec, sanitizeMusicStyle } from '../functions/shared/spec.ts';
 
 type ChatReply = { status?: number; content?: string; raw?: string };
 
@@ -65,6 +65,8 @@ describe('编曲风格白名单', () => {
       leadWave: 'triangle',
       bassWave: 'triangle',
       kickWave: 'sine',
+      instrument: 'chip',
+      pad: 'none',
       density: 1,
       swing: 0,
       octave: 0,
@@ -96,6 +98,8 @@ describe('编曲风格白名单', () => {
     assert.equal(style.swing, 0.3);
     assert.equal(style.octave, 1);
     assert.equal(style.seed, 9999);
+    assert.equal(style.instrument, 'chip');
+    assert.equal(style.pad, 'none');
     assert.ok(!('extra' in style));
 
     const parsed = sanitizeMusicStyle({
@@ -105,6 +109,8 @@ describe('编曲风格白名单', () => {
       leadWave: 'square',
       bassWave: 'sawtooth',
       kickWave: 'triangle',
+      instrument: 'piano',
+      pad: 'warm',
       density: 0.55,
       swing: 0.12,
       octave: -1,
@@ -117,6 +123,8 @@ describe('编曲风格白名单', () => {
       leadWave: 'square',
       bassWave: 'sawtooth',
       kickWave: 'triangle',
+      instrument: 'piano',
+      pad: 'warm',
       density: 0.55,
       swing: 0.12,
       octave: -1,
@@ -133,6 +141,34 @@ describe('编曲风格白名单', () => {
       assert.equal(sanitizeMusicStyle({ progression }).progression, progression);
     }
     assert.equal(sanitizeMusicStyle({ transpose: 99 }).transpose, 7);
+    assert.equal(sanitizeMusicStyle({ instrument: 'theremin', pad: 'choir' }).instrument, 'chip');
+    assert.equal(sanitizeMusicStyle({ instrument: 'theremin', pad: 'choir' }).pad, 'none');
+    assert.equal(sanitizeMusicStyle({ instrument: 'strings' }).pad, 'none');
+  });
+
+  test('提示词乐器关键词作为音色兜底', () => {
+    const piano = applyPromptStyle(DEFAULT_MUSIC_STYLE, '温柔的钢琴曲，节奏舒缓');
+    assert.equal(piano.instrument, 'piano');
+    assert.equal(piano.pad, 'none');
+
+    const strings = applyPromptStyle(DEFAULT_MUSIC_STYLE, '霓虹打砖块', '弦乐');
+    assert.equal(strings.instrument, 'strings');
+    assert.equal(strings.pad, 'strings', '弦乐主旋律默认加弦乐铺底');
+
+    const warm = applyPromptStyle(DEFAULT_MUSIC_STYLE, '钢琴，加一点氛围');
+    assert.equal(warm.instrument, 'piano');
+    assert.equal(warm.pad, 'warm');
+
+    const explicitPad = applyPromptStyle(DEFAULT_MUSIC_STYLE, '钢琴配弦乐铺底');
+    assert.equal(explicitPad.instrument, 'piano');
+    assert.equal(explicitPad.pad, 'strings');
+
+    assert.equal(applyPromptStyle(DEFAULT_MUSIC_STYLE, '八音盒风格').instrument, 'music-box');
+    assert.equal(applyPromptStyle(DEFAULT_MUSIC_STYLE, '长笛与管风琴').instrument, 'flute');
+    assert.equal(applyPromptStyle(DEFAULT_MUSIC_STYLE, 'guitar riff').instrument, 'guitar');
+
+    const tuned = { ...DEFAULT_MUSIC_STYLE, instrument: 'organ' as const };
+    assert.equal(applyPromptStyle(tuned, '钢琴').instrument, 'organ', '模型已选音色时不覆盖');
   });
 });
 
@@ -223,7 +259,24 @@ describe('OpenAI 兼容编曲客户端', () => {
       const messages = server.bodies[0]?.messages as { role: string; content: string }[];
       assert.equal(messages[0]?.role, 'system');
       assert.ok(messages[0]!.content.includes('70-160'));
+      assert.ok(messages[0]!.content.includes('instrument'));
+      assert.ok(messages[0]!.content.includes('pad'));
       assert.ok(messages[1]!.content.includes('breakout'));
+    } finally {
+      await server.close();
+    }
+  });
+
+  test('模型未指定乐器时按提示词补充音色', async () => {
+    const server = await startChatServer(() => ({ content: '{"bpm":100,"progression":"major"}' }));
+    try {
+      const style = await generateMusicStyle('钢琴配弦乐铺底', defaultSpec('breakout', 'neon'), {
+        apiUrl: server.url,
+        apiKey: 'k',
+        model: 'm',
+      });
+      assert.equal(style?.style.instrument, 'piano');
+      assert.equal(style?.style.pad, 'strings');
     } finally {
       await server.close();
     }
@@ -288,7 +341,7 @@ describe('OpenAI 兼容编曲客户端', () => {
 describe('生成管线接入编曲模型', () => {
   test('霓虹街机成功使用模型参数并注入 HTML，不泄露密钥', async () => {
     const server = await startChatServer(() => ({
-      content: '{"bpm":132,"progression":"dorian","transpose":2,"leadWave":"square","bassWave":"sawtooth","kickWave":"triangle","density":0.7,"swing":0.1,"octave":1,"seed":88}',
+      content: '{"bpm":132,"progression":"dorian","transpose":2,"leadWave":"square","bassWave":"sawtooth","kickWave":"triangle","instrument":"piano","pad":"warm","density":0.7,"swing":0.1,"octave":1,"seed":88}',
     }));
     try {
       const result = await generateGame({
@@ -300,9 +353,12 @@ describe('生成管线接入编曲模型', () => {
       assert.equal(result.ok, true);
       assert.equal(result.spec.musicStyle?.bpm, 132);
       assert.equal(result.spec.musicStyle?.progression, 'dorian');
+      assert.equal(result.spec.musicStyle?.instrument, 'piano');
+      assert.equal(result.spec.musicStyle?.pad, 'warm');
       assert.ok(result.html.includes('createArcadeAudio(null, '));
       assert.ok(result.html.includes('"bpm":132'));
       assert.ok(result.html.includes('"progression":"dorian"'));
+      assert.ok(result.html.includes('"instrument":"piano"'));
       assert.ok(!result.html.includes('pipe-secret'));
       assert.ok(result.notes.some((note) => note.includes('mock-arranger')));
       assert.ok(result.stages.some((stage) => stage.name === '调整配乐风格（模型辅助）' && stage.ok));
@@ -341,6 +397,26 @@ describe('生成管线接入编曲模型', () => {
     } finally {
       await server.close();
     }
+  });
+
+  test('未配置编曲模型时，提示词乐器关键词仍生效', async () => {
+    const result = await generateGame({
+      prompt: '霓虹打砖块，希望是温柔的钢琴曲',
+      baseSpec: defaultSpec('breakout', 'neon'),
+      env: {},
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.spec.musicStyle?.instrument, 'piano');
+    assert.ok(result.html.includes('"instrument":"piano"'));
+    assert.ok(result.stages.some((stage) => stage.name === '按提示词选择音色' && stage.ok));
+
+    const arranged = await generateGame({
+      prompt: '霓虹打砖块，长笛主旋律',
+      baseSpec: { ...defaultSpec('breakout', 'neon'), music: 'ai-arranged' },
+      env: {},
+    });
+    assert.equal(arranged.spec.musicStyle?.instrument, 'flute');
+    assert.ok(!arranged.notes.some((note) => note.includes('编曲模型未配置')));
   });
 
   test('提供试听参数时生成直接复用，不再请求编曲模型', async () => {

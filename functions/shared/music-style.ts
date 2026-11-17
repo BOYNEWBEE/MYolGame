@@ -1,7 +1,7 @@
 // OpenAI 兼容的编曲模型：只输出受限的音乐风格参数，不生成或执行任何浏览器代码。
 // 模型失败、超时或输出不合法时返回 null，由调用方回退到默认合成配乐。
 
-import { sanitizeMusicStyle, type GameSpec, type MusicStyle } from './spec.ts';
+import { applyPromptStyle, sanitizeMusicStyle, type GameSpec, type MusicStyle } from './spec.ts';
 
 export interface MusicStyleEnv {
   apiUrl?: string;
@@ -16,15 +16,21 @@ const REQUEST_TIMEOUT_MS = 20000;
 const MAX_RESPONSE_CHARS = 64 * 1024;
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
-const STYLE_KEYS = ['bpm', 'progression', 'transpose', 'leadWave', 'bassWave', 'kickWave', 'density', 'swing', 'octave', 'seed'];
+const STYLE_KEYS = [
+  'bpm', 'progression', 'transpose', 'leadWave', 'bassWave', 'kickWave',
+  'instrument', 'pad', 'density', 'swing', 'octave', 'seed',
+];
 
 const SYSTEM_PROMPT = [
-  '你是 2D 游戏配乐编曲助手，为浏览器实时合成的芯片音乐选择参数。',
+  '你是 2D 游戏配乐编曲助手，为浏览器实时合成的音乐选择参数。',
   '只输出一个 JSON 对象，不要 Markdown 或解释。',
   '字段：bpm(70-160 整数)、progression(minor|major|dorian|phrygian|lydian|mixolydian|harmonic-minor|suspended)、',
   'transpose(-7 到 7 整数，半音移调，用来改变调性)、',
-  'leadWave/bassWave/kickWave(sine|square|sawtooth|triangle)、density(0.3-1)、swing(0-0.3)、',
-  'octave(-1|0|1)、seed(1-9999 整数)。',
+  'leadWave/bassWave/kickWave(sine|square|sawtooth|triangle)、',
+  'instrument(chip|piano|music-box|strings|flute|organ|guitar，主旋律音色，chip 是原版芯片音色)、',
+  'pad(none|warm|strings，和弦铺底，可让织体更饱满)、',
+  'density(0.3-1)、swing(0-0.3)、octave(-1|0|1)、seed(1-9999 整数)。',
+  '用户提到钢琴、弦乐、长笛、八音盒、管风琴、吉他等乐器时必须选择对应的 instrument；提到铺底/氛围时选择 pad。',
   '音乐用于 20 秒循环背景，不要人声，避免长前奏。',
   '不要总是返回默认值：除非用户明确要求原版霓虹风格，transpose 尽量避开 0，并选择与默认 minor 不同的和弦进行；',
   'seed 请随机选择，它会改变旋律型和低频节奏。',
@@ -196,7 +202,9 @@ export async function generateMusicStyle(
   const result = await requestStyleContent(env, stylePrompt(prompt, spec));
   if (!result.ok) return null;
   const parsed = parseStyleContent(result.content);
-  return parsed ? { style: sanitizeMusicStyle(parsed), model: env.model! } : null;
+  if (!parsed) return null;
+  const style = applyPromptStyle(sanitizeMusicStyle(parsed), prompt, spec.musicPrompt);
+  return { style, model: env.model! };
 }
 
 export type MusicStyleProbeResult =

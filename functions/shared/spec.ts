@@ -46,6 +46,9 @@ export type ChordProgression =
   | 'harmonic-minor'
   | 'suspended';
 
+export type MusicInstrument = 'chip' | 'piano' | 'music-box' | 'strings' | 'flute' | 'organ' | 'guitar';
+export type MusicPad = 'none' | 'warm' | 'strings';
+
 // 浏览器内置合成配乐的可调参数；只允许这组受限字段，模型不能注入代码。
 export interface MusicStyle {
   bpm: number; // 70 ~ 160
@@ -54,6 +57,8 @@ export interface MusicStyle {
   leadWave: SynthWave;
   bassWave: SynthWave;
   kickWave: SynthWave;
+  instrument: MusicInstrument; // 主旋律音色，chip 为原版振荡器音色
+  pad: MusicPad; // 和弦铺底，none 表示不铺底
   density: number; // 0.3 ~ 1，旋律音符出现概率
   swing: number; // 0 ~ 0.3，奇数步延迟比例
   octave: number; // -1 ~ 1，旋律八度
@@ -67,6 +72,8 @@ export const DEFAULT_MUSIC_STYLE: MusicStyle = {
   leadWave: 'triangle',
   bassWave: 'triangle',
   kickWave: 'sine',
+  instrument: 'chip',
+  pad: 'none',
   density: 1,
   swing: 0,
   octave: 0,
@@ -74,6 +81,8 @@ export const DEFAULT_MUSIC_STYLE: MusicStyle = {
 };
 
 const SYNTH_WAVES: SynthWave[] = ['sine', 'square', 'sawtooth', 'triangle'];
+const INSTRUMENTS: MusicInstrument[] = ['chip', 'piano', 'music-box', 'strings', 'flute', 'organ', 'guitar'];
+const PADS: MusicPad[] = ['none', 'warm', 'strings'];
 const PROGRESSIONS: ChordProgression[] = [
   'minor',
   'major',
@@ -109,11 +118,50 @@ export function sanitizeMusicStyle(raw: unknown, fallback: MusicStyle = DEFAULT_
     leadWave: SYNTH_WAVES.includes(value.leadWave as SynthWave) ? (value.leadWave as SynthWave) : base.leadWave,
     bassWave: SYNTH_WAVES.includes(value.bassWave as SynthWave) ? (value.bassWave as SynthWave) : base.bassWave,
     kickWave: SYNTH_WAVES.includes(value.kickWave as SynthWave) ? (value.kickWave as SynthWave) : base.kickWave,
+    instrument: INSTRUMENTS.includes(value.instrument as MusicInstrument)
+      ? (value.instrument as MusicInstrument)
+      : base.instrument,
+    pad: PADS.includes(value.pad as MusicPad) ? (value.pad as MusicPad) : base.pad,
     density: clampFloat(value.density, 0.3, 1, base.density),
     swing: clampFloat(value.swing, 0, 0.3, base.swing),
     octave: clampInt(value.octave, -1, 1, base.octave),
     seed: clampInt(value.seed, 1, 9999, base.seed),
   };
+}
+
+// 提示词里的乐器/铺底关键词作为模型输出的兜底：模型未指定音色时按关键词切换，
+// 客户端试听、试听接口与生成管线共用同一套规则。
+const INSTRUMENT_KEYWORDS: [MusicInstrument, RegExp][] = [
+  ['piano', /钢琴|piano/i],
+  ['music-box', /八音盒|音乐盒|music\s*box/i],
+  ['strings', /弦乐|小提琴|大提琴|violin|cello|strings?/i],
+  ['flute', /长笛|笛子|flute/i],
+  ['organ', /管风琴|风琴|organ/i],
+  ['guitar', /吉他|guitar/i],
+];
+const PAD_KEYWORDS: [MusicPad, RegExp][] = [
+  ['strings', /弦乐铺底|铺底弦乐|string\s*pad/i],
+  ['warm', /铺底|垫音|氛围|pad|ambient/i],
+];
+
+export function applyPromptStyle(style: MusicStyle, prompt: string, musicPrompt?: string): MusicStyle {
+  const text = (prompt + ' ' + (musicPrompt ?? '')).trim();
+  if (!text) return style;
+  let instrument = style.instrument;
+  if (instrument === 'chip') {
+    const hit = INSTRUMENT_KEYWORDS.find(([, pattern]) => pattern.test(text));
+    if (hit) instrument = hit[0];
+  }
+  let pad = style.pad;
+  if (pad === 'none') {
+    if (instrument === 'strings') {
+      pad = 'strings';
+    } else {
+      const hit = PAD_KEYWORDS.find(([, pattern]) => pattern.test(text));
+      if (hit) pad = hit[0];
+    }
+  }
+  return instrument === style.instrument && pad === style.pad ? style : { ...style, instrument, pad };
 }
 
 export interface GameSpec {

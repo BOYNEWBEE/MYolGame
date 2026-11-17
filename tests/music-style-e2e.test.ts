@@ -40,7 +40,7 @@ test('账号保存编曲模型后，可选用 AI 编曲并生成带模型参数�
       choices: [{
         message: {
           role: 'assistant',
-          content: '{"bpm":138,"progression":"dorian","transpose":3,"leadWave":"square","bassWave":"sawtooth","kickWave":"triangle","density":0.65,"swing":0.08,"octave":-1,"seed":77}',
+          content: '{"bpm":138,"progression":"dorian","transpose":3,"leadWave":"square","bassWave":"sawtooth","kickWave":"triangle","instrument":"piano","pad":"warm","density":0.65,"swing":0.08,"octave":-1,"seed":77}',
         },
       }],
     }));
@@ -121,10 +121,13 @@ test('账号保存编曲模型后，可选用 AI 编曲并生成带模型参数�
     assert.equal(version?.spec.musicStyle?.bpm, 138);
     assert.equal(version?.spec.musicStyle?.progression, 'dorian');
     assert.equal(version?.spec.musicStyle?.leadWave, 'square');
+    assert.equal(version?.spec.musicStyle?.instrument, 'piano');
+    assert.equal(version?.spec.musicStyle?.pad, 'warm');
     assert.equal(version?.spec.musicStyle?.seed, 77);
     assert.ok(version?.html.includes('createArcadeAudio(null, '));
     assert.ok(version?.html.includes('"bpm":138'));
     assert.ok(version?.html.includes('"progression":"dorian"'));
+    assert.ok(version?.html.includes('"instrument":"piano"'));
     assert.ok(!version?.html.includes(secret), '产物不应包含密钥');
 
     assert.equal(requests, 2);
@@ -155,6 +158,72 @@ test('账号保存编曲模型后，可选用 AI 编曲并生成带模型参数�
     await app.close();
     chat.closeAllConnections();
     await new Promise<void>((resolve) => chat.close(() => resolve()));
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('未配置编曲模型时，提示词里的钢琴音色也能试听并写入游戏', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'myol-music-keyword-'));
+  const store = new FileStore(join(dir, 'db.json'));
+  const app = await startLocalServer({
+    port: 0,
+    store,
+    seed: false,
+    agent: false,
+    distDir: join(rootDir, 'web', 'dist'),
+    env: { model: {} },
+  });
+  const browser = await chromium.launch({ executablePath: CHROME_PATH, headless: true });
+  try {
+    const page = await browser.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.goto(app.url + '/create');
+    await page.getByLabel('配乐提示词（可选）').fill('温柔的钢琴曲，节奏舒缓');
+    const previewButton = page.getByRole('button', { name: '按提示词识别音色试听' });
+    await previewButton.waitFor({ timeout: 15000 });
+    await previewButton.click();
+    await page.getByText('已应用 关键词识别：120 BPM · minor').waitFor({ timeout: 15000 });
+    await page.getByText('音色：钢琴 · 无铺底').waitFor({ timeout: 15000 });
+
+    // 在试听窗口里真正播放，确认钢琴音色经过离线合成后仍有非零频谱。
+    const preview = page.frameLocator('.music-preview');
+    await preview.getByRole('button', { name: '试听配乐' }).click();
+    await preview.locator('#sound-music').waitFor({ timeout: 15000 });
+    assert.equal(await preview.locator('#sound-music').getAttribute('aria-pressed'), 'true');
+    let maxBar = 0;
+    for (let attempt = 0; attempt < 40 && maxBar <= 8; attempt += 1) {
+      await page.waitForTimeout(250);
+      maxBar = await preview.locator('canvas').evaluate((canvas: HTMLCanvasElement) => {
+        const context = canvas.getContext('2d');
+        if (!context) return 0;
+        const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+        let top = canvas.height;
+        for (let y = 0; y < canvas.height; y += 1) {
+          for (let x = 0; x < canvas.width; x += 1) {
+            if (data[(y * canvas.width + x) * 4 + 3] > 20) {
+              top = Math.min(top, y);
+              break;
+            }
+          }
+        }
+        return canvas.height - top;
+      });
+    }
+    assert.ok(maxBar > 8, '钢琴音色的试听频谱应有明显起伏，实际高度 ' + maxBar);
+
+    await page.getByRole('button', { name: '生成游戏并进入工作台' }).click();
+    await page.waitForURL('**/projects/**', { timeout: 30000 });
+    const projectId = page.url().split('/').pop() ?? '';
+    const project = await store.getProject(projectId);
+    const version = await store.getVersion(project!.currentVersionId);
+    assert.equal(version?.spec.musicStyle?.instrument, 'piano');
+    assert.equal(version?.spec.musicStyle?.pad, 'none');
+    assert.ok(version?.html.includes('"instrument":"piano"'));
+    assert.deepEqual(errors, []);
+  } finally {
+    await browser.close();
+    await app.close();
     await rm(dir, { recursive: true, force: true });
   }
 });

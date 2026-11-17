@@ -6,7 +6,14 @@ import { generateMusicTrack, musicConfigured, type MusicEnv } from './shared/mus
 import { generateMusicStyle, musicStyleConfigured, type MusicStyleEnv } from './shared/music-style.ts';
 import { parsePrompt, type ParseMatched } from './shared/prompt.ts';
 import { renderGame } from './shared/templates/index.ts';
-import { getMusicPreset, sanitizeSpec, type GameSpec, type GenerationMode } from './shared/spec.ts';
+import {
+  DEFAULT_MUSIC_STYLE,
+  applyPromptStyle,
+  getMusicPreset,
+  sanitizeSpec,
+  type GameSpec,
+  type GenerationMode,
+} from './shared/spec.ts';
 import type { TaskStage } from './store.ts';
 
 export interface GenerateInput {
@@ -84,22 +91,34 @@ export async function generateGame(input: GenerateInput): Promise<GenerateOutput
   const preset = getMusicPreset(spec);
   const styledPreset = preset === 'neon-arcade' || preset === 'ai-arranged';
   if (input.usePreviewedStyle && styledPreset && spec.musicStyle) {
-    const style = spec.musicStyle;
+    const style = applyPromptStyle(spec.musicStyle, input.prompt, spec.musicPrompt);
+    if (style !== spec.musicStyle) spec = sanitizeSpec({ ...spec, musicStyle: style }, spec);
     notes.push('配乐使用创作页试听时生成的参数（' + style.bpm + ' BPM，' + style.progression + '）。');
     markStage('应用试听配乐参数', true, style.bpm + ' BPM · ' + style.progression);
-  } else if (styledPreset && musicStyleConfigured(input.styleModel)) {
-    const styled = await generateMusicStyle(input.prompt, spec, input.styleModel!);
+  } else if (styledPreset) {
+    const styled = musicStyleConfigured(input.styleModel)
+      ? await generateMusicStyle(input.prompt, spec, input.styleModel!)
+      : null;
     if (styled) {
       spec = sanitizeSpec({ ...spec, musicStyle: styled.style }, spec);
       notes.push('内置合成配乐由 ' + styled.model + ' 调整风格（' + styled.style.bpm + ' BPM，' + styled.style.progression + '）。');
       markStage('调整配乐风格（模型辅助）', true, styled.model + ' · ' + styled.style.bpm + ' BPM · ' + styled.style.progression);
     } else {
-      notes.push('编曲模型调用失败或输出不合法，已回退为默认霓虹配乐。');
-      markStage('调整配乐风格（回退默认）', false, 'style_model_failed');
+      // 模型不可用时，提示词里的乐器关键词仍应生效，避免“写了钢琴却没有变化”。
+      const style = applyPromptStyle(spec.musicStyle ?? DEFAULT_MUSIC_STYLE, input.prompt, spec.musicPrompt);
+      if (style.instrument !== 'chip' || style.pad !== 'none') {
+        spec = sanitizeSpec({ ...spec, musicStyle: style }, spec);
+        const detail = style.instrument + (style.pad === 'none' ? '' : ' · ' + style.pad + ' 铺底');
+        notes.push('编曲模型不可用，按提示词关键词选择音色（' + detail + '）。');
+        markStage('按提示词选择音色', true, detail);
+      } else if (musicStyleConfigured(input.styleModel)) {
+        notes.push('编曲模型调用失败或输出不合法，已回退为默认霓虹配乐。');
+        markStage('调整配乐风格（回退默认）', false, 'style_model_failed');
+      } else if (preset === 'ai-arranged') {
+        notes.push('编曲模型未配置，已使用默认霓虹配乐。');
+        markStage('调整配乐风格（未配置）', false, 'style_model_not_configured');
+      }
     }
-  } else if (preset === 'ai-arranged') {
-    notes.push('编曲模型未配置，已使用默认霓虹配乐。');
-    markStage('调整配乐风格（未配置）', false, 'style_model_not_configured');
   }
 
   // 阶段四：按需调用服务端音乐生成 API；失败或未配置时回退为无配乐，不伪造结果。
