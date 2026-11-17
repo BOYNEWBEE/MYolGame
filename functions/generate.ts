@@ -85,7 +85,7 @@ export async function generateGame(input: GenerateInput): Promise<GenerateOutput
     if (styled) {
       spec = sanitizeSpec({ ...spec, musicStyle: styled.style }, spec);
       notes.push('内置合成配乐由 ' + styled.model + ' 调整风格（' + styled.style.bpm + ' BPM，' + styled.style.progression + '）。');
-      markStage('调整配乐风格（模型辅助）', true, styled.model);
+      markStage('调整配乐风格（模型辅助）', true, styled.model + ' · ' + styled.style.bpm + ' BPM · ' + styled.style.progression);
     } else {
       notes.push('编曲模型调用失败或输出不合法，已回退为默认霓虹配乐。');
       markStage('调整配乐风格（回退默认）', false, 'style_model_failed');

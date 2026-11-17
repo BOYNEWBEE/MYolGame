@@ -73,16 +73,40 @@ export const ARCADE_AUDIO_SCRIPT = `
       const chords = {
         minor: [[45, 57, 60, 64, 67], [41, 57, 60, 65, 69], [48, 55, 60, 64, 67], [43, 55, 59, 62, 67]],
         major: [[48, 60, 64, 67, 72], [43, 55, 59, 62, 67], [45, 57, 61, 64, 69], [41, 53, 57, 60, 65]],
-        dorian: [[45, 57, 60, 64, 67], [48, 60, 64, 67, 72], [43, 55, 59, 62, 67], [41, 53, 57, 60, 65]],
+        dorian: [[50, 62, 65, 69, 72], [43, 55, 59, 62, 65], [45, 57, 60, 64, 67], [48, 60, 64, 67, 71]],
+        phrygian: [[40, 52, 55, 59, 64], [41, 53, 57, 60, 65], [48, 60, 64, 67, 72], [47, 59, 62, 65, 71]],
+        lydian: [[41, 53, 57, 60, 64], [43, 55, 59, 62, 67], [45, 57, 60, 64, 67], [40, 52, 55, 59, 64]],
+        mixolydian: [[43, 55, 59, 62, 65], [41, 53, 57, 60, 64], [48, 60, 64, 67, 72], [50, 62, 65, 69, 72]],
+        'harmonic-minor': [[45, 57, 60, 64, 67], [40, 52, 56, 59, 64], [41, 53, 57, 60, 65], [50, 62, 65, 69, 72]],
         suspended: [[45, 57, 62, 64, 67], [43, 55, 60, 62, 67], [48, 60, 65, 67, 72], [41, 53, 58, 60, 65]]
       };
       const progression = chords[style.progression] || chords.minor;
-      const phrases = [
-        [null, 1, 2, null, 3, 2, null, 4],
-        [3, null, 2, 1, null, 2, 1, null],
-        [1, 2, null, 4, 3, null, 2, 3],
-        [4, null, 3, 2, 1, null, null, 2]
+      const phraseFamilies = [
+        [
+          [null, 1, 2, null, 3, 2, null, 4],
+          [3, null, 2, 1, null, 2, 1, null],
+          [1, 2, null, 4, 3, null, 2, 3],
+          [4, null, 3, 2, 1, null, null, 2]
+        ],
+        [
+          [1, 2, 3, null, 4, null, 3, 2],
+          [null, 1, 3, 2, null, 4, null, 2],
+          [3, 2, 1, null, 2, 3, null, 4],
+          [4, 3, null, 2, null, 1, 2, null]
+        ],
+        [
+          [null, null, 1, 2, null, 4, 3, null],
+          [1, null, 2, null, 3, 2, null, 1],
+          [null, 3, null, 1, 4, null, 2, null],
+          [2, 1, null, null, 3, null, 4, 3]
+        ]
       ];
+      const phrases = phraseFamilies[(style.seed - 1) % phraseFamilies.length];
+      // seed 同时改变低频节奏型；默认 seed=1 保持原版进行。
+      const kickPatterns = [[0, 2, 4, 6], [0, 2, 3, 4, 6], [0, 2, 4, 5, 6], [0, 1, 4, 6]];
+      const bassPatterns = [[0, 2, 4, 6], [0, 3, 4, 6], [0, 2, 5, 6], [0, 4, 6]];
+      const kickSteps = kickPatterns[(style.seed - 1) % kickPatterns.length];
+      const bassSteps = bassPatterns[(style.seed - 1) % bassPatterns.length];
       const hz = function (note) { return 440 * Math.pow(2, (note - 69) / 12); };
       const stepDur = 30 / style.bpm;
       const barDur = stepDur * 8;
@@ -99,8 +123,10 @@ export const ARCADE_AUDIO_SCRIPT = `
         const phrase = phrases[(bar + Math.floor(bar / 4)) % phrases.length];
         for (let s = 0; s < 8; s++) {
           const at = bar * barDur + s * stepDur + (s % 2 === 1 ? style.swing * stepDur : 0);
-          if (s % 2 === 0) {
+          if (kickSteps.includes(s)) {
             tone(engine, out, at, 0.18, style.kickWave, 105, 40, 0.14);
+          }
+          if (bassSteps.includes(s)) {
             const bass = hz(chord[0] + style.transpose + (s === 6 ? 12 : 0));
             tone(engine, out, at + 0.035, 0.29, style.bassWave, bass, bass, 0.15);
           }

@@ -272,7 +272,7 @@ export default function Create(): ReactNode {
                     : <>AI 配乐未启用：请先到 <Link to="/account">账号管理</Link> 填写音乐生成 API，或由服务端统一配置。</>
                   : resolvedMusic === 'ai-arranged'
                     ? styleModelReady
-                      ? '生成时会由 OpenAI 兼容模型调整 BPM、和弦与音色，配乐仍由浏览器实时合成；模型失败时使用默认霓虹配乐。'
+                      ? '生成时会由 OpenAI 兼容模型调整调性、BPM、和弦与音色，配乐仍由浏览器实时合成；下方试听是默认风格，生成后的实际配乐会应用模型参数。模型失败时使用默认霓虹配乐。'
                       : <>AI 编曲未启用：请先到 <Link to="/account">账号管理</Link> 填写 OpenAI 兼容编曲模型，或由服务端统一配置。</>
                     : styleModelReady
                       ? '当前配乐为「霓虹街机」。生成时会由已配置的 AI 编曲模型调整风格；下方试听为默认风格。'

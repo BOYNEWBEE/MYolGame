@@ -36,20 +36,28 @@ export interface GameOptions {
 }
 
 export type SynthWave = 'sine' | 'square' | 'sawtooth' | 'triangle';
-export type ChordProgression = 'minor' | 'major' | 'dorian' | 'suspended';
+export type ChordProgression =
+  | 'minor'
+  | 'major'
+  | 'dorian'
+  | 'phrygian'
+  | 'lydian'
+  | 'mixolydian'
+  | 'harmonic-minor'
+  | 'suspended';
 
 // 浏览器内置合成配乐的可调参数；只允许这组受限字段，模型不能注入代码。
 export interface MusicStyle {
   bpm: number; // 70 ~ 160
   progression: ChordProgression;
-  transpose: number; // -5 ~ 5 半音
+  transpose: number; // -7 ~ 7 半音，用于改变调性
   leadWave: SynthWave;
   bassWave: SynthWave;
   kickWave: SynthWave;
   density: number; // 0.3 ~ 1，旋律音符出现概率
   swing: number; // 0 ~ 0.3，奇数步延迟比例
   octave: number; // -1 ~ 1，旋律八度
-  seed: number; // 1 ~ 9999，保证密度变化可复现
+  seed: number; // 1 ~ 9999，决定旋律型与低频节奏并保证可复现
 }
 
 export const DEFAULT_MUSIC_STYLE: MusicStyle = {
@@ -66,7 +74,16 @@ export const DEFAULT_MUSIC_STYLE: MusicStyle = {
 };
 
 const SYNTH_WAVES: SynthWave[] = ['sine', 'square', 'sawtooth', 'triangle'];
-const PROGRESSIONS: ChordProgression[] = ['minor', 'major', 'dorian', 'suspended'];
+const PROGRESSIONS: ChordProgression[] = [
+  'minor',
+  'major',
+  'dorian',
+  'phrygian',
+  'lydian',
+  'mixolydian',
+  'harmonic-minor',
+  'suspended',
+];
 
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
@@ -88,7 +105,7 @@ export function sanitizeMusicStyle(raw: unknown, fallback: MusicStyle = DEFAULT_
     progression: PROGRESSIONS.includes(value.progression as ChordProgression)
       ? (value.progression as ChordProgression)
       : base.progression,
-    transpose: clampInt(value.transpose, -5, 5, base.transpose),
+    transpose: clampInt(value.transpose, -7, 7, base.transpose),
     leadWave: SYNTH_WAVES.includes(value.leadWave as SynthWave) ? (value.leadWave as SynthWave) : base.leadWave,
     bassWave: SYNTH_WAVES.includes(value.bassWave as SynthWave) ? (value.bassWave as SynthWave) : base.bassWave,
     kickWave: SYNTH_WAVES.includes(value.kickWave as SynthWave) ? (value.kickWave as SynthWave) : base.kickWave,

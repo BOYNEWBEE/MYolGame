@@ -75,7 +75,7 @@ describe('编曲风格白名单', () => {
   test('数值钳制、枚举白名单与缺省回退', () => {
     const style = sanitizeMusicStyle({
       bpm: 500,
-      progression: 'phrygian',
+      progression: 'blues',
       transpose: -99,
       leadWave: 'noise',
       bassWave: 'square',
@@ -88,7 +88,7 @@ describe('编曲风格白名单', () => {
     });
     assert.equal(style.bpm, 160);
     assert.equal(style.progression, 'minor');
-    assert.equal(style.transpose, -5);
+    assert.equal(style.transpose, -7);
     assert.equal(style.leadWave, 'triangle');
     assert.equal(style.bassWave, 'square');
     assert.equal(style.kickWave, 'sawtooth');
@@ -129,6 +129,10 @@ describe('编曲风格白名单', () => {
     assert.equal(sanitizeMusicStyle([], fallback).bpm, 99);
     assert.equal(sanitizeMusicStyle({ bpm: Number.NaN }, fallback).bpm, 99);
     assert.equal(sanitizeMusicStyle({ bpm: 'fast' }, fallback).bpm, 99);
+    for (const progression of ['phrygian', 'lydian', 'mixolydian', 'harmonic-minor'] as const) {
+      assert.equal(sanitizeMusicStyle({ progression }).progression, progression);
+    }
+    assert.equal(sanitizeMusicStyle({ transpose: 99 }).transpose, 7);
   });
 });
 

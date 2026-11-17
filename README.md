@@ -64,7 +64,7 @@ MYOLGAME_MUSIC_NAME=可选模型名
 
 ### AI 编曲模型（OpenAI 兼容）
 
-霓虹打砖块默认使用浏览器内 `OfflineAudioContext` 实时合成的 32 秒循环配乐。配置一个 OpenAI 兼容模型（如 DeepSeek）后，生成时会额外请求模型，让它只返回一组受限的音乐风格参数：`bpm`、和弦进行、移调、主旋律／贝斯／底鼓波形、音符密度、swing、八度与随机种子。服务端逐字段白名单与钳制后写入版本规格，再注入 HTML 交给合成器；模型不能输出 JavaScript，也不能改变模板、玩法或页面结构。
+霓虹打砖块默认使用浏览器内 `OfflineAudioContext` 实时合成的 32 秒循环配乐。配置一个 OpenAI 兼容模型（如 DeepSeek）后，生成时会额外请求模型，让它只返回一组受限的音乐风格参数：`bpm`、和弦进行、移调、主旋律／贝斯／底鼓波形、音符密度、swing、八度与随机种子。和弦进行提供 minor、major、dorian、phrygian、lydian、mixolydian、harmonic-minor、suspended 八种，`transpose` 支持 −7 到 7 半音移调；种子还会切换旋律型与低频节奏。服务端逐字段白名单与钳制后写入版本规格，再注入 HTML 交给合成器；模型不能输出 JavaScript，也不能改变模板、玩法或页面结构。
 
 ```bash
 # 本地通过 shell 导出；不要写入前端或提交到 Git
@@ -73,7 +73,7 @@ MYOLGAME_MUSIC_STYLE_API_KEY=服务端密钥
 MYOLGAME_MUSIC_STYLE_MODEL=deepseek-chat
 ```
 
-地址可填基址（自动追加 `/chat/completions`）、`/v1` 基址或完整地址；请求为 `POST`，携带 `Authorization: Bearer <key>` 与 `{ model, messages, temperature, max_tokens, stream: false }`，20 秒超时、响应上限 64KB。模型输出会被提取为首个 JSON 对象，至少包含一个已知字段才被视为有效。创作页的「AI 编曲（实时合成）」选项在配置模型后启用；选择「霓虹街机」时，若模型已配置也会自动调整。未配置、超时、HTTP 失败、非 JSON 或字段缺失时回退默认霓虹参数；显式选择 AI 编曲但模型未配置时，仍会生成默认合成配乐并在任务阶段标记 `style_model_not_configured`，模型调用失败则标记 `style_model_failed`。默认参数保持原版听感。云端入口预留 `APP_MUSIC_STYLE_API_URL`、`APP_MUSIC_STYLE_API_KEY`、`APP_MUSIC_STYLE_MODEL`；账号级配置保存在 `myol_music_style_settings` 表（迁移草案 [20261117_music_style_settings.sql](infra/migrations/20261117_music_style_settings.sql)，尚未部署），读写接口为 `GET/PUT/DELETE /api/music/style-model`，同样只回传 `hasKey`，密钥不出服务端。登录后可在「账号管理」的「AI 编曲模型（OpenAI 兼容）」面板填写地址、模型名与密钥，保存时只校验地址协议与模型名格式，不请求上游。
+地址可填基址（自动追加 `/chat/completions`）、`/v1` 基址或完整地址；请求为 `POST`，携带 `Authorization: Bearer <key>` 与 `{ model, messages, temperature, max_tokens, stream: false }`，20 秒超时、响应上限 64KB。模型输出会被提取为首个 JSON 对象，至少包含一个已知字段才被视为有效。系统提示要求模型尽量避开默认调性与和弦，并随机选择种子；任务阶段会显示实际使用的模型、BPM 与和弦进行。创作页试听固定播放默认风格，生成后的实际配乐才会应用模型参数。创作页的「AI 编曲（实时合成）」选项在配置模型后启用；选择「霓虹街机」时，若模型已配置也会自动调整。未配置、超时、HTTP 失败、非 JSON 或字段缺失时回退默认霓虹参数；显式选择 AI 编曲但模型未配置时，仍会生成默认合成配乐并在任务阶段标记 `style_model_not_configured`，模型调用失败则标记 `style_model_failed`。默认参数保持原版听感。云端入口预留 `APP_MUSIC_STYLE_API_URL`、`APP_MUSIC_STYLE_API_KEY`、`APP_MUSIC_STYLE_MODEL`；账号级配置保存在 `myol_music_style_settings` 表（迁移草案 [20261117_music_style_settings.sql](infra/migrations/20261117_music_style_settings.sql)，尚未部署），读写接口为 `GET/PUT/DELETE /api/music/style-model`，同样只回传 `hasKey`，密钥不出服务端。登录后可在「账号管理」的「AI 编曲模型（OpenAI 兼容）」面板填写地址、模型名与密钥，保存时只校验地址协议与模型名格式，不请求上游。
 
 ## 启动 Agent 后端
 

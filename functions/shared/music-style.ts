@@ -21,10 +21,13 @@ const STYLE_KEYS = ['bpm', 'progression', 'transpose', 'leadWave', 'bassWave', '
 const SYSTEM_PROMPT = [
   '你是 2D 游戏配乐编曲助手，为浏览器实时合成的芯片音乐选择参数。',
   '只输出一个 JSON 对象，不要 Markdown 或解释。',
-  '字段：bpm(70-160 整数)、progression(minor|major|dorian|suspended)、transpose(-5 到 5 整数)、',
+  '字段：bpm(70-160 整数)、progression(minor|major|dorian|phrygian|lydian|mixolydian|harmonic-minor|suspended)、',
+  'transpose(-7 到 7 整数，半音移调，用来改变调性)、',
   'leadWave/bassWave/kickWave(sine|square|sawtooth|triangle)、density(0.3-1)、swing(0-0.3)、',
   'octave(-1|0|1)、seed(1-9999 整数)。',
   '音乐用于 20 秒循环背景，不要人声，避免长前奏。',
+  '不要总是返回默认值：除非用户明确要求原版霓虹风格，transpose 尽量避开 0，并选择与默认 minor 不同的和弦进行；',
+  'seed 请随机选择，它会改变旋律型和低频节奏。',
 ].join('');
 
 export function musicStyleConfigured(env: MusicStyleEnv | undefined): boolean {
@@ -121,7 +124,7 @@ export async function generateMusicStyle(
       },
       body: JSON.stringify({
         model: env.model,
-        temperature: 0.7,
+        temperature: 1,
         max_tokens: 200,
         stream: false,
         messages: [
