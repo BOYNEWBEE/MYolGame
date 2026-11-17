@@ -15,7 +15,11 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5173,
     proxy: {
-      '/functions': 'http://127.0.0.1:8787',
+      // 保留浏览器 Host，否则后端 Origin 校验会把前端 5173 误判为跨站。
+      '/functions': {
+        target: 'http://127.0.0.1:8787',
+        changeOrigin: false,
+      },
     },
   },
   build: {
