@@ -23,7 +23,7 @@ import {
 } from './shared/spec.ts';
 import { modelConfigured, type ModelEnv } from './shared/model.ts';
 import { musicConfigured, parseMusicSettingsInput, probeMusicGateway, type MusicEnv } from './shared/music.ts';
-import { musicStyleConfigured, parseMusicStyleSettingsInput, type MusicStyleEnv } from './shared/music-style.ts';
+import { musicStyleConfigured, parseMusicStyleSettingsInput, probeMusicStyle, type MusicStyleEnv } from './shared/music-style.ts';
 import type {
   Game,
   GameFilter,
@@ -486,6 +486,35 @@ function buildRoutes(): Route[] {
           updatedAt: new Date().toISOString(),
         });
         return json(await musicStyleSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/music\/style-model\/test$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        const body = await readBody(req);
+        const previous = await deps.store.getMusicStyleSettings(session!.token);
+        const parsed = parseMusicStyleSettingsInput({
+          apiUrl: body.apiUrl ?? previous?.apiUrl,
+          apiKey: body.apiKey,
+          model: body.model ?? previous?.model,
+        }, previous?.apiKey);
+        if (!parsed.ok) return fail(400, 'invalid_music_style_settings', parsed.error);
+
+        const started = Date.now();
+        const result = await probeMusicStyle(parsed);
+        const elapsedMs = Date.now() - started;
+        const headers = { 'cache-control': 'no-store' };
+        if (!result.ok) return json({ ok: false, error: result.error, elapsedMs }, 200, headers);
+        return json({
+          ok: true,
+          model: result.model,
+          bpm: result.style.bpm,
+          progression: result.style.progression,
+          transpose: result.style.transpose,
+          elapsedMs,
+        }, 200, headers);
       },
     },
     {

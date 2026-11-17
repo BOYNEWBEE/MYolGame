@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { appHref } from '../routing.ts';
 import { ApiError, requestJson } from '../api.ts';
 import { fetchMusicSettings, musicErrorText, testMusicSettings, type MusicSettingsView } from '../music-settings.ts';
-import { fetchMusicStyleSettings, type MusicStyleSettingsView } from '../music-style-settings.ts';
+import { fetchMusicStyleSettings, musicStyleErrorText, testMusicStyleSettings, type MusicStyleSettingsView } from '../music-style-settings.ts';
 import { useSession } from '../session.tsx';
 
 export default function Account() {
@@ -28,6 +28,7 @@ export default function Account() {
   const [styleKey, setStyleKey] = useState('');
   const [styleLoading, setStyleLoading] = useState(false);
   const [styleBusy, setStyleBusy] = useState(false);
+  const [styleTesting, setStyleTesting] = useState(false);
   const [styleError, setStyleError] = useState('');
   const [styleNotice, setStyleNotice] = useState('');
 
@@ -156,8 +157,30 @@ export default function Account() {
     }
   }
 
-  async function clearStyle(): Promise<void> {
-    if (styleBusy) return;
+  async function testStyleConnection(): Promise<void> {
+    if (styleBusy || styleTesting) return;
+    setStyleTesting(true);
+    setStyleError('');
+    setStyleNotice('');
+    try {
+      const body: { apiUrl: string; apiKey?: string; model?: string } = { apiUrl: styleUrl, model: styleModel };
+      if (styleKey.trim()) body.apiKey = styleKey;
+      const result = await testMusicStyleSettings(body);
+      if (!result.ok) {
+        setStyleError('连接失败：' + musicStyleErrorText(result.error ?? ''));
+        return;
+      }
+      const elapsed = result.elapsedMs === undefined ? '' : '，耗时 ' + (result.elapsedMs / 1000).toFixed(1) + ' 秒';
+      setStyleNotice('连接正常：' + (result.model ?? styleModel) + ' 返回 bpm=' + (result.bpm ?? '?') + '、progression=' + (result.progression ?? '?') + elapsed + '。');
+    } catch (e) {
+      if (e instanceof ApiError) setStyleError(e.message || musicStyleErrorText(e.code));
+      else setStyleError(e instanceof Error ? e.message : '测试失败');
+    } finally {
+      setStyleTesting(false);
+    }
+  }
+
+  async function clearStyle(): Promise<void> {    if (styleBusy) return;
     setStyleBusy(true);
     setStyleError('');
     setStyleNotice('');
@@ -298,13 +321,14 @@ export default function Account() {
                 <input type="password" maxLength={512} value={styleKey} onChange={(e) => setStyleKey(e.target.value)} placeholder={styleStatus?.account?.hasKey ? '已保存；留空则保持不变' : '输入服务提供的密钥'} autoComplete="new-password" />
               </label>
               <p className="panel-note" style={{ margin: 0 }}>
-                仅支持 HTTPS；本机调试可用 http://127.0.0.1 或 http://localhost。留空密钥表示沿用已保存的密钥。
+                仅支持 HTTPS；本机调试可用 http://127.0.0.1 或 http://localhost。留空密钥表示沿用已保存的密钥；「测试编曲连接」会真实请求一次模型，可能产生小额调用费用。
               </p>
               {styleError && <p role="alert" style={{ margin: 0 }}>{styleError}</p>}
               {styleNotice && <p role="status" style={{ margin: 0 }}>{styleNotice}</p>}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button className="btn primary" disabled={styleBusy}>{styleBusy ? '处理中…' : '保存编曲模型'}</button>
-                <button type="button" className="btn danger" disabled={styleBusy || !styleStatus?.account} onClick={() => void clearStyle()}>清除编曲配置</button>
+                <button type="button" className="btn" disabled={styleBusy || styleTesting} onClick={() => void testStyleConnection()}>{styleTesting ? '测试中…' : '测试编曲连接'}</button>
+                <button className="btn primary" disabled={styleBusy || styleTesting}>{styleBusy ? '处理中…' : '保存编曲模型'}</button>
+                <button type="button" className="btn danger" disabled={styleBusy || styleTesting || !styleStatus?.account} onClick={() => void clearStyle()}>清除编曲配置</button>
               </div>
             </form>
           </>

@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { startLocalServer } from '../dev/local-server.ts';
 import { FileStore } from '../dev/store_file.ts';
 import { generateGame } from '../functions/generate.ts';
-import { chatCompletionsUrl, generateMusicStyle, parseMusicStyleSettingsInput } from '../functions/shared/music-style.ts';
+import { chatCompletionsUrl, generateMusicStyle, parseMusicStyleSettingsInput, probeMusicStyle } from '../functions/shared/music-style.ts';
 import { DEFAULT_MUSIC_STYLE, defaultSpec, sanitizeMusicStyle } from '../functions/shared/spec.ts';
 
 type ChatReply = { status?: number; content?: string; raw?: string };
@@ -217,6 +217,42 @@ describe('OpenAI 兼容编曲客户端', () => {
       await junk.close();
       await unrelated.close();
       await badRaw.close();
+    }
+  });
+
+  test('连接测试返回解析后的风格参数与可区分错误码', async () => {
+    const ok = await startChatServer(() => ({ content: '{"bpm":101,"progression":"lydian","transpose":-5,"seed":3}' }));
+    const unauthorized = await startChatServer(() => ({ status: 401 }));
+    const junk = await startChatServer(() => ({ content: '你好，我无法返回 JSON。' }));
+    try {
+      const env = (url: string) => ({ apiUrl: url, apiKey: 'probe-key', model: 'probe-model' });
+      const result = await probeMusicStyle(env(ok.url));
+      assert.equal(result.ok, true);
+      if (result.ok) {
+        assert.equal(result.model, 'probe-model');
+        assert.equal(result.style.bpm, 101);
+        assert.equal(result.style.progression, 'lydian');
+        assert.equal(result.style.transpose, -5);
+      }
+      assert.equal(ok.headers[0]?.authorization, 'Bearer probe-key');
+      const messages = ok.bodies[0]?.messages as { role: string; content: string }[];
+      assert.ok(messages[1]!.content.includes('连通性测试'));
+
+      const denied = await probeMusicStyle(env(unauthorized.url));
+      assert.equal(denied.ok, false);
+      if (!denied.ok) assert.equal(denied.error, 'style_http_401');
+
+      const bad = await probeMusicStyle(env(junk.url));
+      assert.equal(bad.ok, false);
+      if (!bad.ok) assert.equal(bad.error, 'style_invalid_response');
+
+      const missing = await probeMusicStyle({ apiUrl: ok.url });
+      assert.equal(missing.ok, false);
+      if (!missing.ok) assert.equal(missing.error, 'style_not_configured');
+    } finally {
+      await ok.close();
+      await unauthorized.close();
+      await junk.close();
     }
   });
 });
@@ -454,6 +490,73 @@ describe('账号级编曲模型设置', () => {
       assert.equal(chat.requests(), 1);
     } finally {
       await chat.close();
+      await f.cleanup();
+    }
+  });
+
+  test('测试连接：临时参数、已保存密钥回退、上游错误与不落库', async () => {
+    const chat = await startChatServer(() => ({ content: '{"bpm":118,"progression":"mixolydian","transpose":4,"seed":12}' }));
+    const failing = await startChatServer(() => ({ status: 401 }));
+    const f = await fixture();
+    try {
+      const token = await f.createSession();
+
+      // 缺少密钥且账号无保存配置时拒绝。
+      let response = await f.request('/music/style-model/test', 'POST', { apiUrl: chat.url, model: 'm' }, token);
+      assert.equal(response.status, 400);
+      assert.equal(((await response.json()) as { error: { code: string } }).error.code, 'invalid_music_style_settings');
+
+      // 未保存的临时配置可直接测试，且不写库。
+      response = await f.request('/music/style-model/test', 'POST', {
+        apiUrl: chat.url,
+        apiKey: 'temp-key',
+        model: 'temp-model',
+      }, token);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      const probe = await response.json() as {
+        ok: boolean; model: string; bpm: number; progression: string; transpose: number; elapsedMs: number;
+      };
+      assert.equal(probe.ok, true);
+      assert.equal(probe.model, 'temp-model');
+      assert.equal(probe.bpm, 118);
+      assert.equal(probe.progression, 'mixolydian');
+      assert.equal(probe.transpose, 4);
+      assert.equal(typeof probe.elapsedMs, 'number');
+      assert.equal(chat.headers[0]?.authorization, 'Bearer temp-key');
+      assert.equal(await f.store.getMusicStyleSettings(token), null);
+
+      // 密钥留空时沿用已保存密钥，模型名可用临时值。
+      response = await f.request('/music/style-model', 'PUT', {
+        apiUrl: chat.url,
+        apiKey: 'saved-key',
+        model: 'saved-model',
+      }, token);
+      assert.equal(response.status, 200);
+      response = await f.request('/music/style-model/test', 'POST', {
+        apiUrl: chat.url,
+        model: 'other-model',
+      }, token);
+      assert.equal(response.status, 200);
+      const kept = await response.json() as { ok: boolean; model: string };
+      assert.equal(kept.ok, true);
+      assert.equal(kept.model, 'other-model');
+      assert.equal(chat.headers[chat.headers.length - 1]?.authorization, 'Bearer saved-key');
+
+      // 上游鉴权失败返回结构化错误码，接口本身仍为 200。
+      response = await f.request('/music/style-model/test', 'POST', {
+        apiUrl: failing.url,
+        apiKey: 'bad-key',
+        model: 'm',
+      }, token);
+      assert.equal(response.status, 200);
+      const failed = await response.json() as { ok: boolean; error: string; elapsedMs: number };
+      assert.equal(failed.ok, false);
+      assert.equal(failed.error, 'style_http_401');
+      assert.equal(typeof failed.elapsedMs, 'number');
+    } finally {
+      await chat.close();
+      await failing.close();
       await f.cleanup();
     }
   });

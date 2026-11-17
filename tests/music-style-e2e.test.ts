@@ -77,6 +77,11 @@ test('账号保存编曲模型后，可选用 AI 编曲并生成带模型参数�
     await page.getByLabel('编曲接口地址').fill(apiUrl);
     await page.getByLabel('编曲模型名').fill('deepseek-chat');
     await page.getByLabel('编曲 API 密钥').fill(secret);
+    // 保存前可直接测试未保存的配置，模型返回的参数会展示出来。
+    await page.getByRole('button', { name: '测试编曲连接' }).click();
+    await page.getByText('连接正常：deepseek-chat 返回 bpm=138、progression=dorian').waitFor({ timeout: 15000 });
+    assert.equal(requests, 1);
+    assert.equal(authorization, 'Bearer ' + secret);
     await page.getByRole('button', { name: '保存编曲模型' }).click();
     await page.getByText('已保存。生成「霓虹街机」配乐时会由该模型调整风格。').waitFor({ timeout: 15000 });
     assert.ok((await page.textContent('body'))?.includes('账号配置：' + apiUrl + '（模型 deepseek-chat）'));
@@ -118,7 +123,7 @@ test('账号保存编曲模型后，可选用 AI 编曲并生成带模型参数�
     assert.ok(version?.html.includes('"progression":"dorian"'));
     assert.ok(!version?.html.includes(secret), '产物不应包含密钥');
 
-    assert.equal(requests, 1);
+    assert.equal(requests, 2);
     assert.equal(authorization, 'Bearer ' + secret);
     assert.ok(userPrompt.includes('更慢、更悬疑，少一点鼓点'), '模型应收到配乐提示词');
     assert.ok(userPrompt.includes('breakout'));

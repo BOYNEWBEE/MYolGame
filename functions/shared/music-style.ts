@@ -105,13 +105,18 @@ function extractStyle(text: string): unknown {
   }
 }
 
-export async function generateMusicStyle(
-  prompt: string,
-  spec: GameSpec,
-  env: MusicStyleEnv,
-): Promise<{ style: MusicStyle; model: string } | null> {
-  if (!musicStyleConfigured(env)) return null;
+// 只接受对象且至少包含一个已知字段，避免把无关 JSON 当成有效风格。
+function parseStyleContent(content: string): Record<string, unknown> | null {
+  const parsed = extractStyle(content);
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+  const record = parsed as Record<string, unknown>;
+  return STYLE_KEYS.some((key) => key in record) ? record : null;
+}
 
+type StyleRequest = { ok: true; content: string } | { ok: false; error: string };
+
+// 真实请求一次模型；返回可区分的错误码，供生成回退与连接测试共用。
+async function requestStyleContent(env: MusicStyleEnv, userPrompt: string): Promise<StyleRequest> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
@@ -129,33 +134,57 @@ export async function generateMusicStyle(
         stream: false,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: stylePrompt(prompt, spec) },
+          { role: 'user', content: userPrompt },
         ],
       }),
       signal: controller.signal,
     });
     if (!response.ok) {
       await response.body?.cancel();
-      return null;
+      return { ok: false, error: 'style_http_' + response.status };
     }
     const text = await response.text();
-    if (text.length > MAX_RESPONSE_CHARS) return null;
+    if (text.length > MAX_RESPONSE_CHARS) return { ok: false, error: 'style_invalid_response' };
     let body: unknown;
     try {
       body = JSON.parse(text);
     } catch {
-      return null;
+      return { ok: false, error: 'style_invalid_response' };
     }
     const content = (body as { choices?: { message?: { content?: unknown } }[] })?.choices?.[0]?.message?.content;
-    if (typeof content !== 'string') return null;
-    const parsed = extractStyle(content);
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
-    // 至少包含一个已知字段，避免把无关 JSON 当成有效风格。
-    if (!STYLE_KEYS.some((key) => key in (parsed as Record<string, unknown>))) return null;
-    return { style: sanitizeMusicStyle(parsed), model: env.model! };
+    if (typeof content !== 'string') return { ok: false, error: 'style_invalid_response' };
+    return { ok: true, content };
   } catch {
-    return null;
+    return { ok: false, error: controller.signal.aborted ? 'style_timeout' : 'style_failed' };
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function generateMusicStyle(
+  prompt: string,
+  spec: GameSpec,
+  env: MusicStyleEnv,
+): Promise<{ style: MusicStyle; model: string } | null> {
+  if (!musicStyleConfigured(env)) return null;
+  const result = await requestStyleContent(env, stylePrompt(prompt, spec));
+  if (!result.ok) return null;
+  const parsed = parseStyleContent(result.content);
+  return parsed ? { style: sanitizeMusicStyle(parsed), model: env.model! } : null;
+}
+
+export type MusicStyleProbeResult =
+  | { ok: true; model: string; style: MusicStyle }
+  | { ok: false; error: string };
+
+const PROBE_PROMPT = '这是一次连通性测试：请按系统提示只返回一个 JSON 风格参数对象。';
+
+// 测试连接：真实请求一次模型并校验输出结构，不保存配置、不生成配乐。
+export async function probeMusicStyle(env: MusicStyleEnv | undefined): Promise<MusicStyleProbeResult> {
+  if (!musicStyleConfigured(env)) return { ok: false, error: 'style_not_configured' };
+  const result = await requestStyleContent(env!, PROBE_PROMPT);
+  if (!result.ok) return result;
+  const parsed = parseStyleContent(result.content);
+  if (!parsed) return { ok: false, error: 'style_invalid_response' };
+  return { ok: true, model: env!.model!, style: sanitizeMusicStyle(parsed) };
 }
