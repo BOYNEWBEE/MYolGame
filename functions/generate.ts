@@ -8,7 +8,10 @@ import { parsePrompt, type ParseMatched } from './shared/prompt.ts';
 import { renderGame } from './shared/templates/index.ts';
 import {
   DEFAULT_MUSIC_STYLE,
+  MUSIC_INSTRUMENT_NAMES,
+  MUSIC_PAD_NAMES,
   applyPromptStyle,
+  applyPromptTuning,
   getMusicPreset,
   sanitizeSpec,
   type GameSpec,
@@ -104,13 +107,22 @@ export async function generateGame(input: GenerateInput): Promise<GenerateOutput
       notes.push('内置合成配乐由 ' + styled.model + ' 调整风格（' + styled.style.bpm + ' BPM，' + styled.style.progression + '）。');
       markStage('调整配乐风格（模型辅助）', true, styled.model + ' · ' + styled.style.bpm + ' BPM · ' + styled.style.progression);
     } else {
-      // 模型不可用时，提示词里的乐器关键词仍应生效，避免“写了钢琴却没有变化”。
-      const style = applyPromptStyle(spec.musicStyle ?? DEFAULT_MUSIC_STYLE, input.prompt, spec.musicPrompt);
-      if (style.instrument !== 'chip' || style.pad !== 'none') {
+      // 模型不可用时，提示词里的乐器与情绪关键词仍应生效，避免只有音色变化、调性不变。
+      const baseStyle = spec.musicStyle ?? DEFAULT_MUSIC_STYLE;
+      const style = applyPromptTuning(baseStyle, input.prompt, spec.musicPrompt);
+      if (style !== baseStyle) {
         spec = sanitizeSpec({ ...spec, musicStyle: style }, spec);
-        const detail = style.instrument + (style.pad === 'none' ? '' : ' · ' + style.pad + ' 铺底');
-        notes.push('编曲模型不可用，按提示词关键词选择音色（' + detail + '）。');
-        markStage('按提示词选择音色', true, detail);
+        const detail = [
+          style.instrument !== baseStyle.instrument ? MUSIC_INSTRUMENT_NAMES[style.instrument] : '',
+          style.pad !== baseStyle.pad ? MUSIC_PAD_NAMES[style.pad] : '',
+          style.progression !== baseStyle.progression ? style.progression : '',
+          style.transpose !== baseStyle.transpose
+            ? (style.transpose > 0 ? '+' : '') + style.transpose + ' 半音'
+            : '',
+          style.seed !== baseStyle.seed ? '旋律种子 ' + style.seed : '',
+        ].filter(Boolean).join(' · ');
+        notes.push('编曲模型不可用，按提示词关键词选择音色与调性（' + detail + '）。');
+        markStage('按提示词选择音色与调性', true, detail);
       } else if (musicStyleConfigured(input.styleModel)) {
         notes.push('编曲模型调用失败或输出不合法，已回退为默认霓虹配乐。');
         markStage('调整配乐风格（回退默认）', false, 'style_model_failed');

@@ -10,7 +10,15 @@ import { startLocalServer } from '../dev/local-server.ts';
 import { FileStore } from '../dev/store_file.ts';
 import { generateGame } from '../functions/generate.ts';
 import { chatCompletionsUrl, chatCompletionsUrls, generateMusicStyle, parseMusicStyleSettingsInput, probeMusicStyle } from '../functions/shared/music-style.ts';
-import { DEFAULT_MUSIC_STYLE, applyPromptStyle, defaultSpec, sanitizeMusicStyle } from '../functions/shared/spec.ts';
+import {
+  DEFAULT_MUSIC_STYLE,
+  applyPromptStyle,
+  applyPromptTuning,
+  defaultSpec,
+  promptMood,
+  promptSeed,
+  sanitizeMusicStyle,
+} from '../functions/shared/spec.ts';
 
 type ChatReply = { status?: number; content?: string; raw?: string };
 
@@ -170,6 +178,32 @@ describe('编曲风格白名单', () => {
     const tuned = { ...DEFAULT_MUSIC_STYLE, instrument: 'organ' as const };
     assert.equal(applyPromptStyle(tuned, '钢琴').instrument, 'organ', '模型已选音色时不覆盖');
   });
+
+  test('情绪关键词改变调性、和弦进行与旋律种子', () => {
+    assert.deepEqual(promptMood('悬疑的钢琴'), {
+      label: '悬疑',
+      progression: 'phrygian',
+      transpose: -2,
+    });
+    assert.equal(promptMood('明亮欢快的打砖块')?.progression, 'major');
+    assert.equal(promptMood('霓虹打砖块'), null);
+
+    const suspense = applyPromptTuning(DEFAULT_MUSIC_STYLE, '悬疑的钢琴曲');
+    assert.equal(suspense.progression, 'phrygian');
+    assert.equal(suspense.transpose, -2);
+    assert.equal(suspense.instrument, 'piano');
+    assert.notEqual(suspense.seed, 1);
+    assert.ok(suspense.seed >= 1 && suspense.seed <= 9999);
+
+    const sameA = promptSeed('悬疑的钢琴曲');
+    const sameB = promptSeed('悬疑的钢琴曲');
+    const other = promptSeed('明亮欢快的打砖块');
+    assert.equal(sameA, sameB);
+    assert.notEqual(sameA, other);
+
+    assert.equal(applyPromptTuning(DEFAULT_MUSIC_STYLE, '霓虹打砖块'), DEFAULT_MUSIC_STYLE);
+    assert.equal(applyPromptTuning(DEFAULT_MUSIC_STYLE, '钢琴').seed, promptSeed('钢琴'));
+  });
 });
 
 describe('OpenAI 兼容编曲客户端', () => {
@@ -279,6 +313,36 @@ describe('OpenAI 兼容编曲客户端', () => {
       assert.equal(style?.style.pad, 'strings');
     } finally {
       await server.close();
+    }
+  });
+
+  test('模型未指定调性时按情绪关键词补位，已指定则不覆盖', async () => {
+    const partial = await startChatServer(() => ({ content: '{"bpm":96}' }));
+    const full = await startChatServer(() => ({
+      content: '{"bpm":96,"progression":"lydian","transpose":-5,"seed":3}',
+    }));
+    try {
+      const filled = await generateMusicStyle('悬疑的钢琴曲', defaultSpec('breakout', 'neon'), {
+        apiUrl: partial.url,
+        apiKey: 'k',
+        model: 'm',
+      });
+      assert.equal(filled?.style.progression, 'phrygian');
+      assert.equal(filled?.style.transpose, -2);
+      assert.equal(filled?.style.seed, promptSeed('悬疑的钢琴曲'));
+      assert.equal(filled?.style.instrument, 'piano');
+
+      const kept = await generateMusicStyle('悬疑的钢琴曲', defaultSpec('breakout', 'neon'), {
+        apiUrl: full.url,
+        apiKey: 'k',
+        model: 'm',
+      });
+      assert.equal(kept?.style.progression, 'lydian');
+      assert.equal(kept?.style.transpose, -5);
+      assert.equal(kept?.style.seed, 3);
+    } finally {
+      await partial.close();
+      await full.close();
     }
   });
 
@@ -407,8 +471,12 @@ describe('生成管线接入编曲模型', () => {
     });
     assert.equal(result.ok, true);
     assert.equal(result.spec.musicStyle?.instrument, 'piano');
+    assert.equal(result.spec.musicStyle?.progression, 'suspended');
+    assert.equal(result.spec.musicStyle?.transpose, 1);
+    assert.notEqual(result.spec.musicStyle?.seed, 1);
     assert.ok(result.html.includes('"instrument":"piano"'));
-    assert.ok(result.stages.some((stage) => stage.name === '按提示词选择音色' && stage.ok));
+    assert.ok(result.html.includes('"progression":"suspended"'));
+    assert.ok(result.stages.some((stage) => stage.name === '按提示词选择音色与调性' && stage.ok));
 
     const arranged = await generateGame({
       prompt: '霓虹打砖块，长笛主旋律',

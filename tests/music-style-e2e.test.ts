@@ -180,17 +180,23 @@ test('未配置编曲模型时，提示词里的钢琴音色也能试听并写�
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto(app.url + '/create');
     await page.getByLabel('配乐提示词（可选）').fill('温柔的钢琴曲，节奏舒缓');
-    const previewButton = page.getByRole('button', { name: '按提示词识别音色试听' });
+    const previewButton = page.getByRole('button', { name: '按提示词识别风格试听' });
     await previewButton.waitFor({ timeout: 15000 });
     await previewButton.click();
-    await page.getByText('已应用 关键词识别：120 BPM · minor').waitFor({ timeout: 15000 });
+    await page.getByText('已应用 关键词识别：120 BPM · suspended').waitFor({ timeout: 15000 });
     await page.getByText('音色：钢琴 · 无铺底').waitFor({ timeout: 15000 });
+    await page.getByText('调性：suspended · 移调 +1').waitFor({ timeout: 15000 });
 
     // 在试听窗口里真正播放，确认钢琴音色经过离线合成后仍有非零频谱。
     const preview = page.frameLocator('.music-preview');
-    await preview.getByRole('button', { name: '试听配乐' }).click();
-    await preview.locator('#sound-music').waitFor({ timeout: 15000 });
-    assert.equal(await preview.locator('#sound-music').getAttribute('aria-pressed'), 'true');
+    const enableButton = preview.locator('#sound-enable');
+    const musicButton = preview.locator('#sound-music');
+    for (let attempt = 0; attempt < 20 && !(await musicButton.isVisible()); attempt += 1) {
+      if (await enableButton.isVisible()) await enableButton.click().catch(() => {});
+      await page.waitForTimeout(200);
+    }
+    await musicButton.waitFor({ timeout: 15000 });
+    assert.equal(await musicButton.getAttribute('aria-pressed'), 'true');
     let maxBar = 0;
     for (let attempt = 0; attempt < 40 && maxBar <= 8; attempt += 1) {
       await page.waitForTimeout(250);
@@ -219,7 +225,11 @@ test('未配置编曲模型时，提示词里的钢琴音色也能试听并写�
     const version = await store.getVersion(project!.currentVersionId);
     assert.equal(version?.spec.musicStyle?.instrument, 'piano');
     assert.equal(version?.spec.musicStyle?.pad, 'none');
+    assert.equal(version?.spec.musicStyle?.progression, 'suspended');
+    assert.equal(version?.spec.musicStyle?.transpose, 1);
+    assert.notEqual(version?.spec.musicStyle?.seed, 1);
     assert.ok(version?.html.includes('"instrument":"piano"'));
+    assert.ok(version?.html.includes('"progression":"suspended"'));
     assert.deepEqual(errors, []);
   } finally {
     await browser.close();

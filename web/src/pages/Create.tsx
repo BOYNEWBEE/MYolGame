@@ -19,7 +19,9 @@ import {
   MUSIC_NAMES,
   MAX_MUSIC_PROMPT,
   DEFAULT_MUSIC_STYLE,
-  applyPromptStyle,
+  MUSIC_INSTRUMENT_NAMES,
+  MUSIC_PAD_NAMES,
+  applyPromptTuning,
   defaultSpec,
   getMusicPreset,
   type GameSpec,
@@ -66,21 +68,6 @@ const MUSIC_CHOICES: { value?: MusicPreset; label: string; needsMusicApi?: boole
   { value: 'ai-generated', label: MUSIC_NAMES['ai-generated'], needsMusicApi: true },
   { value: 'ai-arranged', label: MUSIC_NAMES['ai-arranged'], needsStyleModel: true },
 ];
-
-const INSTRUMENT_NAMES: Record<MusicStyle['instrument'], string> = {
-  chip: '芯片音色',
-  piano: '钢琴',
-  'music-box': '八音盒',
-  strings: '弦乐',
-  flute: '长笛',
-  organ: '管风琴',
-  guitar: '吉他',
-};
-const PAD_NAMES: Record<MusicStyle['pad'], string> = {
-  none: '无铺底',
-  warm: '暖色铺底',
-  strings: '弦乐铺底',
-};
 
 export default function Create(): ReactNode {
   const navigate = useNavigate();
@@ -156,12 +143,13 @@ export default function Create(): ReactNode {
     [prompt, parsed.spec],
   );
   const previewFresh = musicPreview?.signature === previewSignature;
-  // 未配置编曲模型时，提示词里的乐器关键词也能立即反映到试听与生成参数中。
+  // 未配置编曲模型时，乐器与情绪关键词直接决定音色、调性、和弦进行与旋律种子。
+  const baseLocalStyle = parsed.spec.musicStyle ?? DEFAULT_MUSIC_STYLE;
   const localStyle = useMemo(
-    () => applyPromptStyle(parsed.spec.musicStyle ?? DEFAULT_MUSIC_STYLE, prompt, musicPrompt),
-    [parsed.spec.musicStyle, prompt, musicPrompt],
+    () => applyPromptTuning(baseLocalStyle, prompt, musicPrompt),
+    [baseLocalStyle, prompt, musicPrompt],
   );
-  const keywordVoice = localStyle.instrument !== 'chip' || localStyle.pad !== 'none';
+  const keywordTuned = localStyle !== baseLocalStyle;
 
   // 试听必须用提示词真实生成一次：合成配乐向编曲模型取参数，外部配乐调用音乐接口。
   // 结果带签名，参数变化后提示重新生成，且生成游戏时不会误用旧参数。
@@ -191,8 +179,8 @@ export default function Create(): ReactNode {
       }
       // 未配置编曲模型时不必请求服务端：提示词关键词已能决定音色与铺底。
       if (!styleModelReady) {
-        if (!keywordVoice) {
-          setPreviewError('提示词里还没识别到乐器；可以写钢琴、弦乐、长笛、八音盒、管风琴或吉他。');
+        if (!keywordTuned) {
+          setPreviewError('提示词里还没识别到乐器或情绪；可以写钢琴、弦乐，或悬疑、悲伤、明亮、梦幻、复古、科幻等情绪。');
           return;
         }
         setMusicPreview({ kind: 'style', style: localStyle, model: '关键词识别', signature: previewSignature });
@@ -205,7 +193,7 @@ export default function Create(): ReactNode {
         error?: string;
       }>('/music/style/preview', { method: 'POST', body: { prompt: prompt.trim(), spec: parsed.spec } });
       if (!result.ok || !result.style) {
-        if (keywordVoice) {
+        if (keywordTuned) {
           setMusicPreview({ kind: 'style', style: localStyle, model: '关键词回退', signature: previewSignature });
           setPreviewError('编曲模型不可用，已按提示词关键词生成试听。');
           return;
@@ -411,12 +399,12 @@ export default function Create(): ReactNode {
                 />
                 <span className="panel-note" style={{ margin: 0 }}>
                   {synthMusic
-                    ? '写钢琴、弦乐、长笛、八音盒、管风琴、吉他等乐器会切换音色；配置编曲模型后，这段描述还会与玩法、主题、速度一起调整 BPM、和弦与铺底。点下方按钮生成试听后可确认效果。'
+                    ? '写钢琴、弦乐、长笛、八音盒、管风琴、吉他等乐器会切换音色；写悬疑、悲伤、明亮、梦幻、复古、科幻等情绪会改变调性与和弦进行，并换用新的旋律。配置编曲模型后，还会由模型进一步调整 BPM 与铺底。'
                     : '会与模板、主题和速度自动生成的描述一起发送给音乐接口；留空则只用自动描述。'}
                 </span>
               </label>
             )}
-            {(resolvedMusic === 'ai-generated' || (synthMusic && (styleModelReady || keywordVoice))) && (
+            {(resolvedMusic === 'ai-generated' || (synthMusic && (styleModelReady || keywordTuned))) && (
               <div className="music-preview-actions">
                 <button
                   type="button"
@@ -430,7 +418,7 @@ export default function Create(): ReactNode {
                       ? '用提示词生成配乐试听'
                       : styleModelReady
                         ? '用提示词生成编曲试听'
-                        : '按提示词识别音色试听'}
+                        : '按提示词识别风格试听'}
                 </button>
                 {previewFresh && musicPreview?.kind === 'style' && (
                   <span className="panel-note" role="status" style={{ margin: 0 }}>
@@ -441,7 +429,14 @@ export default function Create(): ReactNode {
                   && musicPreview?.kind === 'style'
                   && (musicPreview.style.instrument !== 'chip' || musicPreview.style.pad !== 'none') && (
                   <span className="panel-note" role="status" style={{ margin: 0 }}>
-                    音色：{INSTRUMENT_NAMES[musicPreview.style.instrument]} · {PAD_NAMES[musicPreview.style.pad]}
+                    音色：{MUSIC_INSTRUMENT_NAMES[musicPreview.style.instrument]} · {MUSIC_PAD_NAMES[musicPreview.style.pad]}
+                  </span>
+                )}
+                {previewFresh
+                  && musicPreview?.kind === 'style'
+                  && (musicPreview.style.progression !== 'minor' || musicPreview.style.transpose !== 0) && (
+                  <span className="panel-note" role="status" style={{ margin: 0 }}>
+                    调性：{musicPreview.style.progression} · 移调 {musicPreview.style.transpose > 0 ? '+' : ''}{musicPreview.style.transpose}
                   </span>
                 )}
                 {previewFresh && musicPreview?.kind === 'track' && (
@@ -467,7 +462,7 @@ export default function Create(): ReactNode {
                 sandbox="allow-scripts"
                 srcDoc={musicPreview?.kind === 'style'
                   ? musicPreviewHtml(musicPreview.style)
-                  : musicPreviewHtml(keywordVoice ? localStyle : null)}
+                  : musicPreviewHtml(keywordTuned ? localStyle : null)}
               />
             )}
           </div>

@@ -83,6 +83,21 @@ export const DEFAULT_MUSIC_STYLE: MusicStyle = {
 const SYNTH_WAVES: SynthWave[] = ['sine', 'square', 'sawtooth', 'triangle'];
 const INSTRUMENTS: MusicInstrument[] = ['chip', 'piano', 'music-box', 'strings', 'flute', 'organ', 'guitar'];
 const PADS: MusicPad[] = ['none', 'warm', 'strings'];
+
+export const MUSIC_INSTRUMENT_NAMES: Record<MusicInstrument, string> = {
+  chip: '芯片音色',
+  piano: '钢琴',
+  'music-box': '八音盒',
+  strings: '弦乐',
+  flute: '长笛',
+  organ: '管风琴',
+  guitar: '吉他',
+};
+export const MUSIC_PAD_NAMES: Record<MusicPad, string> = {
+  none: '无铺底',
+  warm: '暖色铺底',
+  strings: '弦乐铺底',
+};
 const PROGRESSIONS: ChordProgression[] = [
   'minor',
   'major',
@@ -162,6 +177,85 @@ export function applyPromptStyle(style: MusicStyle, prompt: string, musicPrompt?
     }
   }
   return instrument === style.instrument && pad === style.pad ? style : { ...style, instrument, pad };
+}
+
+export interface PromptMood {
+  label: string;
+  progression: ChordProgression;
+  transpose: number;
+}
+
+// 情绪关键词映射到不同的调式与调性，避免所有提示词都落在默认 A 小调。
+const PROMPT_MOODS: (PromptMood & { pattern: RegExp })[] = [
+  {
+    label: '悬疑',
+    progression: 'phrygian',
+    transpose: -2,
+    pattern: /悬疑|紧张|恐怖|惊悚|神秘|阴暗|黑暗|dark|mysterious|suspense|thriller/i,
+  },
+  {
+    label: '悲伤',
+    progression: 'harmonic-minor',
+    transpose: -3,
+    pattern: /悲伤|悲哀|忧郁|忧伤|伤感|凄凉|sad|melancholy|sorrow|tragic/i,
+  },
+  {
+    label: '明亮',
+    progression: 'major',
+    transpose: 2,
+    pattern: /明亮|欢快|轻快|开心|快乐|阳光|愉悦|活泼|happy|bright|cheerful|upbeat|joyful/i,
+  },
+  {
+    label: '梦幻',
+    progression: 'suspended',
+    transpose: 1,
+    pattern: /梦幻|空灵|治愈|宁静|舒缓|平静|放松|温柔|dreamy|ambient|calm|relax|gentle|soft/i,
+  },
+  {
+    label: '复古',
+    progression: 'mixolydian',
+    transpose: -1,
+    pattern: /复古|怀旧|年代感|retro|nostalgic|vintage/i,
+  },
+  {
+    label: '科幻',
+    progression: 'dorian',
+    transpose: 3,
+    pattern: /科幻|赛博|未来|太空|星际|electronic|cyber|sci-?fi|space/i,
+  },
+];
+
+export function promptMood(prompt: string, musicPrompt?: string): PromptMood | null {
+  const text = (prompt + ' ' + (musicPrompt ?? '')).trim();
+  if (!text) return null;
+  const hit = PROMPT_MOODS.find((mood) => mood.pattern.test(text));
+  return hit ? { label: hit.label, progression: hit.progression, transpose: hit.transpose } : null;
+}
+
+// 同一提示词得到同一旋律种子，不同提示词得到不同旋律型；与客户端试听保持一致。
+export function promptSeed(prompt: string, musicPrompt?: string): number {
+  const text = (prompt + ' ' + (musicPrompt ?? '')).replace(/\s+/g, ' ').trim();
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return ((hash || 1) % 9999) + 1;
+}
+
+// 未配置模型时的完整提示词调优：情绪决定调性与和弦进行，乐器决定音色，
+// 任一关键词生效都换一个由提示词决定的旋律种子。
+export function applyPromptTuning(style: MusicStyle, prompt: string, musicPrompt?: string): MusicStyle {
+  const styled = applyPromptStyle(style, prompt, musicPrompt);
+  const mood = promptMood(prompt, musicPrompt);
+  let tuned = styled;
+  if (mood && (tuned.progression !== mood.progression || tuned.transpose !== mood.transpose)) {
+    tuned = { ...tuned, progression: mood.progression, transpose: mood.transpose };
+  }
+  if ((mood || styled !== style) && tuned.seed === 1) {
+    tuned = { ...tuned, seed: promptSeed(prompt, musicPrompt) };
+  }
+  return tuned;
 }
 
 export interface GameSpec {

@@ -1,7 +1,7 @@
 // OpenAI 兼容的编曲模型：只输出受限的音乐风格参数，不生成或执行任何浏览器代码。
 // 模型失败、超时或输出不合法时返回 null，由调用方回退到默认合成配乐。
 
-import { applyPromptStyle, sanitizeMusicStyle, type GameSpec, type MusicStyle } from './spec.ts';
+import { applyPromptStyle, promptMood, promptSeed, sanitizeMusicStyle, type GameSpec, type MusicStyle } from './spec.ts';
 
 export interface MusicStyleEnv {
   apiUrl?: string;
@@ -203,8 +203,18 @@ export async function generateMusicStyle(
   if (!result.ok) return null;
   const parsed = parseStyleContent(result.content);
   if (!parsed) return null;
-  const style = applyPromptStyle(sanitizeMusicStyle(parsed), prompt, spec.musicPrompt);
-  return { style, model: env.model! };
+  // 模型没给出的调性/种子字段才用提示词补位，避免覆盖模型已经做出的选择。
+  const mood = promptMood(prompt, spec.musicPrompt);
+  const style = sanitizeMusicStyle(parsed);
+  const filled = mood
+    ? {
+        ...style,
+        progression: 'progression' in parsed ? style.progression : mood.progression,
+        transpose: 'transpose' in parsed ? style.transpose : mood.transpose,
+        seed: 'seed' in parsed ? style.seed : promptSeed(prompt, spec.musicPrompt),
+      }
+    : style;
+  return { style: applyPromptStyle(filled, prompt, spec.musicPrompt), model: env.model! };
 }
 
 export type MusicStyleProbeResult =
