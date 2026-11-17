@@ -9,7 +9,6 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import { startLocalServer } from '../dev/local-server.ts';
 import { FileStore } from '../dev/store_file.ts';
-import { defaultSpec } from '../functions/shared/spec.ts';
 
 const CHROME_PATH =
   process.env.MYOLGAME_CHROME_PATH ??
@@ -74,37 +73,36 @@ test('AI 配乐在真实 Chrome 中可播放并受声音开关控制', async () 
     const aiButton = page.getByRole('button', { name: 'AI 生成配乐' });
     await aiButton.waitFor({ timeout: 15000 });
     assert.equal(await aiButton.isEnabled(), true);
-
-    const response = await fetch(app.url + '/api/projects', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
-      body: JSON.stringify({
-        prompt: '霓虹打砖块，带背景音乐',
-        spec: { ...defaultSpec('breakout', 'neon'), music: 'ai-generated' },
-      }),
-    });
-    assert.equal(response.status, 201);
-    const created = await response.json() as { project: { currentVersionId: string } };
-    const version = await store.getVersion(created.project.currentVersionId);
+    await aiButton.click();
+    await page.getByLabel('需求提示词').fill('《配乐测试》：霓虹打砖块');
+    await page.getByRole('button', { name: '生成游戏并进入工作台' }).click();
+    await page.waitForURL('**/projects/**');
+    const projectId = page.url().split('/').pop() ?? '';
+    const project = await store.getProject(projectId);
+    const version = await store.getVersion(project!.currentVersionId);
+    assert.equal(version?.spec.music, 'ai-generated');
     assert.ok(version?.html.includes('data:audio/wav;base64,'));
 
-    await page.setContent(version!.html);
-    await page.waitForFunction(() => {
+    const preview = page.frameLocator('.sandbox-frame iframe');
+    await preview.getByRole('button', { name: '开启声音' }).waitFor({ timeout: 15000 });
+    const previewFrame = page.frames().find((frame) => frame.url() === 'about:srcdoc');
+    assert.ok(previewFrame, '应存在沙箱预览 iframe');
+    await previewFrame.waitForFunction(() => {
       const track = document.getElementById('music-track') as HTMLAudioElement | null;
       return Boolean(track && track.readyState >= 2);
     });
-    await page.click('#sound-enable');
-    await page.waitForFunction(() => {
+    await preview.getByRole('button', { name: '开启声音' }).click();
+    await previewFrame.waitForFunction(() => {
       const track = document.getElementById('music-track') as HTMLAudioElement | null;
       return Boolean(track && !track.paused);
     });
-    assert.equal(await page.getAttribute('#sound-music', 'aria-pressed'), 'true');
-    await page.click('#sound-music');
-    await page.waitForFunction(() => {
+    assert.equal(await preview.getByRole('button', { name: '音乐' }).getAttribute('aria-pressed'), 'true');
+    await preview.getByRole('button', { name: '音乐' }).click();
+    await previewFrame.waitForFunction(() => {
       const track = document.getElementById('music-track') as HTMLAudioElement | null;
       return Boolean(track && track.paused);
     });
-    assert.equal(await page.getAttribute('#sound-music', 'aria-pressed'), 'false');
+    assert.equal(await preview.getByRole('button', { name: '音乐' }).getAttribute('aria-pressed'), 'false');
     assert.deepEqual(errors, []);
   } finally {
     await browser.close();
