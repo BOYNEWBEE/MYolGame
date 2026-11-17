@@ -70,7 +70,7 @@ test('AI 配乐在真实 Chrome 中可播放并受声音开关控制', async () 
       if (window === window.top && /^https?:$/.test(location.protocol)) localStorage.setItem('myol.token', value);
     }, token);
     await page.goto(app.url + '/create');
-    const aiButton = page.getByRole('button', { name: 'AI 生成配乐' });
+    const aiButton = page.getByRole('button', { name: 'AI 配乐（音乐模型）' });
     await aiButton.waitFor({ timeout: 15000 });
     assert.equal(await aiButton.isEnabled(), true);
     await aiButton.click();

@@ -79,7 +79,8 @@ export async function generateGame(input: GenerateInput): Promise<GenerateOutput
   markStage('校验规格', true, spec.template + '/' + spec.theme + '/' + spec.difficulty);
 
   // 阶段三：编曲模型只输出受限参数，用于调整浏览器内置合成配乐的风格。
-  if (getMusicPreset(spec) === 'neon-arcade' && musicStyleConfigured(input.styleModel)) {
+  const preset = getMusicPreset(spec);
+  if ((preset === 'neon-arcade' || preset === 'ai-arranged') && musicStyleConfigured(input.styleModel)) {
     const styled = await generateMusicStyle(input.prompt, spec, input.styleModel!);
     if (styled) {
       spec = sanitizeSpec({ ...spec, musicStyle: styled.style }, spec);
@@ -89,6 +90,9 @@ export async function generateGame(input: GenerateInput): Promise<GenerateOutput
       notes.push('编曲模型调用失败或输出不合法，已回退为默认霓虹配乐。');
       markStage('调整配乐风格（回退默认）', false, 'style_model_failed');
     }
+  } else if (preset === 'ai-arranged') {
+    notes.push('编曲模型未配置，已使用默认霓虹配乐。');
+    markStage('调整配乐风格（未配置）', false, 'style_model_not_configured');
   }
 
   // 阶段四：按需调用服务端音乐生成 API；失败或未配置时回退为无配乐，不伪造结果。

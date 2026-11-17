@@ -228,7 +228,7 @@ export default function Account() {
       <section className="panel" style={{ marginTop: 20, textAlign: 'left', display: 'grid', gap: 12 }}>
         <h2>AI 配乐 API</h2>
         <p className="panel-note" style={{ margin: 0 }}>
-          填写兼容的服务端网关地址与密钥。保存后，创作页的「AI 生成配乐」会调用它生成 20 秒循环配乐；密钥只保存在服务端，不会回传浏览器。
+          填写兼容的服务端网关地址与密钥。保存后，创作页的「AI 配乐（音乐模型）」会调用它生成 20 秒循环配乐；密钥只保存在服务端，不会回传浏览器。
         </p>
         {session.cloudM0 ? <p className="panel-note" style={{ margin: 0 }}>
           当前部署为云端 M0 模拟阶段，写入接口尚未开放；账号级配乐设置暂不可用，服务端统一配置仍可通过创作页使用。

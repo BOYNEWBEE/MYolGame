@@ -243,6 +243,38 @@ describe('生成管线接入编曲模型', () => {
     }
   });
 
+  test('AI 编曲预设使用模型参数，未配置时回退默认合成配乐', async () => {
+    const server = await startChatServer(() => ({ content: '{"bpm":112,"progression":"major","seed":5}' }));
+    try {
+      const arranged = await generateGame({
+        prompt: '霓虹打砖块，轻快一点',
+        baseSpec: { ...defaultSpec('breakout', 'neon'), music: 'ai-arranged' },
+        env: {},
+        styleModel: { apiUrl: server.url, apiKey: 'k', model: 'arranger' },
+      });
+      assert.equal(arranged.ok, true);
+      assert.equal(arranged.spec.music, 'ai-arranged');
+      assert.equal(arranged.spec.musicStyle?.bpm, 112);
+      assert.ok(arranged.html.includes('createArcadeAudio(null, '));
+      assert.ok(arranged.html.includes('"bpm":112'));
+      assert.ok(arranged.stages.some((stage) => stage.name === '调整配乐风格（模型辅助）' && stage.ok));
+
+      const fallback = await generateGame({
+        prompt: '霓虹打砖块',
+        baseSpec: { ...defaultSpec('breakout', 'neon'), music: 'ai-arranged' },
+        env: {},
+      });
+      assert.equal(fallback.ok, true);
+      assert.equal(fallback.spec.music, 'ai-arranged');
+      assert.equal(fallback.spec.musicStyle, undefined);
+      assert.ok(fallback.html.includes('createArcadeAudio(null, null)'));
+      assert.ok(fallback.notes.some((note) => note.includes('编曲模型未配置')));
+      assert.ok(fallback.stages.some((stage) => stage.name === '调整配乐风格（未配置）' && stage.detail === 'style_model_not_configured'));
+    } finally {
+      await server.close();
+    }
+  });
+
   test('模型失败回退默认霓虹配乐；非霓虹主题不请求模型', async () => {
     const failing = await startChatServer(() => ({ status: 500 }));
     try {

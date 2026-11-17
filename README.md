@@ -47,7 +47,7 @@ npm run dev:api
 
 ## AI 配乐
 
-默认关闭。服务端配置音乐网关后，或登录账号并在「账号管理」中保存自己的网关后，创作页会启用「AI 生成配乐」；生成时按模板、主题与速度确定音乐提示词，调用区域外部的 HTTP 接口制作 20 秒循环配乐，并以 data URI 内嵌到游戏，产物仍是可离线运行、无外部请求的单文件 HTML。
+默认关闭。服务端配置音乐网关后，或登录账号并在「账号管理」中保存自己的网关后，创作页的「AI 配乐（音乐模型）」选项会启用；生成时按模板、主题与速度确定音乐提示词，调用区域外部的 HTTP 接口制作 20 秒循环配乐，并以 data URI 内嵌到游戏，产物仍是可离线运行、无外部请求的单文件 HTML。创作页另提供「AI 编曲（实时合成）」，使用 OpenAI 兼容模型调整浏览器内置合成配乐，详见下一节。
 
 ```bash
 # 本地通过 shell 导出；不要写入前端或提交到 Git
@@ -60,7 +60,7 @@ MYOLGAME_MUSIC_NAME=可选模型名
 
 未配置、请求失败、超时、类型不符或超限时会回退为无配乐，并在任务阶段与提示中如实标记，不会伪装成生成成功。相同提示词在单个进程内复用缓存；当前只对内置模板游戏生效，Agent 源码游戏保持原样。云端入口预留 `APP_MUSIC_API_URL`、`APP_MUSIC_API_KEY`、`APP_MUSIC_NAME`，尚未部署或联调。
 
-登录后可在「账号管理」的「AI 配乐 API」面板保存接口地址、密钥与可选模型名。配置按账号保存在服务端，读写接口（`GET/PUT/DELETE /api/music/settings`）只返回是否已保存密钥，不回传密钥；生成时账号配置优先于服务端环境变量。接口地址仅接受 HTTPS，本机调试放行 `http://127.0.0.1` 与 `http://localhost`；保存时不会主动请求上游校验，首次生成失败同样回退。面板提供「测试连接」（`POST /api/music/settings/test`）：用当前表单值发起一次约 5 秒的短配乐请求，密钥留空时沿用已保存的密钥，成功展示返回类型、大小与耗时，失败展示错误原因；测试不会保存配置、不回传音频，但会真实调用上游并可能产生费用。创作页选择「AI 生成配乐」后可填写最多 200 字的配乐提示词，它会作为附加风格描述与自动生成的提示词一起发送，并随版本规格保存。云端需要新增 `myol_music_settings` 表，迁移草案见 [20261117_music_settings.sql](infra/migrations/20261117_music_settings.sql)，尚未部署。
+登录后可在「账号管理」的「AI 配乐 API」面板保存接口地址、密钥与可选模型名。配置按账号保存在服务端，读写接口（`GET/PUT/DELETE /api/music/settings`）只返回是否已保存密钥，不回传密钥；生成时账号配置优先于服务端环境变量。接口地址仅接受 HTTPS，本机调试放行 `http://127.0.0.1` 与 `http://localhost`；保存时不会主动请求上游校验，首次生成失败同样回退。面板提供「测试连接」（`POST /api/music/settings/test`）：用当前表单值发起一次约 5 秒的短配乐请求，密钥留空时沿用已保存的密钥，成功展示返回类型、大小与耗时，失败展示错误原因；测试不会保存配置、不回传音频，但会真实调用上游并可能产生费用。创作页选择「AI 配乐（音乐模型）」后可填写最多 200 字的配乐提示词，它会作为附加风格描述与自动生成的提示词一起发送，并随版本规格保存。云端需要新增 `myol_music_settings` 表，迁移草案见 [20261117_music_settings.sql](infra/migrations/20261117_music_settings.sql)，尚未部署。
 
 ### AI 编曲模型（OpenAI 兼容）
 
@@ -73,7 +73,7 @@ MYOLGAME_MUSIC_STYLE_API_KEY=服务端密钥
 MYOLGAME_MUSIC_STYLE_MODEL=deepseek-chat
 ```
 
-地址可填基址（自动追加 `/chat/completions`）、`/v1` 基址或完整地址；请求为 `POST`，携带 `Authorization: Bearer <key>` 与 `{ model, messages, temperature, max_tokens, stream: false }`，20 秒超时、响应上限 64KB。模型输出会被提取为首个 JSON 对象，至少包含一个已知字段才被视为有效。仅当规格使用「霓虹街机」内置配乐时才会调用；未配置、超时、HTTP 失败、非 JSON 或字段缺失时回退默认霓虹参数，并在任务阶段与提示中标记 `style_model_failed`。默认参数保持原版听感。云端入口预留 `APP_MUSIC_STYLE_API_URL`、`APP_MUSIC_STYLE_API_KEY`、`APP_MUSIC_STYLE_MODEL`；账号级配置保存在 `myol_music_style_settings` 表（迁移草案 [20261117_music_style_settings.sql](infra/migrations/20261117_music_style_settings.sql)，尚未部署），读写接口为 `GET/PUT/DELETE /api/music/style-model`，同样只回传 `hasKey`，密钥不出服务端。登录后可在「账号管理」的「AI 编曲模型（OpenAI 兼容）」面板填写地址、模型名与密钥，保存时只校验地址协议与模型名格式，不请求上游。
+地址可填基址（自动追加 `/chat/completions`）、`/v1` 基址或完整地址；请求为 `POST`，携带 `Authorization: Bearer <key>` 与 `{ model, messages, temperature, max_tokens, stream: false }`，20 秒超时、响应上限 64KB。模型输出会被提取为首个 JSON 对象，至少包含一个已知字段才被视为有效。创作页的「AI 编曲（实时合成）」选项在配置模型后启用；选择「霓虹街机」时，若模型已配置也会自动调整。未配置、超时、HTTP 失败、非 JSON 或字段缺失时回退默认霓虹参数；显式选择 AI 编曲但模型未配置时，仍会生成默认合成配乐并在任务阶段标记 `style_model_not_configured`，模型调用失败则标记 `style_model_failed`。默认参数保持原版听感。云端入口预留 `APP_MUSIC_STYLE_API_URL`、`APP_MUSIC_STYLE_API_KEY`、`APP_MUSIC_STYLE_MODEL`；账号级配置保存在 `myol_music_style_settings` 表（迁移草案 [20261117_music_style_settings.sql](infra/migrations/20261117_music_style_settings.sql)，尚未部署），读写接口为 `GET/PUT/DELETE /api/music/style-model`，同样只回传 `hasKey`，密钥不出服务端。登录后可在「账号管理」的「AI 编曲模型（OpenAI 兼容）」面板填写地址、模型名与密钥，保存时只校验地址协议与模型名格式，不请求上游。
 
 ## 启动 Agent 后端
 

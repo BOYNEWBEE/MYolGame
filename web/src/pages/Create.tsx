@@ -35,11 +35,12 @@ const SPEEDS = [
   { value: 1.8, label: '极速 1.8x' },
 ];
 
-const MUSIC_CHOICES: { value?: MusicPreset; label: string; needsMusicApi?: boolean }[] = [
+const MUSIC_CHOICES: { value?: MusicPreset; label: string; needsMusicApi?: boolean; needsStyleModel?: boolean }[] = [
   { label: '随玩法与主题' },
   { value: 'none', label: MUSIC_NAMES.none },
   { value: 'neon-arcade', label: MUSIC_NAMES['neon-arcade'] },
   { value: 'ai-generated', label: MUSIC_NAMES['ai-generated'], needsMusicApi: true },
+  { value: 'ai-arranged', label: MUSIC_NAMES['ai-arranged'], needsStyleModel: true },
 ];
 
 export default function Create(): ReactNode {
@@ -98,6 +99,7 @@ export default function Create(): ReactNode {
 
   const parsed = useMemo(() => parsePrompt(prompt, baseSpec), [prompt, baseSpec]);
   const resolvedMusic = getMusicPreset(parsed.spec);
+  const synthMusic = resolvedMusic === 'neon-arcade' || resolvedMusic === 'ai-arranged';
   const hasPrompt = Boolean(prompt.trim());
   const activeTemplate = TEMPLATES.find((t) => t.id === template)!;
   const promptOverridesSettings = hasPrompt && (
@@ -236,8 +238,10 @@ export default function Create(): ReactNode {
           <div className="field">
             <span id="create-music-label" className="field-label">背景音乐</span>
             <div className="segmented wrap" role="group" aria-labelledby="create-music-label">
-              {MUSIC_CHOICES.map(({ value, label, needsMusicApi }) => {
-                const unavailable = Boolean(needsMusicApi && !musicApiReady);
+              {MUSIC_CHOICES.map(({ value, label, needsMusicApi, needsStyleModel }) => {
+                const missingMusicApi = Boolean(needsMusicApi && !musicApiReady);
+                const missingStyleModel = Boolean(needsStyleModel && !styleModelReady);
+                const unavailable = missingMusicApi || missingStyleModel;
                 return (
                   <button
                     key={label}
@@ -245,7 +249,11 @@ export default function Create(): ReactNode {
                     className={music === value ? 'active' : ''}
                     aria-pressed={music === value}
                     disabled={unavailable}
-                    title={unavailable ? '需在账号管理中填写音乐生成 API，或由服务端统一配置' : undefined}
+                    title={missingMusicApi
+                      ? '需在账号管理中填写音乐生成 API，或由服务端统一配置'
+                      : missingStyleModel
+                        ? '需在账号管理中填写 OpenAI 兼容编曲模型，或由服务端统一配置'
+                        : undefined}
                     onClick={() => setMusic(value)}
                   >
                     {label}
@@ -262,11 +270,15 @@ export default function Create(): ReactNode {
                       ? '生成时将使用账号里保存的音乐 API，制作 20 秒循环配乐并内嵌到游戏；失败会回退为无配乐。'
                       : '生成时调用服务端音乐 API，制作 20 秒循环配乐并内嵌到游戏；失败会回退为无配乐。'
                     : <>AI 配乐未启用：请先到 <Link to="/account">账号管理</Link> 填写音乐生成 API，或由服务端统一配置。</>
-                  : styleModelReady
-                    ? '当前配乐为「霓虹街机」。生成时会由已配置的 AI 编曲模型调整风格；下方试听为默认风格。'
-                    : <>当前配乐为「霓虹街机」。点试听播放，再点一次停止；到 <Link to="/account">账号管理</Link> 配置 OpenAI 兼容编曲模型后，可按提示词调整风格。</>}
+                  : resolvedMusic === 'ai-arranged'
+                    ? styleModelReady
+                      ? '生成时会由 OpenAI 兼容模型调整 BPM、和弦与音色，配乐仍由浏览器实时合成；模型失败时使用默认霓虹配乐。'
+                      : <>AI 编曲未启用：请先到 <Link to="/account">账号管理</Link> 填写 OpenAI 兼容编曲模型，或由服务端统一配置。</>
+                    : styleModelReady
+                      ? '当前配乐为「霓虹街机」。生成时会由已配置的 AI 编曲模型调整风格；下方试听为默认风格。'
+                      : <>当前配乐为「霓虹街机」。点试听播放，再点一次停止；到 <Link to="/account">账号管理</Link> 配置 OpenAI 兼容编曲模型后，可按提示词调整风格。</>}
             </p>
-            {(resolvedMusic === 'ai-generated' || resolvedMusic === 'neon-arcade') && (
+            {(resolvedMusic === 'ai-generated' || synthMusic) && (
               <label className="field" style={{ marginTop: 10 }}>
                 <span className="field-label">配乐提示词（可选）</span>
                 <textarea
@@ -274,16 +286,16 @@ export default function Create(): ReactNode {
                   maxLength={MAX_MUSIC_PROMPT}
                   value={musicPrompt}
                   onChange={(e) => setMusicPrompt(e.target.value)}
-                  placeholder={resolvedMusic === 'neon-arcade' ? '例如：更慢、更悬疑，少一点鼓点' : '例如：温柔的钢琴与雨声，节奏舒缓，不要鼓点'}
+                  placeholder={synthMusic ? '例如：更慢、更悬疑，少一点鼓点' : '例如：温柔的钢琴与雨声，节奏舒缓，不要鼓点'}
                 />
                 <span className="panel-note" style={{ margin: 0 }}>
-                  {resolvedMusic === 'neon-arcade'
+                  {synthMusic
                     ? '配置编曲模型后，这段描述会与玩法、主题、速度一起用于调整 BPM、和弦与音色；未配置时仅随版本保存。'
                     : '会与模板、主题和速度自动生成的描述一起发送给音乐接口；留空则只用自动描述。'}
                 </span>
               </label>
             )}
-            {resolvedMusic === 'neon-arcade' && !submitting && (
+            {synthMusic && !submitting && (
               <iframe
                 className="music-preview"
                 title="配乐试听"

@@ -31,7 +31,8 @@ export function gameShell({ spec, gameScript, config, soundEffects = false, musi
   const palette = getTheme(spec.theme).palette;
   const title = escapeHtml(spec.title);
   const hasTrack = Boolean(musicTrack);
-  const hasMusic = hasTrack || getMusicPreset(spec) === 'neon-arcade';
+  const preset = getMusicPreset(spec);
+  const hasMusic = hasTrack || preset === 'neon-arcade' || preset === 'ai-arranged';
   const hasSound = hasMusic || soundEffects;
   return `<!doctype html>
 <html lang="zh-CN">

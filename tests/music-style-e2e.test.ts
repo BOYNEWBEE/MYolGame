@@ -17,7 +17,7 @@ const CHROME_PATH =
     : '/usr/bin/google-chrome');
 const rootDir = fileURLToPath(new URL('..', import.meta.url));
 
-test('账号保存编曲模型后，霓虹街机生成使用模型参数并可试听', async () => {
+test('账号保存编曲模型后，可选用 AI 编曲并生成带模型参数的实时合成配乐', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'myol-music-style-'));
   let requests = 0;
   let authorization = '';
@@ -87,7 +87,15 @@ test('账号保存编曲模型后，霓虹街机生成使用模型参数并可�
     assert.equal(await page.getByLabel('编曲 API 密钥').inputValue(), '');
 
     await page.goto(app.url + '/create');
-    await page.getByText('当前配乐为「霓虹街机」。生成时会由已配置的 AI 编曲模型调整风格').waitFor({ timeout: 15000 });
+    const arrangedButton = page.getByRole('button', { name: 'AI 编曲（实时合成）' });
+    await arrangedButton.waitFor({ timeout: 15000 });
+    await page.waitForFunction(() => {
+      const button = [...document.querySelectorAll('button')].find((item) => item.textContent === 'AI 编曲（实时合成）');
+      return Boolean(button && !button.disabled);
+    }, undefined, { timeout: 15000 });
+    assert.equal(await page.getByRole('button', { name: 'AI 配乐（音乐模型）' }).isEnabled(), false);
+    await arrangedButton.click();
+    await page.getByText('生成时会由 OpenAI 兼容模型调整 BPM、和弦与音色').waitFor({ timeout: 15000 });
     await page.getByLabel('配乐提示词（可选）').fill('更慢、更悬疑，少一点鼓点');
     await page.getByLabel('需求提示词').fill('《编曲测试》：霓虹打砖块');
     await page.getByRole('button', { name: '生成游戏并进入工作台' }).click();
@@ -99,6 +107,7 @@ test('账号保存编曲模型后，霓虹街机生成使用模型参数并可�
     assert.equal(project?.ownerToken.startsWith('account:'), true);
     assert.equal(version?.spec.template, 'breakout');
     assert.equal(version?.spec.theme, 'neon');
+    assert.equal(version?.spec.music, 'ai-arranged');
     assert.equal(version?.spec.musicPrompt, '更慢、更悬疑，少一点鼓点');
     assert.equal(version?.spec.musicStyle?.bpm, 138);
     assert.equal(version?.spec.musicStyle?.progression, 'dorian');
@@ -124,6 +133,13 @@ test('账号保存编曲模型后，霓虹街机生成使用模型参数并可�
     assert.equal(await musicButton.getAttribute('aria-pressed'), 'false');
     await musicButton.click();
     assert.equal(await musicButton.getAttribute('aria-pressed'), 'true');
+
+    // 未登录会话没有编曲配置，AI 编曲选项不可用。
+    const guest = await browser.newPage();
+    await guest.goto(app.url + '/create');
+    const guestArranged = guest.getByRole('button', { name: 'AI 编曲（实时合成）' });
+    await guestArranged.waitFor({ timeout: 15000 });
+    assert.equal(await guestArranged.isEnabled(), false);
     assert.deepEqual(errors, []);
   } finally {
     await browser.close();

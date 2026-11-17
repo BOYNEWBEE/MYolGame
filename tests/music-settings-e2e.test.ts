@@ -100,7 +100,7 @@ test('账号页保存音乐 API 后创作页启用 AI 配乐并生成成功', as
     await page.getByText('连接正常：返回 audio/wav').waitFor({ timeout: 15000 });
 
     await page.goto(app.url + '/create');
-    const aiButton = page.getByRole('button', { name: 'AI 生成配乐' });
+    const aiButton = page.getByRole('button', { name: 'AI 配乐（音乐模型）' });
     await aiButton.waitFor({ timeout: 15000 });
     assert.equal(await aiButton.isEnabled(), true);
     await aiButton.click();
@@ -121,7 +121,7 @@ test('账号页保存音乐 API 后创作页启用 AI 配乐并生成成功', as
     // 未登录的新会话不会继承该账号的接口配置。
     const guest = await browser.newPage();
     await guest.goto(app.url + '/create');
-    const guestButton = guest.getByRole('button', { name: 'AI 生成配乐' });
+    const guestButton = guest.getByRole('button', { name: 'AI 配乐（音乐模型）' });
     await guestButton.waitFor({ timeout: 15000 });
     assert.equal(await guestButton.isEnabled(), false);
     assert.deepEqual(errors, []);

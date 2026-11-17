@@ -59,8 +59,9 @@ function aiSpec(): GameSpec {
 }
 
 describe('AI 配乐网关', () => {
-  test('白名单接受 ai-generated', () => {
+  test('白名单接受 ai-generated 与 ai-arranged', () => {
     assert.equal(sanitizeSpec({ ...aiSpec(), music: 'ai-generated' }).music, 'ai-generated');
+    assert.equal(sanitizeSpec({ ...aiSpec(), music: 'ai-arranged' }).music, 'ai-arranged');
     assert.equal(sanitizeSpec({ ...aiSpec(), music: 'unknown' }, aiSpec()).music, 'ai-generated');
   });
 
