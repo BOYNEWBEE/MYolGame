@@ -95,6 +95,9 @@ test('账号页保存音乐 API 后创作页启用 AI 配乐并生成成功', as
     await page.reload();
     await page.getByText('账号配置：' + apiUrl).waitFor({ timeout: 15000 });
     assert.equal(await page.getByLabel('API 密钥').inputValue(), '');
+    // 密钥留空时，测试连接沿用服务端已保存的密钥。
+    await page.getByRole('button', { name: '测试连接' }).click();
+    await page.getByText('连接正常：返回 audio/wav').waitFor({ timeout: 15000 });
 
     await page.goto(app.url + '/create');
     const aiButton = page.getByRole('button', { name: 'AI 生成配乐' });
@@ -112,7 +115,7 @@ test('账号页保存音乐 API 后创作页启用 AI 配乐并生成成功', as
     assert.equal(version?.spec.music, 'ai-generated');
     assert.equal(version?.spec.musicPrompt, '温柔的钢琴与雨声');
     assert.ok(version?.html.includes('data:audio/wav;base64,'));
-    assert.equal(requests, 1);
+    assert.equal(requests, 2);
     assert.ok(lastPrompt.includes('Additional direction: 温柔的钢琴与雨声'), '网关应收到配乐提示词');
 
     // 未登录的新会话不会继承该账号的接口配置。

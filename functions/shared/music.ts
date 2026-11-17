@@ -28,6 +28,10 @@ export const MAX_MUSIC_NAME = 40;
 export const MAX_MUSIC_BYTES = 240 * 1024;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 30000;
+// 连通性测试只生成一小段并等待更短时间，避免用户点击测试时长时间占用请求。
+const PROBE_DURATION_SECONDS = 5;
+const PROBE_TIMEOUT_MS = 20000;
+const PROBE_PROMPT = 'Short instrumental connectivity test for a browser game, calm synth pad, no vocals.';
 const CACHE_LIMIT = 16;
 
 const MIME_ALIASES: Record<string, string> = {
@@ -151,40 +155,37 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export async function generateMusicTrack(env: MusicEnv | undefined, spec: GameSpec): Promise<MusicResult> {
-  if (!musicConfigured(env)) return { ok: false, error: 'music_not_configured' };
-
+function validGatewayUrl(value: string): boolean {
   try {
-    const gateway = new URL(env!.apiUrl!);
-    if (!['http:', 'https:'].includes(gateway.protocol) || gateway.username || gateway.password) {
-      return { ok: false, error: 'music_invalid_url' };
-    }
+    const gateway = new URL(value);
+    return ['http:', 'https:'].includes(gateway.protocol) && !gateway.username && !gateway.password;
   } catch {
-    return { ok: false, error: 'music_invalid_url' };
+    return false;
   }
+}
 
-  const prompt = musicPrompt(spec);
-  // 密钥参与缓存键，避免不同账号使用同一网关时互相复用结果。
-  const cacheKey = [env!.apiUrl, env!.apiKey, env!.name ?? '', prompt, MUSIC_DURATION_SECONDS, 'mp3'].join('|');
-  const cached = cache.get(cacheKey);
-  if (cached) return { ok: true, track: cached };
-
+async function requestTrack(
+  env: MusicEnv,
+  prompt: string,
+  durationSeconds: number,
+  timeoutMs: number,
+): Promise<MusicResult> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(env!.apiUrl!, {
+    const response = await fetch(env.apiUrl!, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         accept: 'audio/*, application/json',
-        authorization: 'Bearer ' + env!.apiKey,
+        authorization: 'Bearer ' + env.apiKey,
       },
       body: JSON.stringify({
         prompt,
-        durationSeconds: MUSIC_DURATION_SECONDS,
+        durationSeconds,
         format: 'mp3',
         loop: true,
-        ...(env!.name ? { model: env!.name } : {}),
+        ...(env.name ? { model: env.name } : {}),
       }),
       signal: controller.signal,
     });
@@ -200,26 +201,52 @@ export async function generateMusicTrack(env: MusicEnv | undefined, spec: GameSp
     }
 
     const mime = normalizeMime(response.headers.get('content-type'));
-    let result: MusicResult;
     if (mime.startsWith('audio/')) {
       const bytes = new Uint8Array(await response.arrayBuffer());
-      result = bytes.length > MAX_RESPONSE_BYTES ? { ok: false, error: 'music_too_large' } : finish(bytes, normalizeMime(mime));
-    } else {
-      const raw = await response.text();
-      if (raw.length > MAX_RESPONSE_BYTES) return { ok: false, error: 'music_too_large' };
-      result = parseJsonResponse(raw, mime);
+      return bytes.length > MAX_RESPONSE_BYTES ? { ok: false, error: 'music_too_large' } : finish(bytes, normalizeMime(mime));
     }
-
-    if (result.ok) {
-      cache.set(cacheKey, result.track);
-      if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value as string);
-    }
-    return result;
+    const raw = await response.text();
+    if (raw.length > MAX_RESPONSE_BYTES) return { ok: false, error: 'music_too_large' };
+    return parseJsonResponse(raw, mime);
   } catch {
     return { ok: false, error: controller.signal.aborted ? 'music_timeout' : 'music_failed' };
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function generateMusicTrack(env: MusicEnv | undefined, spec: GameSpec): Promise<MusicResult> {
+  if (!musicConfigured(env)) return { ok: false, error: 'music_not_configured' };
+  if (!validGatewayUrl(env!.apiUrl!)) return { ok: false, error: 'music_invalid_url' };
+
+  const prompt = musicPrompt(spec);
+  // 密钥参与缓存键，避免不同账号使用同一网关时互相复用结果。
+  const cacheKey = [env!.apiUrl, env!.apiKey, env!.name ?? '', prompt, MUSIC_DURATION_SECONDS, 'mp3'].join('|');
+  const cached = cache.get(cacheKey);
+  if (cached) return { ok: true, track: cached };
+
+  const result = await requestTrack(env!, prompt, MUSIC_DURATION_SECONDS, REQUEST_TIMEOUT_MS);
+  if (result.ok) {
+    cache.set(cacheKey, result.track);
+    if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value as string);
+  }
+  return result;
+}
+
+export type MusicProbeResult = {
+  ok: true;
+  mimeType: string;
+  bytes: number;
+} | { ok: false; error: string };
+
+// 测试连接：真实发起一次 5 秒生成请求，校验鉴权、响应用与音频格式，不返回、不缓存音频。
+export async function probeMusicGateway(env: MusicEnv | undefined): Promise<MusicProbeResult> {
+  if (!musicConfigured(env)) return { ok: false, error: 'music_not_configured' };
+  if (!validGatewayUrl(env!.apiUrl!)) return { ok: false, error: 'music_invalid_url' };
+  const result = await requestTrack(env!, PROBE_PROMPT, PROBE_DURATION_SECONDS, PROBE_TIMEOUT_MS);
+  return result.ok
+    ? { ok: true, mimeType: result.track.mimeType, bytes: result.track.bytes }
+    : result;
 }
 
 function parseJsonResponse(raw: string, fallbackMime: string): MusicResult {

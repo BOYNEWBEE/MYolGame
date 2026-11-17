@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { appHref } from '../routing.ts';
 import { ApiError, requestJson } from '../api.ts';
-import { fetchMusicSettings, type MusicSettingsView } from '../music-settings.ts';
+import { fetchMusicSettings, musicErrorText, testMusicSettings, type MusicSettingsView } from '../music-settings.ts';
 import { useSession } from '../session.tsx';
 
 export default function Account() {
@@ -17,6 +17,7 @@ export default function Account() {
   const [musicKey, setMusicKey] = useState('');
   const [musicLoading, setMusicLoading] = useState(false);
   const [musicBusy, setMusicBusy] = useState(false);
+  const [musicTesting, setMusicTesting] = useState(false);
   const [musicError, setMusicError] = useState('');
   const [musicNotice, setMusicNotice] = useState('');
 
@@ -77,6 +78,30 @@ export default function Account() {
       setMusicError(e instanceof Error ? e.message : '清除失败');
     } finally {
       setMusicBusy(false);
+    }
+  }
+
+  async function testConnection(): Promise<void> {
+    if (musicBusy || musicTesting) return;
+    setMusicTesting(true);
+    setMusicError('');
+    setMusicNotice('');
+    try {
+      const body: { apiUrl: string; apiKey?: string; name?: string } = { apiUrl: musicUrl, name: musicName };
+      if (musicKey.trim()) body.apiKey = musicKey;
+      const result = await testMusicSettings(body);
+      if (!result.ok) {
+        setMusicError('连接失败：' + musicErrorText(result.error ?? ''));
+        return;
+      }
+      const size = result.bytes === undefined ? '大小未知' : (result.bytes / 1024).toFixed(1) + ' KB';
+      const elapsed = result.elapsedMs === undefined ? '' : '，耗时 ' + (result.elapsedMs / 1000).toFixed(1) + ' 秒';
+      setMusicNotice('连接正常：返回 ' + (result.mimeType ?? '音频') + '，' + size + elapsed + '。');
+    } catch (e) {
+      if (e instanceof ApiError) setMusicError(e.message || musicErrorText(e.code));
+      else setMusicError(e instanceof Error ? e.message : '测试失败');
+    } finally {
+      setMusicTesting(false);
     }
   }
 
@@ -159,13 +184,14 @@ export default function Account() {
                 <input type="password" maxLength={512} value={musicKey} onChange={(e) => setMusicKey(e.target.value)} placeholder={musicStatus?.account?.hasKey ? '已保存；留空则保持不变' : '输入服务提供的密钥'} autoComplete="new-password" />
               </label>
               <p className="panel-note" style={{ margin: 0 }}>
-                仅支持 HTTPS；本机调试可用 http://127.0.0.1 或 http://localhost。保存时不会校验上游，首次生成失败会回退为无配乐。
+                仅支持 HTTPS；本机调试可用 http://127.0.0.1 或 http://localhost。保存时不会校验上游；「测试连接」会真实请求一次约 5 秒的短配乐，可能产生调用费用。
               </p>
               {musicError && <p role="alert" style={{ margin: 0 }}>{musicError}</p>}
               {musicNotice && <p role="status" style={{ margin: 0 }}>{musicNotice}</p>}
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button className="btn primary" disabled={musicBusy}>{musicBusy ? '处理中…' : '保存配乐接口'}</button>
-                <button type="button" className="btn danger" disabled={musicBusy || !musicStatus?.account} onClick={() => void clearMusic()}>清除账号配置</button>
+                <button type="button" className="btn" disabled={musicBusy || musicTesting} onClick={() => void testConnection()}>{musicTesting ? '测试中…' : '测试连接'}</button>
+                <button className="btn primary" disabled={musicBusy || musicTesting}>{musicBusy ? '处理中…' : '保存配乐接口'}</button>
+                <button type="button" className="btn danger" disabled={musicBusy || musicTesting || !musicStatus?.account} onClick={() => void clearMusic()}>清除账号配置</button>
               </div>
             </form>
           </>

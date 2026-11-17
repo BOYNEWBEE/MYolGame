@@ -32,11 +32,29 @@ function wavFixture(seconds = 0.2): Uint8Array {
   return new Uint8Array(bytes);
 }
 
-async function startGateway(): Promise<{ url: string; requests: () => number; close: () => Promise<void> }> {
+async function startGateway(status = 200): Promise<{
+  url: string;
+  requests: () => number;
+  bodies: Record<string, unknown>[];
+  close: () => Promise<void>;
+}> {
   let requests = 0;
+  const bodies: Record<string, unknown>[] = [];
   const audio = wavFixture();
-  const server = createServer(async (_req: IncomingMessage, res: ServerResponse) => {
+  const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     requests += 1;
+    let raw = '';
+    for await (const chunk of req) raw += chunk;
+    try {
+      bodies.push(JSON.parse(raw) as Record<string, unknown>);
+    } catch {
+      bodies.push({});
+    }
+    if (status !== 200) {
+      res.statusCode = status;
+      res.end('denied');
+      return;
+    }
     res.setHeader('content-type', 'audio/wav');
     res.end(audio);
   });
@@ -45,6 +63,7 @@ async function startGateway(): Promise<{ url: string; requests: () => number; cl
   return {
     url: 'http://127.0.0.1:' + port + '/music',
     requests: () => requests,
+    bodies,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }
@@ -173,6 +192,83 @@ describe('账号级 AI 配乐设置', () => {
       assert.deepEqual(await response.json(), { account: null, server: null, effective: 'none' });
       assert.equal(await f.store.getMusicSettings(token), null);
     } finally {
+      await f.cleanup();
+    }
+  });
+
+  test('测试连接：临时参数、已保存密钥回退、失败码与不落库', async () => {
+    const f = await fixture();
+    const failing = await startGateway(401);
+    try {
+      const token = await f.createSession();
+
+      // 未保存配置时也能用表单当前值测试，且不会写入配置。
+      let response = await f.request('/music/settings/test', 'POST', {
+        apiUrl: f.gateway.url,
+        apiKey: 'probe-secret',
+        name: 'probe-music',
+      }, token);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      const text = await response.text();
+      assert.ok(!text.includes('probe-secret'), '测试响应不能包含密钥');
+      const probe = JSON.parse(text) as { ok: boolean; mimeType: string; bytes: number; elapsedMs: number };
+      assert.equal(probe.ok, true);
+      assert.equal(probe.mimeType, 'audio/wav');
+      assert.ok(probe.bytes > 0);
+      assert.ok(probe.elapsedMs >= 0);
+      assert.equal(f.gateway.requests(), 1);
+      const sent = f.gateway.bodies[0]!;
+      assert.equal(sent.durationSeconds, 5);
+      assert.equal(sent.format, 'mp3');
+      assert.equal(sent.loop, true);
+      assert.equal(sent.model, 'probe-music');
+      assert.ok(String(sent.prompt).includes('connectivity test'));
+      const saved = await (await f.request('/music/settings', 'GET', undefined, token)).json() as MusicView;
+      assert.equal(saved.account, null, '测试不应保存配置');
+
+      // 已保存密钥时，表单留空密钥沿用服务端保存的密钥。
+      response = await f.request('/music/settings', 'PUT', {
+        apiUrl: f.gateway.url,
+        apiKey: 'saved-secret',
+        name: 'saved-music',
+      }, token);
+      assert.equal(response.status, 200);
+      response = await f.request('/music/settings/test', 'POST', {
+        apiUrl: f.gateway.url,
+        name: 'saved-music',
+      }, token);
+      assert.equal(response.status, 200);
+      assert.equal((await response.json() as { ok: boolean }).ok, true);
+      assert.equal(f.gateway.requests(), 2);
+
+      // 上游错误状态原样转换为失败码，HTTP 状态仍为 200 供界面展示。
+      response = await f.request('/music/settings/test', 'POST', {
+        apiUrl: failing.url,
+        apiKey: 'bad-key',
+      }, token);
+      assert.equal(response.status, 200);
+      const failed = await response.json() as { ok: boolean; error: string; elapsedMs: number };
+      assert.equal(failed.ok, false);
+      assert.equal(failed.error, 'music_http_401');
+      assert.ok(failed.elapsedMs >= 0);
+
+      // 非法地址与非 HTTPS 地址在发请求前被拒绝。
+      response = await f.request('/music/settings/test', 'POST', {
+        apiUrl: 'http://example.com/music',
+        apiKey: 'k-123',
+      }, token);
+      assert.equal(response.status, 400);
+      const invalid = await response.json() as { error: { code: string } };
+      assert.equal(invalid.error.code, 'invalid_music_settings');
+
+      // 既未保存也留空密钥时直接报错，不尝试请求上游。
+      const other = await f.createSession();
+      response = await f.request('/music/settings/test', 'POST', { apiUrl: f.gateway.url }, other);
+      assert.equal(response.status, 400);
+      assert.equal(f.gateway.requests(), 2);
+    } finally {
+      await failing.close();
       await f.cleanup();
     }
   });
