@@ -47,7 +47,7 @@ npm run dev:api
 
 ## AI 配乐
 
-默认关闭。服务端配置音乐网关后，或登录账号并在「账号管理」中保存自己的网关后，创作页的「AI 配乐（音乐模型）」选项会启用；生成时按模板、主题与速度确定音乐提示词，调用区域外部的 HTTP 接口制作 20 秒循环配乐，并以 data URI 内嵌到游戏，产物仍是可离线运行、无外部请求的单文件 HTML。创作页另提供「AI 编曲（实时合成）」，使用 OpenAI 兼容模型调整浏览器内置合成配乐，详见下一节。
+默认关闭。服务端配置音乐网关后，或登录账号并在「账号管理」中保存自己的网关后，创作页的「AI 配乐（音乐模型）」选项会启用；生成时按模板、主题与速度确定音乐提示词，调用区域外部的 HTTP 接口制作 20 秒循环配乐，并以 data URI 内嵌到游戏，产物仍是可离线运行、无外部请求的单文件 HTML。创作页可先用提示词生成试听（`POST /api/music/preview`），确认后再生成游戏；同一服务进程内生成会复用这次试听结果。创作页另提供「AI 编曲（实时合成）」，使用 OpenAI 兼容模型调整浏览器内置合成配乐，详见下一节。
 
 ```bash
 # 本地通过 shell 导出；不要写入前端或提交到 Git
@@ -73,7 +73,7 @@ MYOLGAME_MUSIC_STYLE_API_KEY=服务端密钥
 MYOLGAME_MUSIC_STYLE_MODEL=deepseek-chat
 ```
 
-地址可填基址（自动追加 `/chat/completions`）、`/v1` 基址或完整地址；请求为 `POST`，携带 `Authorization: Bearer <key>` 与 `{ model, messages, temperature, max_tokens, stream: false }`，20 秒超时、响应上限 64KB。模型输出会被提取为首个 JSON 对象，至少包含一个已知字段才被视为有效。系统提示要求模型尽量避开默认调性与和弦，并随机选择种子；任务阶段会显示实际使用的模型、BPM 与和弦进行。创作页试听固定播放默认风格，生成后的实际配乐才会应用模型参数。创作页的「AI 编曲（实时合成）」选项在配置模型后启用；选择「霓虹街机」时，若模型已配置也会自动调整。未配置、超时、HTTP 失败、非 JSON 或字段缺失时回退默认霓虹参数；显式选择 AI 编曲但模型未配置时，仍会生成默认合成配乐并在任务阶段标记 `style_model_not_configured`，模型调用失败则标记 `style_model_failed`。默认参数保持原版听感。云端入口预留 `APP_MUSIC_STYLE_API_URL`、`APP_MUSIC_STYLE_API_KEY`、`APP_MUSIC_STYLE_MODEL`；账号级配置保存在 `myol_music_style_settings` 表（迁移草案 [20261117_music_style_settings.sql](infra/migrations/20261117_music_style_settings.sql)，尚未部署），读写接口为 `GET/PUT/DELETE /api/music/style-model`，同样只回传 `hasKey`，密钥不出服务端。登录后可在「账号管理」的「AI 编曲模型（OpenAI 兼容）」面板填写地址、模型名与密钥，保存时只校验地址协议与模型名格式，不请求上游；「测试编曲连接」会用当前填写（或已保存）的配置真实请求一次模型，展示返回的模型名、BPM 与和弦进行，便于在保存前确认地址、密钥与模型名可用，测试不会写入配置。
+地址可填基址（自动追加 `/chat/completions`）、`/v1` 基址或完整地址；无路径的基址在首个请求返回 404 时会自动补试 `/v1/chat/completions`，兼容 OpenAI 等要求版本前缀的服务。请求为 `POST`，携带 `Authorization: Bearer <key>` 与 `{ model, messages, temperature, max_tokens, stream: false }`，20 秒超时、响应上限 64KB。模型输出会被提取为首个 JSON 对象，至少包含一个已知字段才被视为有效。系统提示要求模型尽量避开默认调性与和弦，并随机选择种子；任务阶段会显示实际使用的模型、BPM 与和弦进行。创作页可先用提示词生成编曲试听（`POST /api/music/style/preview`）：模型返回参数后由 iframe 实时合成播放，生成游戏时携带 `musicStylePreviewed` 明确复用该参数，不再重复请求模型；未生成试听时试听为默认风格。创作页的「AI 编曲（实时合成）」选项在配置模型后启用；选择「霓虹街机」时，若模型已配置也会自动调整。未配置、超时、HTTP 失败、非 JSON 或字段缺失时回退默认霓虹参数；显式选择 AI 编曲但模型未配置时，仍会生成默认合成配乐并在任务阶段标记 `style_model_not_configured`，模型调用失败则标记 `style_model_failed`。默认参数保持原版听感。云端入口预留 `APP_MUSIC_STYLE_API_URL`、`APP_MUSIC_STYLE_API_KEY`、`APP_MUSIC_STYLE_MODEL`；账号级配置保存在 `myol_music_style_settings` 表（迁移草案 [20261117_music_style_settings.sql](infra/migrations/20261117_music_style_settings.sql)，尚未部署），读写接口为 `GET/PUT/DELETE /api/music/style-model`，同样只回传 `hasKey`，密钥不出服务端。登录后可在「账号管理」的「AI 编曲模型（OpenAI 兼容）」面板填写地址、模型名与密钥，保存时只校验地址协议与模型名格式，不请求上游；「测试编曲连接」会用当前填写（或已保存）的配置真实请求一次模型，展示返回的模型名、BPM 与和弦进行，失败时显示错误原因与实际请求地址，便于在保存前确认地址、密钥与模型名可用，测试不会写入配置。
 
 ## 启动 Agent 后端
 
@@ -110,7 +110,8 @@ npm test
 - 账号级配乐设置：保存、密钥掩码读取、会话隔离、账号配置优先与清除回退，以及真实 Chrome 中注册 → 保存接口 → 创作页生成。
 - 配乐接口的连接测试：临时参数直连、已保存密钥回退、上游失败码、非法地址与测试不落库，以及真实 Chrome 中留空密钥测试后仍能正常生成。
 - 配乐提示词的清理、长度限制、规格持久化，以及生成请求实际携带附加风格描述。
-- 编曲模型：风格参数钳制与白名单、OpenAI 兼容地址归一化、代码块 JSON 提取、上游失败／非 JSON／无关字段回退、仅霓虹街机调用，以及账号级编曲配置的保存、掩码、隔离、环境变量回退与生成接入。
+- 编曲模型：风格参数钳制与白名单、OpenAI 兼容地址归一化与无路径基址的 `/v1` 回退、代码块 JSON 提取、上游失败／非 JSON／无关字段回退、仅霓虹街机调用、账号级编曲配置的保存、掩码、隔离、环境变量回退与生成接入，以及试听参数复用。
+- 创作页试听：AI 配乐的 20 秒试听接口与生成缓存命中；编曲试听接口返回模型参数并由 iframe 实际播放，真实 Chrome 确认参数展示与生成时不再重复请求模型。
 
 ## 限制说明
 

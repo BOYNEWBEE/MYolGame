@@ -10,7 +10,7 @@ import { fetchMusicSettings } from '../music-settings.ts';
 import { fetchMusicStyleSettings } from '../music-style-settings.ts';
 import Cover from '../components/Cover.tsx';
 import { GenerationBadge, SpecBadges } from '../components/Badges.tsx';
-import { MUSIC_PREVIEW_HTML } from '@shared/audio.ts';
+import { musicPreviewHtml } from '@shared/audio.ts';
 import { parsePrompt } from '@shared/prompt.ts';
 import {
   TEMPLATES,
@@ -21,12 +21,34 @@ import {
   defaultSpec,
   getMusicPreset,
   type GameSpec,
+  type MusicStyle,
   type TemplateId,
   type ThemeId,
   type Difficulty,
   type MusicPreset,
 } from '@shared/spec.ts';
 import type { ProjectSummary, VersionSummary } from '../types.ts';
+
+type MusicPreview =
+  | { kind: 'style'; style: MusicStyle; model: string; signature: string }
+  | { kind: 'track'; dataUri: string; mimeType: string; bytes: number; signature: string };
+
+function previewErrorText(code?: string): string {
+  if (!code) return '试听生成失败，请稍后重试';
+  if (/^music_http_\d+$/.test(code)) return '音乐接口返回 HTTP ' + code.slice('music_http_'.length);
+  const messages: Record<string, string> = {
+    style_not_configured: '编曲模型未配置，请先到账号管理填写',
+    style_model_failed: '编曲模型调用失败或输出不合规，请先在账号管理测试连接',
+    music_not_configured: '音乐生成 API 未配置，请先到账号管理填写',
+    music_invalid_url: '音乐接口地址不合法',
+    music_timeout: '音乐接口响应超时',
+    music_invalid_response: '音乐接口返回内容不符合约定',
+    music_unsupported_type: '音乐接口返回的不是受支持的音频格式',
+    music_too_large: '音乐接口返回的音频超过大小限制',
+    music_failed: '无法连接音乐接口，请检查地址、网络与证书',
+  };
+  return messages[code] ?? '试听生成失败（' + code + '）';
+}
 
 const SPEEDS = [
   { value: 0.7, label: '慢速 0.7x' },
@@ -58,6 +80,9 @@ export default function Create(): ReactNode {
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [options, setOptions] = useState<Record<string, boolean>>({ widePaddle: true });
   const [submitting, setSubmitting] = useState(false);
+  const [musicPreview, setMusicPreview] = useState<MusicPreview | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [previewError, setPreviewError] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -109,6 +134,55 @@ export default function Create(): ReactNode {
     parsed.spec.difficulty !== difficulty ||
     Object.entries(parsed.spec.options).some(([key, enabled]) => enabled && !options[key])
   );
+  const previewSignature = useMemo(
+    () => JSON.stringify({ prompt: prompt.trim(), spec: parsed.spec }),
+    [prompt, parsed.spec],
+  );
+  const previewFresh = musicPreview?.signature === previewSignature;
+
+  // 试听必须用提示词真实生成一次：合成配乐向编曲模型取参数，外部配乐调用音乐接口。
+  // 结果带签名，参数变化后提示重新生成，且生成游戏时不会误用旧参数。
+  async function generateMusicPreview(): Promise<void> {
+    if (previewBusy) return;
+    setPreviewBusy(true);
+    setPreviewError('');
+    try {
+      if (resolvedMusic === 'ai-generated') {
+        const result = await requestJson<{
+          ok: boolean;
+          track?: { dataUri: string; mimeType: string; bytes: number };
+          error?: string;
+        }>('/music/preview', { method: 'POST', body: { prompt: prompt.trim(), spec: parsed.spec } });
+        if (!result.ok || !result.track) {
+          setPreviewError(previewErrorText(result.error));
+          return;
+        }
+        setMusicPreview({
+          kind: 'track',
+          dataUri: result.track.dataUri,
+          mimeType: result.track.mimeType,
+          bytes: result.track.bytes,
+          signature: previewSignature,
+        });
+        return;
+      }
+      const result = await requestJson<{
+        ok: boolean;
+        style?: MusicStyle;
+        model?: string;
+        error?: string;
+      }>('/music/style/preview', { method: 'POST', body: { prompt: prompt.trim(), spec: parsed.spec } });
+      if (!result.ok || !result.style) {
+        setPreviewError(previewErrorText(result.error));
+        return;
+      }
+      setMusicPreview({ kind: 'style', style: result.style, model: result.model ?? '', signature: previewSignature });
+    } catch (err) {
+      setPreviewError(err instanceof Error ? err.message : '试听生成失败');
+    } finally {
+      setPreviewBusy(false);
+    }
+  }
 
   function applyTemplate(id: TemplateId): void {
     if (id === template) return;
@@ -124,10 +198,20 @@ export default function Create(): ReactNode {
     if (submitting) return;
     setSubmitting(true);
     setError(null);
+    const usePreview = Boolean(previewFresh && synthMusic && musicPreview?.kind === 'style');
+    const spec: GameSpec = usePreview && musicPreview?.kind === 'style'
+      ? { ...parsed.spec, musicStyle: musicPreview.style }
+      : parsed.spec;
+    const body: Record<string, unknown> = {
+      prompt: prompt.trim() || '使用当前配置生成',
+      spec,
+    };
+    // 明确告知服务端复用试听参数，避免生成时再次随机调用模型。
+    if (usePreview) body.musicStylePreviewed = true;
     try {
       const result = await requestJson<{ project: ProjectSummary; version: VersionSummary }>(
         '/projects',
-        { method: 'POST', body: { prompt: prompt.trim() || '使用当前配置生成', spec: baseSpec } },
+        { method: 'POST', body },
       );
       navigate('/projects/' + result.project.id);
     } catch (err) {
@@ -267,15 +351,15 @@ export default function Create(): ReactNode {
                 : resolvedMusic === 'ai-generated'
                   ? musicApiReady
                     ? musicSource === 'account'
-                      ? '生成时将使用账号里保存的音乐 API，制作 20 秒循环配乐并内嵌到游戏；失败会回退为无配乐。'
-                      : '生成时调用服务端音乐 API，制作 20 秒循环配乐并内嵌到游戏；失败会回退为无配乐。'
+                      ? '先用提示词生成 20 秒试听，确认后会内嵌到游戏；试听与生成都会调用账号里保存的音乐 API，生成游戏时尽量复用试听结果。'
+                      : '先用提示词生成 20 秒试听，确认后会内嵌到游戏；试听与生成都会调用服务端音乐 API，生成游戏时尽量复用试听结果。'
                     : <>AI 配乐未启用：请先到 <Link to="/account">账号管理</Link> 填写音乐生成 API，或由服务端统一配置。</>
                   : resolvedMusic === 'ai-arranged'
                     ? styleModelReady
-                      ? '生成时会由 OpenAI 兼容模型调整调性、BPM、和弦与音色，配乐仍由浏览器实时合成；下方试听是默认风格，生成后的实际配乐会应用模型参数。模型失败时使用默认霓虹配乐。'
+                      ? '先用提示词生成编曲试听：模型会返回调性、BPM、和弦与音色参数，浏览器按这些参数实时合成；生成游戏时复用试听参数，参数修改后需重新生成试听。'
                       : <>AI 编曲未启用：请先到 <Link to="/account">账号管理</Link> 填写 OpenAI 兼容编曲模型，或由服务端统一配置。</>
                     : styleModelReady
-                      ? '当前配乐为「霓虹街机」。生成时会由已配置的 AI 编曲模型调整风格；下方试听为默认风格。'
+                      ? '当前配乐为「霓虹街机」。可先用提示词生成编曲试听，再生成游戏；未生成试听时下方为默认风格。'
                       : <>当前配乐为「霓虹街机」。点试听播放，再点一次停止；到 <Link to="/account">账号管理</Link> 配置 OpenAI 兼容编曲模型后，可按提示词调整风格。</>}
             </p>
             {(resolvedMusic === 'ai-generated' || synthMusic) && (
@@ -290,17 +374,52 @@ export default function Create(): ReactNode {
                 />
                 <span className="panel-note" style={{ margin: 0 }}>
                   {synthMusic
-                    ? '配置编曲模型后，这段描述会与玩法、主题、速度一起用于调整 BPM、和弦与音色；未配置时仅随版本保存。'
+                    ? '配置编曲模型后，这段描述会与玩法、主题、速度一起用于调整 BPM、和弦与音色；点下方按钮生成试听后即可确认效果。'
                     : '会与模板、主题和速度自动生成的描述一起发送给音乐接口；留空则只用自动描述。'}
                 </span>
               </label>
+            )}
+            {(resolvedMusic === 'ai-generated' || (synthMusic && styleModelReady)) && (
+              <div className="music-preview-actions">
+                <button
+                  type="button"
+                  className="btn small"
+                  disabled={previewBusy || submitting}
+                  onClick={() => void generateMusicPreview()}
+                >
+                  {previewBusy
+                    ? '正在生成试听…'
+                    : resolvedMusic === 'ai-generated'
+                      ? '用提示词生成配乐试听'
+                      : '用提示词生成编曲试听'}
+                </button>
+                {previewFresh && musicPreview?.kind === 'style' && (
+                  <span className="panel-note" role="status" style={{ margin: 0 }}>
+                    已应用 {musicPreview.model || '编曲模型'}：{musicPreview.style.bpm} BPM · {musicPreview.style.progression}
+                  </span>
+                )}
+                {previewFresh && musicPreview?.kind === 'track' && (
+                  <span className="panel-note" role="status" style={{ margin: 0 }}>
+                    {(musicPreview.bytes / 1024).toFixed(0)} KB 试听音频；生成游戏时尽量复用。
+                  </span>
+                )}
+                {musicPreview && !previewFresh && (
+                  <span className="panel-note warn" role="status" style={{ margin: 0 }}>
+                    设置或提示词已修改，试听仍是旧结果；请重新生成试听。
+                  </span>
+                )}
+              </div>
+            )}
+            {previewError && <p className="panel-note warn" role="alert" style={{ margin: 0 }}>{previewError}</p>}
+            {musicPreview?.kind === 'track' && (
+              <audio className="music-preview-audio" controls src={musicPreview.dataUri} />
             )}
             {synthMusic && !submitting && (
               <iframe
                 className="music-preview"
                 title="配乐试听"
                 sandbox="allow-scripts"
-                srcDoc={MUSIC_PREVIEW_HTML}
+                srcDoc={musicPreview?.kind === 'style' ? musicPreviewHtml(musicPreview.style) : musicPreviewHtml()}
               />
             )}
           </div>
@@ -364,7 +483,7 @@ export default function Create(): ReactNode {
           <button
             type="button"
             className="btn primary large block"
-            disabled={submitting || !session.ready}
+            disabled={submitting || previewBusy || !session.ready}
             onClick={() => void submit()}
           >
             {submitting ? '正在提交…' : '生成游戏并进入工作台'}

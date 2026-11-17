@@ -22,8 +22,8 @@ import {
   type ThemeId,
 } from './shared/spec.ts';
 import { modelConfigured, type ModelEnv } from './shared/model.ts';
-import { musicConfigured, parseMusicSettingsInput, probeMusicGateway, type MusicEnv } from './shared/music.ts';
-import { musicStyleConfigured, parseMusicStyleSettingsInput, probeMusicStyle, type MusicStyleEnv } from './shared/music-style.ts';
+import { generateMusicTrack, musicConfigured, parseMusicSettingsInput, probeMusicGateway, type MusicEnv } from './shared/music.ts';
+import { generateMusicStyle, musicStyleConfigured, parseMusicStyleSettingsInput, probeMusicStyle, type MusicStyleEnv } from './shared/music-style.ts';
 import type {
   Game,
   GameFilter,
@@ -263,6 +263,7 @@ async function runGenerationTask(
   specOverride: unknown,
   music?: MusicEnv,
   styleModel?: MusicStyleEnv,
+  usePreviewedStyle = false,
 ): Promise<{ task: TaskRecord; version: Version; notes: string[] }> {
   if (project.templateOrigin) throw httpError(409, 'agent_required', '此项目基于社区源码模板，修改需要启用 Agent 源码开发');
   const baseSpec = specOverride
@@ -292,7 +293,7 @@ async function runGenerationTask(
     createdAt: now,
   });
 
-  const result = await generateGame({ prompt, baseSpec, env: deps.env.model, music, styleModel });
+  const result = await generateGame({ prompt, baseSpec, env: deps.env.model, music, styleModel, usePreviewedStyle });
   task.stages = result.stages;
   task.generationMode = result.mode;
   task.finishedAt = new Date().toISOString();
@@ -506,15 +507,58 @@ function buildRoutes(): Route[] {
         const result = await probeMusicStyle(parsed);
         const elapsedMs = Date.now() - started;
         const headers = { 'cache-control': 'no-store' };
-        if (!result.ok) return json({ ok: false, error: result.error, elapsedMs }, 200, headers);
+        if (!result.ok) return json({ ok: false, error: result.error, url: result.url, elapsedMs }, 200, headers);
         return json({
           ok: true,
           model: result.model,
           bpm: result.style.bpm,
           progression: result.style.progression,
           transpose: result.style.transpose,
+          url: result.url,
           elapsedMs,
         }, 200, headers);
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/music\/style\/preview$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        const body = await readBody(req);
+        const prompt = typeof body.prompt === 'string' ? body.prompt.slice(0, MAX_PROMPT) : '';
+        const spec = sanitizeSpec(body.spec);
+        const env = await musicStyleForSession(deps, session!);
+        if (!musicStyleConfigured(env)) {
+          return json({ ok: false, error: 'style_not_configured' }, 200, { 'cache-control': 'no-store' });
+        }
+        const styled = await generateMusicStyle(prompt, spec, env!);
+        if (!styled) {
+          return json({ ok: false, error: 'style_model_failed' }, 200, { 'cache-control': 'no-store' });
+        }
+        return json({
+          ok: true,
+          model: styled.model,
+          style: styled.style,
+        }, 200, { 'cache-control': 'no-store' });
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/music\/preview$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        const body = await readBody(req);
+        const spec = sanitizeSpec(body.spec);
+        const env = await musicForSession(deps, session!);
+        if (!musicConfigured(env)) {
+          return json({ ok: false, error: 'music_not_configured' }, 200, { 'cache-control': 'no-store' });
+        }
+        // 与生成时使用同一份规格与缓存键，生成游戏时可直接复用这次试听结果。
+        const result = await generateMusicTrack(env, spec);
+        if (!result.ok) {
+          return json({ ok: false, error: result.error }, 200, { 'cache-control': 'no-store' });
+        }
+        return json({ ok: true, track: result.track }, 200, { 'cache-control': 'no-store' });
       },
     },
     {
@@ -705,7 +749,15 @@ function buildRoutes(): Route[] {
             const task = await deps.agent.submit(project, prompt, initialSpec);
             return json({ project: projectSummary(project), task }, 202);
           }
-          const { task, version } = await runGenerationTask(deps, project, prompt, body.spec, await musicForSession(deps, session!), await musicStyleForSession(deps, session!));
+          const { task, version } = await runGenerationTask(
+            deps,
+            project,
+            prompt,
+            body.spec,
+            await musicForSession(deps, session!),
+            await musicStyleForSession(deps, session!),
+            body.musicStylePreviewed === true,
+          );
           return json(
             { project: projectSummary(project), version: versionSummary(version), task },
             201,

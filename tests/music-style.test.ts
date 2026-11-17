@@ -9,12 +9,12 @@ import { tmpdir } from 'node:os';
 import { startLocalServer } from '../dev/local-server.ts';
 import { FileStore } from '../dev/store_file.ts';
 import { generateGame } from '../functions/generate.ts';
-import { chatCompletionsUrl, generateMusicStyle, parseMusicStyleSettingsInput, probeMusicStyle } from '../functions/shared/music-style.ts';
+import { chatCompletionsUrl, chatCompletionsUrls, generateMusicStyle, parseMusicStyleSettingsInput, probeMusicStyle } from '../functions/shared/music-style.ts';
 import { DEFAULT_MUSIC_STYLE, defaultSpec, sanitizeMusicStyle } from '../functions/shared/spec.ts';
 
 type ChatReply = { status?: number; content?: string; raw?: string };
 
-async function startChatServer(reply: (body: Record<string, unknown>) => ChatReply = () => ({ content: '{}' })): Promise<{
+async function startChatServer(reply: (body: Record<string, unknown>, url: string) => ChatReply = () => ({ content: '{}' })): Promise<{
   url: string;
   requests: () => number;
   bodies: Record<string, unknown>[];
@@ -34,7 +34,7 @@ async function startChatServer(reply: (body: Record<string, unknown>) => ChatRep
     } catch {
       bodies.push({});
     }
-    const result = reply(bodies[bodies.length - 1] ?? {});
+    const result = reply(bodies[bodies.length - 1] ?? {}, req.url ?? '');
     res.statusCode = result.status ?? 200;
     res.setHeader('content-type', 'application/json');
     if (result.raw !== undefined) {
@@ -145,6 +145,34 @@ describe('OpenAI 兼容编曲客户端', () => {
       chatCompletionsUrl('https://api.openai.com/v1/chat/completions/'),
       'https://api.openai.com/v1/chat/completions',
     );
+  });
+
+  test('无路径基址在 404 时自动补试 /v1', async () => {
+    assert.deepEqual(chatCompletionsUrls('https://api.openai.com'), [
+      'https://api.openai.com/chat/completions',
+      'https://api.openai.com/v1/chat/completions',
+    ]);
+    assert.deepEqual(chatCompletionsUrls('https://api.deepseek.com/v1'), [
+      'https://api.deepseek.com/v1/chat/completions',
+    ]);
+    assert.deepEqual(chatCompletionsUrls('https://example.com/custom/chat/completions'), [
+      'https://example.com/custom/chat/completions',
+    ]);
+
+    const server = await startChatServer((_body, url) => (
+      url.endsWith('/v1/chat/completions') ? { content: '{"bpm":123,"progression":"dorian"}' } : { status: 404 }
+    ));
+    try {
+      const result = await probeMusicStyle({ apiUrl: server.url, apiKey: 'k', model: 'm' });
+      assert.equal(result.ok, true);
+      if (result.ok) {
+        assert.equal(result.style.bpm, 123);
+        assert.equal(result.url, server.url + '/v1/chat/completions');
+      }
+      assert.equal(server.requests(), 2);
+    } finally {
+      await server.close();
+    }
   });
 
   test('配置校验：协议、凭据、模型名与已保存密钥回退', () => {
@@ -310,6 +338,34 @@ describe('生成管线接入编曲模型', () => {
       assert.ok(fallback.html.includes('createArcadeAudio(null, null)'));
       assert.ok(fallback.notes.some((note) => note.includes('编曲模型未配置')));
       assert.ok(fallback.stages.some((stage) => stage.name === '调整配乐风格（未配置）' && stage.detail === 'style_model_not_configured'));
+    } finally {
+      await server.close();
+    }
+  });
+
+  test('提供试听参数时生成直接复用，不再请求编曲模型', async () => {
+    const server = await startChatServer(() => ({ content: '{"bpm":99,"progression":"major"}' }));
+    try {
+      const previewed = {
+        ...DEFAULT_MUSIC_STYLE,
+        bpm: 128,
+        progression: 'lydian' as const,
+        transpose: 3,
+        seed: 42,
+      };
+      const result = await generateGame({
+        prompt: '霓虹打砖块',
+        baseSpec: { ...defaultSpec('breakout', 'neon'), musicStyle: previewed },
+        env: {},
+        styleModel: { apiUrl: server.url, apiKey: 'k', model: 'm' },
+        usePreviewedStyle: true,
+      });
+      assert.equal(result.ok, true);
+      assert.equal(result.spec.musicStyle?.bpm, 128);
+      assert.equal(result.spec.musicStyle?.progression, 'lydian');
+      assert.ok(result.html.includes('"bpm":128'));
+      assert.ok(result.stages.some((stage) => stage.name === '应用试听配乐参数' && stage.ok));
+      assert.equal(server.requests(), 0);
     } finally {
       await server.close();
     }
@@ -557,6 +613,46 @@ describe('账号级编曲模型设置', () => {
     } finally {
       await chat.close();
       await failing.close();
+      await f.cleanup();
+    }
+  });
+
+  test('试听接口按账号配置返回风格参数，未配置时明确提示', async () => {
+    const chat = await startChatServer(() => ({
+      content: '{"bpm":124,"progression":"lydian","transpose":2,"seed":9}',
+    }));
+    const f = await fixture();
+    const spec = { ...defaultSpec('breakout', 'neon'), music: 'ai-arranged' as const };
+    try {
+      const token = await f.createSession();
+      let response = await f.request('/music/style/preview', 'POST', { prompt: '霓虹打砖块', spec }, token);
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { ok: false, error: 'style_not_configured' });
+
+      await f.request('/music/style-model', 'PUT', {
+        apiUrl: chat.url,
+        apiKey: 'preview-key',
+        model: 'arranger',
+      }, token);
+      response = await f.request('/music/style/preview', 'POST', { prompt: '霓虹打砖块', spec }, token);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      const result = await response.json() as {
+        ok: boolean; model: string; style: { bpm: number; progression: string; transpose: number; seed: number };
+      };
+      assert.equal(result.ok, true);
+      assert.equal(result.model, 'arranger');
+      assert.equal(result.style.bpm, 124);
+      assert.equal(result.style.progression, 'lydian');
+      assert.equal(result.style.transpose, 2);
+      assert.equal(result.style.seed, 9);
+      assert.equal(chat.requests(), 1);
+      assert.equal(chat.headers[0]?.authorization, 'Bearer preview-key');
+      const messages = chat.bodies[0]?.messages as { role: string; content: string }[];
+      assert.ok(messages[1]!.content.includes('霓虹打砖块'));
+      assert.ok(messages[1]!.content.includes('breakout'));
+    } finally {
+      await chat.close();
       await f.cleanup();
     }
   });

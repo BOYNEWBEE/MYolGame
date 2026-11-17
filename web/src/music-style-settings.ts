@@ -14,6 +14,7 @@ export interface MusicStyleTestResult {
   bpm?: number;
   progression?: string;
   transpose?: number;
+  url?: string;
   elapsedMs?: number;
   error?: string;
 }

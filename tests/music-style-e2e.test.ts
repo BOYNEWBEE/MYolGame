@@ -100,9 +100,13 @@ test('账号保存编曲模型后，可选用 AI 编曲并生成带模型参数�
     }, undefined, { timeout: 15000 });
     assert.equal(await page.getByRole('button', { name: 'AI 配乐（音乐模型）' }).isEnabled(), false);
     await arrangedButton.click();
-    await page.getByText('生成时会由 OpenAI 兼容模型调整调性').waitFor({ timeout: 15000 });
+    await page.getByText('先用提示词生成编曲试听').waitFor({ timeout: 15000 });
     await page.getByLabel('配乐提示词（可选）').fill('更慢、更悬疑，少一点鼓点');
     await page.getByLabel('需求提示词').fill('《编曲测试》：霓虹打砖块');
+    // 先用提示词生成试听，确认页面展示模型实际参数。
+    await page.getByRole('button', { name: '用提示词生成编曲试听' }).click();
+    await page.getByText('已应用 deepseek-chat：138 BPM · dorian').waitFor({ timeout: 15000 });
+    assert.equal(requests, 2);
     await page.getByRole('button', { name: '生成游戏并进入工作台' }).click();
     await page.waitForURL('**/projects/**', { timeout: 30000 });
 

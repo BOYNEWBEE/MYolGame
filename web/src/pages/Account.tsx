@@ -167,7 +167,8 @@ export default function Account() {
       if (styleKey.trim()) body.apiKey = styleKey;
       const result = await testMusicStyleSettings(body);
       if (!result.ok) {
-        setStyleError('连接失败：' + musicStyleErrorText(result.error ?? ''));
+        setStyleError('连接失败：' + musicStyleErrorText(result.error ?? '')
+          + (result.url ? '（请求地址：' + result.url + '）' : ''));
         return;
       }
       const elapsed = result.elapsedMs === undefined ? '' : '，耗时 ' + (result.elapsedMs / 1000).toFixed(1) + ' 秒';

@@ -40,7 +40,9 @@ function wavFixture(seconds = 0.3): Uint8Array {
 
 test('AI 配乐在真实 Chrome 中可播放并受声音开关控制', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'myol-music-'));
+  let gatewayRequests = 0;
   const gateway = createServer((_req, res) => {
+    gatewayRequests += 1;
     res.setHeader('content-type', 'audio/wav');
     res.end(wavFixture());
   });
@@ -75,8 +77,15 @@ test('AI 配乐在真实 Chrome 中可播放并受声音开关控制', async () 
     assert.equal(await aiButton.isEnabled(), true);
     await aiButton.click();
     await page.getByLabel('需求提示词').fill('《配乐测试》：霓虹打砖块');
+    // 先用提示词生成试听，确认音频可加载；生成游戏时复用这次结果。
+    await page.getByRole('button', { name: '用提示词生成配乐试听' }).click();
+    const audioPreview = page.locator('audio.music-preview-audio');
+    await audioPreview.waitFor({ timeout: 15000 });
+    assert.ok((await audioPreview.getAttribute('src'))?.startsWith('data:audio/wav;base64,'), '试听应使用接口返回的音频');
+    assert.equal(gatewayRequests, 1);
     await page.getByRole('button', { name: '生成游戏并进入工作台' }).click();
     await page.waitForURL('**/projects/**');
+    assert.equal(gatewayRequests, 1, '生成时应复用试听缓存');
     const projectId = page.url().split('/').pop() ?? '';
     const project = await store.getProject(projectId);
     const version = await store.getVersion(project!.currentVersionId);

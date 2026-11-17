@@ -15,6 +15,8 @@ export interface GenerateInput {
   env: ModelEnv;
   music?: MusicEnv;
   styleModel?: MusicStyleEnv;
+  // 创作页已用提示词生成并试听过编曲参数时，直接复用，不再重复请求模型。
+  usePreviewedStyle?: boolean;
 }
 
 export interface GenerateOutput {
@@ -80,7 +82,12 @@ export async function generateGame(input: GenerateInput): Promise<GenerateOutput
 
   // 阶段三：编曲模型只输出受限参数，用于调整浏览器内置合成配乐的风格。
   const preset = getMusicPreset(spec);
-  if ((preset === 'neon-arcade' || preset === 'ai-arranged') && musicStyleConfigured(input.styleModel)) {
+  const styledPreset = preset === 'neon-arcade' || preset === 'ai-arranged';
+  if (input.usePreviewedStyle && styledPreset && spec.musicStyle) {
+    const style = spec.musicStyle;
+    notes.push('配乐使用创作页试听时生成的参数（' + style.bpm + ' BPM，' + style.progression + '）。');
+    markStage('应用试听配乐参数', true, style.bpm + ' BPM · ' + style.progression);
+  } else if (styledPreset && musicStyleConfigured(input.styleModel)) {
     const styled = await generateMusicStyle(input.prompt, spec, input.styleModel!);
     if (styled) {
       spec = sanitizeSpec({ ...spec, musicStyle: styled.style }, spec);

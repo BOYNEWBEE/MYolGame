@@ -273,6 +273,41 @@ describe('账号级 AI 配乐设置', () => {
     }
   });
 
+  test('试听接口使用账号配置返回音频，生成同规格游戏时复用缓存', async () => {
+    const f = await fixture();
+    try {
+      const token = await f.createSession();
+      let response = await f.request('/music/preview', 'POST', { spec: aiSpec() }, token);
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { ok: false, error: 'music_not_configured' });
+
+      await f.request('/music/settings', 'PUT', {
+        apiUrl: f.gateway.url,
+        apiKey: 'preview-key',
+        name: 'fake-music',
+      }, token);
+      response = await f.request('/music/preview', 'POST', { prompt: '霓虹打砖块', spec: aiSpec() }, token);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      const result = await response.json() as {
+        ok: boolean;
+        track: { dataUri: string; mimeType: string; bytes: number };
+      };
+      assert.equal(result.ok, true);
+      assert.ok(result.track.dataUri.startsWith('data:audio/wav;base64,'));
+      assert.equal(result.track.mimeType, 'audio/wav');
+      assert.ok(result.track.bytes > 0);
+      assert.equal(f.gateway.requests(), 1);
+
+      // 生成相同规格的项目时命中试听缓存，不再二次调用音乐接口。
+      response = await f.request('/projects', 'POST', { prompt: '霓虹打砖块', spec: aiSpec() }, token);
+      assert.equal(response.status, 201);
+      assert.equal(f.gateway.requests(), 1);
+    } finally {
+      await f.cleanup();
+    }
+  });
+
   test('服务端环境变量作为未保存账号配置时的回退', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'myol-music-server-'));
     const gateway = await startGateway();

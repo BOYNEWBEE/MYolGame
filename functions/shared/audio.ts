@@ -328,3 +328,13 @@ draw();
 </script>
 </body>
 </html>`;
+
+// 用模型返回的风格参数生成试听页；传 null 时保持默认霓虹听感。
+export function musicPreviewHtml(style?: object | null): string {
+  if (!style) return MUSIC_PREVIEW_HTML;
+  const json = JSON.stringify(style).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+  return MUSIC_PREVIEW_HTML.replace(
+    'const preview = createArcadeAudio();',
+    'const preview = createArcadeAudio(null, ' + json + ');',
+  );
+}
