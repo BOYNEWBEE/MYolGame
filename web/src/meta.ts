@@ -9,7 +9,6 @@ export interface MetaInfo {
   generationMode: 'template' | 'model' | 'agent';
   agent: { configured: boolean; name: string | null };
   model: { configured: boolean; name: string | null };
-  music: { configured: boolean; name: string | null };
   identityNotice: string;
   templates: TemplateMeta[];
   themes: { id: ThemeId; name: string; palette: Palette }[];

@@ -419,7 +419,7 @@ describe('生成管线接入编曲模型', () => {
       assert.equal(result.spec.musicStyle?.progression, 'dorian');
       assert.equal(result.spec.musicStyle?.instrument, 'piano');
       assert.equal(result.spec.musicStyle?.pad, 'warm');
-      assert.ok(result.html.includes('createArcadeAudio(null, '));
+      assert.ok(result.html.includes('createArcadeAudio('));
       assert.ok(result.html.includes('"bpm":132'));
       assert.ok(result.html.includes('"progression":"dorian"'));
       assert.ok(result.html.includes('"instrument":"piano"'));
@@ -443,7 +443,7 @@ describe('生成管线接入编曲模型', () => {
       assert.equal(arranged.ok, true);
       assert.equal(arranged.spec.music, 'ai-arranged');
       assert.equal(arranged.spec.musicStyle?.bpm, 112);
-      assert.ok(arranged.html.includes('createArcadeAudio(null, '));
+      assert.ok(arranged.html.includes('createArcadeAudio('));
       assert.ok(arranged.html.includes('"bpm":112'));
       assert.ok(arranged.stages.some((stage) => stage.name === '调整配乐风格（模型辅助）' && stage.ok));
 
@@ -455,7 +455,7 @@ describe('生成管线接入编曲模型', () => {
       assert.equal(fallback.ok, true);
       assert.equal(fallback.spec.music, 'ai-arranged');
       assert.equal(fallback.spec.musicStyle, undefined);
-      assert.ok(fallback.html.includes('createArcadeAudio(null, null)'));
+      assert.ok(fallback.html.includes('createArcadeAudio(null)'));
       assert.ok(fallback.notes.some((note) => note.includes('编曲模型未配置')));
       assert.ok(fallback.stages.some((stage) => stage.name === '调整配乐风格（未配置）' && stage.detail === 'style_model_not_configured'));
     } finally {

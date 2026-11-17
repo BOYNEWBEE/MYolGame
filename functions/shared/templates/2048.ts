@@ -411,13 +411,12 @@ function script(): string {
 `;
 }
 
-export function renderGame2048(spec: GameSpec, musicTrack?: string): string {
+export function renderGame2048(spec: GameSpec): string {
   const palette = getTheme(spec.theme).palette;
   return gameShell({
     spec,
     gameScript: script(),
     soundEffects: true,
-    musicTrack,
     config: {
       title: spec.title,
       palette,

@@ -6,7 +6,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ApiError, requestJson } from '../api.ts';
 import { useSession } from '../session.tsx';
 import { useMeta } from '../meta.ts';
-import { fetchMusicSettings } from '../music-settings.ts';
 import { fetchMusicStyleSettings } from '../music-style-settings.ts';
 import Cover from '../components/Cover.tsx';
 import { GenerationBadge, SpecBadges } from '../components/Badges.tsx';
@@ -33,23 +32,13 @@ import {
 } from '@shared/spec.ts';
 import type { ProjectSummary, VersionSummary } from '../types.ts';
 
-type MusicPreview =
-  | { kind: 'style'; style: MusicStyle; model: string; signature: string }
-  | { kind: 'track'; dataUri: string; mimeType: string; bytes: number; signature: string };
+type MusicPreview = { kind: 'style'; style: MusicStyle; model: string; signature: string };
 
 function previewErrorText(code?: string): string {
   if (!code) return '试听生成失败，请稍后重试';
-  if (/^music_http_\d+$/.test(code)) return '音乐接口返回 HTTP ' + code.slice('music_http_'.length);
   const messages: Record<string, string> = {
     style_not_configured: '编曲模型未配置，请先到账号管理填写',
     style_model_failed: '编曲模型调用失败或输出不合规，请先在账号管理测试连接',
-    music_not_configured: '音乐生成 API 未配置，请先到账号管理填写',
-    music_invalid_url: '音乐接口地址不合法',
-    music_timeout: '音乐接口响应超时',
-    music_invalid_response: '音乐接口返回内容不符合约定',
-    music_unsupported_type: '音乐接口返回的不是受支持的音频格式',
-    music_too_large: '音乐接口返回的音频超过大小限制',
-    music_failed: '无法连接音乐接口，请检查地址、网络与证书',
   };
   return messages[code] ?? '试听生成失败（' + code + '）';
 }
@@ -61,11 +50,10 @@ const SPEEDS = [
   { value: 1.8, label: '极速 1.8x' },
 ];
 
-const MUSIC_CHOICES: { value?: MusicPreset; label: string; needsMusicApi?: boolean; needsStyleModel?: boolean }[] = [
+const MUSIC_CHOICES: { value?: MusicPreset; label: string; needsStyleModel?: boolean }[] = [
   { label: '随玩法与主题' },
   { value: 'none', label: MUSIC_NAMES.none },
   { value: 'neon-arcade', label: MUSIC_NAMES['neon-arcade'] },
-  { value: 'ai-generated', label: MUSIC_NAMES['ai-generated'], needsMusicApi: true },
   { value: 'ai-arranged', label: MUSIC_NAMES['ai-arranged'], needsStyleModel: true },
 ];
 
@@ -78,7 +66,6 @@ export default function Create(): ReactNode {
   const [theme, setTheme] = useState<ThemeId>('neon');
   const [music, setMusic] = useState<MusicPreset>();
   const [musicPrompt, setMusicPrompt] = useState('');
-  const [musicSource, setMusicSource] = useState<'account' | 'server' | 'none' | null>(null);
   const [styleModelSource, setStyleModelSource] = useState<'account' | 'server' | 'none' | null>(null);
   const [speed, setSpeed] = useState(1.4);
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
@@ -92,14 +79,6 @@ export default function Create(): ReactNode {
   useEffect(() => {
     if (!session.ready) return;
     let cancelled = false;
-    fetchMusicSettings()
-      .then((view) => {
-        if (!cancelled) setMusicSource(view.effective);
-      })
-      .catch(() => {
-        // 未登录或接口不可用时沿用平台元信息中的服务端配置状态。
-        if (!cancelled) setMusicSource(null);
-      });
     fetchMusicStyleSettings()
       .then((view) => {
         if (!cancelled) setStyleModelSource(view.effective);
@@ -110,7 +89,6 @@ export default function Create(): ReactNode {
     return () => { cancelled = true; };
   }, [session.ready, session.account?.username]);
 
-  const musicApiReady = musicSource ? musicSource !== 'none' : Boolean(meta?.music.configured);
   const styleModelReady = styleModelSource ? styleModelSource !== 'none' : false;
 
   // 结构化选择作为基底，提示词关键词覆盖其上（服务器生成时使用相同规则）
@@ -151,33 +129,14 @@ export default function Create(): ReactNode {
   );
   const keywordTuned = localStyle !== baseLocalStyle;
 
-  // 试听必须用提示词真实生成一次：合成配乐向编曲模型取参数，外部配乐调用音乐接口。
+  // 试听必须用提示词真实生成一次：合成配乐向编曲模型取参数。
   // 结果带签名，参数变化后提示重新生成，且生成游戏时不会误用旧参数。
   async function generateMusicPreview(): Promise<void> {
     if (previewBusy) return;
     setPreviewBusy(true);
     setPreviewError('');
     try {
-      if (resolvedMusic === 'ai-generated') {
-        const result = await requestJson<{
-          ok: boolean;
-          track?: { dataUri: string; mimeType: string; bytes: number };
-          error?: string;
-        }>('/music/preview', { method: 'POST', body: { prompt: prompt.trim(), spec: parsed.spec } });
-        if (!result.ok || !result.track) {
-          setPreviewError(previewErrorText(result.error));
-          return;
-        }
-        setMusicPreview({
-          kind: 'track',
-          dataUri: result.track.dataUri,
-          mimeType: result.track.mimeType,
-          bytes: result.track.bytes,
-          signature: previewSignature,
-        });
-        return;
-      }
-      // 未配置编曲模型时不必请求服务端：提示词关键词已能决定音色与铺底。
+      // 未配置编曲模型时不必请求服务端：提示词关键词已能决定音色、调性与旋律。
       if (!styleModelReady) {
         if (!keywordTuned) {
           setPreviewError('提示词里还没识别到乐器或情绪；可以写钢琴、弦乐，或悬疑、悲伤、明亮、梦幻、复古、科幻等情绪。');
@@ -347,22 +306,18 @@ export default function Create(): ReactNode {
           <div className="field">
             <span id="create-music-label" className="field-label">背景音乐</span>
             <div className="segmented wrap" role="group" aria-labelledby="create-music-label">
-              {MUSIC_CHOICES.map(({ value, label, needsMusicApi, needsStyleModel }) => {
-                const missingMusicApi = Boolean(needsMusicApi && !musicApiReady);
+              {MUSIC_CHOICES.map(({ value, label, needsStyleModel }) => {
                 const missingStyleModel = Boolean(needsStyleModel && !styleModelReady);
-                const unavailable = missingMusicApi || missingStyleModel;
                 return (
                   <button
                     key={label}
                     type="button"
                     className={music === value ? 'active' : ''}
                     aria-pressed={music === value}
-                    disabled={unavailable}
-                    title={missingMusicApi
-                      ? '需在账号管理中填写音乐生成 API，或由服务端统一配置'
-                      : missingStyleModel
-                        ? '需在账号管理中填写 OpenAI 兼容编曲模型，或由服务端统一配置'
-                        : undefined}
+                    disabled={missingStyleModel}
+                    title={missingStyleModel
+                      ? '需在账号管理中填写 OpenAI 兼容编曲模型，或由服务端统一配置'
+                      : undefined}
                     onClick={() => setMusic(value)}
                   >
                     {label}
@@ -373,21 +328,15 @@ export default function Create(): ReactNode {
             <p className="panel-note music-note">
               {resolvedMusic === 'none'
                 ? '当前游戏无配乐。选择「霓虹街机」即可试听。'
-                : resolvedMusic === 'ai-generated'
-                  ? musicApiReady
-                    ? musicSource === 'account'
-                      ? '先用提示词生成 20 秒试听，确认后会内嵌到游戏；试听与生成都会调用账号里保存的音乐 API，生成游戏时尽量复用试听结果。'
-                      : '先用提示词生成 20 秒试听，确认后会内嵌到游戏；试听与生成都会调用服务端音乐 API，生成游戏时尽量复用试听结果。'
-                    : <>AI 配乐未启用：请先到 <Link to="/account">账号管理</Link> 填写音乐生成 API，或由服务端统一配置。</>
-                  : resolvedMusic === 'ai-arranged'
-                    ? styleModelReady
-                      ? '先用提示词生成编曲试听：模型会返回调性、BPM、和弦与音色参数，浏览器按这些参数实时合成；生成游戏时复用试听参数，参数修改后需重新生成试听。'
-                      : <>AI 编曲未启用：请先到 <Link to="/account">账号管理</Link> 填写 OpenAI 兼容编曲模型，或由服务端统一配置。</>
-                    : styleModelReady
-                      ? '当前配乐为「霓虹街机」。可先用提示词生成编曲试听，再生成游戏；未生成试听时下方为默认风格。'
-                      : <>当前配乐为「霓虹街机」。提示词里写钢琴、弦乐、长笛、八音盒、管风琴或吉他会直接切换音色，下方试听会同步变化；到 <Link to="/account">账号管理</Link> 配置编曲模型后可进一步调整 BPM、调性与铺底。</>}
+                : resolvedMusic === 'ai-arranged'
+                  ? styleModelReady
+                    ? '先用提示词生成编曲试听：模型会返回调性、BPM、和弦与音色参数，浏览器按这些参数实时合成；生成游戏时复用试听参数，参数修改后需重新生成试听。'
+                    : <>AI 编曲未启用：请先到 <Link to="/account">账号管理</Link> 填写 OpenAI 兼容编曲模型，或由服务端统一配置。</>
+                  : styleModelReady
+                    ? '当前配乐为「霓虹街机」。可先用提示词生成编曲试听，再生成游戏；未生成试听时下方为默认风格。'
+                    : <>当前配乐为「霓虹街机」。提示词里写钢琴、弦乐、长笛、八音盒、管风琴或吉他会直接切换音色，下方试听会同步变化；到 <Link to="/account">账号管理</Link> 配置编曲模型后可进一步调整 BPM、调性与铺底。</>}
             </p>
-            {(resolvedMusic === 'ai-generated' || synthMusic) && (
+            {synthMusic && (
               <label className="field" style={{ marginTop: 10 }}>
                 <span className="field-label">配乐提示词（可选）</span>
                 <textarea
@@ -395,16 +344,14 @@ export default function Create(): ReactNode {
                   maxLength={MAX_MUSIC_PROMPT}
                   value={musicPrompt}
                   onChange={(e) => setMusicPrompt(e.target.value)}
-                  placeholder={synthMusic ? '例如：更慢、更悬疑，少一点鼓点' : '例如：温柔的钢琴与雨声，节奏舒缓，不要鼓点'}
+                  placeholder="例如：更慢、更悬疑，少一点鼓点"
                 />
                 <span className="panel-note" style={{ margin: 0 }}>
-                  {synthMusic
-                    ? '写钢琴、弦乐、长笛、八音盒、管风琴、吉他等乐器会切换音色；写悬疑、悲伤、明亮、梦幻、复古、科幻等情绪会改变调性与和弦进行，并换用新的旋律。配置编曲模型后，还会由模型进一步调整 BPM 与铺底。'
-                    : '会与模板、主题和速度自动生成的描述一起发送给音乐接口；留空则只用自动描述。'}
+                  写钢琴、弦乐、长笛、八音盒、管风琴、吉他等乐器会切换音色；写悬疑、悲伤、明亮、梦幻、复古、科幻等情绪会改变调性与和弦进行，并换用新的旋律。配置编曲模型后，还会由模型进一步调整 BPM 与铺底。
                 </span>
               </label>
             )}
-            {(resolvedMusic === 'ai-generated' || (synthMusic && (styleModelReady || keywordTuned))) && (
+            {synthMusic && (styleModelReady || keywordTuned) && (
               <div className="music-preview-actions">
                 <button
                   type="button"
@@ -414,37 +361,28 @@ export default function Create(): ReactNode {
                 >
                   {previewBusy
                     ? '正在生成试听…'
-                    : resolvedMusic === 'ai-generated'
-                      ? '用提示词生成配乐试听'
-                      : styleModelReady
-                        ? '用提示词生成编曲试听'
-                        : '按提示词识别风格试听'}
+                    : styleModelReady
+                      ? '用提示词生成编曲试听'
+                      : '按提示词识别风格试听'}
                 </button>
-                {previewFresh && musicPreview?.kind === 'style' && (
+                {previewFresh && (
                   <span className="panel-note" role="status" style={{ margin: 0 }}>
                     已应用 {musicPreview.model || '编曲模型'}：{musicPreview.style.bpm} BPM · {musicPreview.style.progression}
                   </span>
                 )}
                 {previewFresh
-                  && musicPreview?.kind === 'style'
                   && (musicPreview.style.instrument !== 'chip' || musicPreview.style.pad !== 'none') && (
                   <span className="panel-note" role="status" style={{ margin: 0 }}>
                     音色：{MUSIC_INSTRUMENT_NAMES[musicPreview.style.instrument]} · {MUSIC_PAD_NAMES[musicPreview.style.pad]}
                   </span>
                 )}
                 {previewFresh
-                  && musicPreview?.kind === 'style'
                   && (musicPreview.style.progression !== 'minor' || musicPreview.style.transpose !== 0) && (
                   <span className="panel-note" role="status" style={{ margin: 0 }}>
                     调性：{musicPreview.style.progression} · 移调 {musicPreview.style.transpose > 0 ? '+' : ''}{musicPreview.style.transpose}
                   </span>
                 )}
-                {previewFresh && musicPreview?.kind === 'track' && (
-                  <span className="panel-note" role="status" style={{ margin: 0 }}>
-                    {(musicPreview.bytes / 1024).toFixed(0)} KB 试听音频；生成游戏时尽量复用。
-                  </span>
-                )}
-                {musicPreview && !previewFresh && (
+                {!previewFresh && (
                   <span className="panel-note warn" role="status" style={{ margin: 0 }}>
                     设置或提示词已修改，试听仍是旧结果；请重新生成试听。
                   </span>
@@ -452,9 +390,6 @@ export default function Create(): ReactNode {
               </div>
             )}
             {previewError && <p className="panel-note warn" role="alert" style={{ margin: 0 }}>{previewError}</p>}
-            {musicPreview?.kind === 'track' && (
-              <audio className="music-preview-audio" controls src={musicPreview.dataUri} />
-            )}
             {synthMusic && !submitting && (
               <iframe
                 className="music-preview"

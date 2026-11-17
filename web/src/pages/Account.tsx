@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { appHref } from '../routing.ts';
 import { ApiError, requestJson } from '../api.ts';
-import { fetchMusicSettings, musicErrorText, testMusicSettings, type MusicSettingsView } from '../music-settings.ts';
 import { fetchMusicStyleSettings, musicStyleErrorText, testMusicStyleSettings, type MusicStyleSettingsView } from '../music-style-settings.ts';
 import { useSession } from '../session.tsx';
 
@@ -12,16 +11,6 @@ export default function Account() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const [musicStatus, setMusicStatus] = useState<MusicSettingsView | null>(null);
-  const [musicUrl, setMusicUrl] = useState('');
-  const [musicName, setMusicName] = useState('');
-  const [musicKey, setMusicKey] = useState('');
-  const [musicLoading, setMusicLoading] = useState(false);
-  const [musicBusy, setMusicBusy] = useState(false);
-  const [musicTesting, setMusicTesting] = useState(false);
-  const [musicError, setMusicError] = useState('');
-  const [musicNotice, setMusicNotice] = useState('');
-
   const [styleStatus, setStyleStatus] = useState<MusicStyleSettingsView | null>(null);
   const [styleUrl, setStyleUrl] = useState('');
   const [styleModel, setStyleModel] = useState('');
@@ -31,27 +20,6 @@ export default function Account() {
   const [styleTesting, setStyleTesting] = useState(false);
   const [styleError, setStyleError] = useState('');
   const [styleNotice, setStyleNotice] = useState('');
-
-  useEffect(() => {
-    if (!session.ready || !session.account || session.cloudM0) return;
-    let cancelled = false;
-    setMusicLoading(true);
-    setMusicError('');
-    fetchMusicSettings()
-      .then((view) => {
-        if (cancelled) return;
-        setMusicStatus(view);
-        setMusicUrl(view.account?.apiUrl ?? '');
-        setMusicName(view.account?.name ?? '');
-      })
-      .catch((e) => {
-        if (!cancelled) setMusicError(e instanceof Error ? e.message : '配乐接口配置读取失败');
-      })
-      .finally(() => {
-        if (!cancelled) setMusicLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [session.ready, session.account?.username, session.cloudM0]);
 
   useEffect(() => {
     if (!session.ready || !session.account || session.cloudM0) return;
@@ -73,69 +41,6 @@ export default function Account() {
       });
     return () => { cancelled = true; };
   }, [session.ready, session.account?.username, session.cloudM0]);
-
-  async function saveMusic(e: FormEvent<HTMLFormElement>): Promise<void> {
-    e.preventDefault();
-    if (musicBusy) return;
-    setMusicBusy(true);
-    setMusicError('');
-    setMusicNotice('');
-    try {
-      const body: Record<string, unknown> = { apiUrl: musicUrl, name: musicName };
-      if (musicKey.trim()) body.apiKey = musicKey;
-      const view = await requestJson<MusicSettingsView>('/music/settings', { method: 'PUT', body });
-      setMusicStatus(view);
-      setMusicKey('');
-      setMusicNotice('已保存。创作页会优先使用这个接口生成 AI 配乐。');
-    } catch (e) {
-      setMusicError(e instanceof Error ? e.message : '保存失败');
-    } finally {
-      setMusicBusy(false);
-    }
-  }
-
-  async function clearMusic(): Promise<void> {
-    if (musicBusy) return;
-    setMusicBusy(true);
-    setMusicError('');
-    setMusicNotice('');
-    try {
-      const view = await requestJson<MusicSettingsView>('/music/settings', { method: 'DELETE' });
-      setMusicStatus(view);
-      setMusicUrl('');
-      setMusicName('');
-      setMusicKey('');
-      setMusicNotice(view.server ? '已清除账号配置，将改用服务端配置。' : '已清除账号配置。');
-    } catch (e) {
-      setMusicError(e instanceof Error ? e.message : '清除失败');
-    } finally {
-      setMusicBusy(false);
-    }
-  }
-
-  async function testConnection(): Promise<void> {
-    if (musicBusy || musicTesting) return;
-    setMusicTesting(true);
-    setMusicError('');
-    setMusicNotice('');
-    try {
-      const body: { apiUrl: string; apiKey?: string; name?: string } = { apiUrl: musicUrl, name: musicName };
-      if (musicKey.trim()) body.apiKey = musicKey;
-      const result = await testMusicSettings(body);
-      if (!result.ok) {
-        setMusicError('连接失败：' + musicErrorText(result.error ?? ''));
-        return;
-      }
-      const size = result.bytes === undefined ? '大小未知' : (result.bytes / 1024).toFixed(1) + ' KB';
-      const elapsed = result.elapsedMs === undefined ? '' : '，耗时 ' + (result.elapsedMs / 1000).toFixed(1) + ' 秒';
-      setMusicNotice('连接正常：返回 ' + (result.mimeType ?? '音频') + '，' + size + elapsed + '。');
-    } catch (e) {
-      if (e instanceof ApiError) setMusicError(e.message || musicErrorText(e.code));
-      else setMusicError(e instanceof Error ? e.message : '测试失败');
-    } finally {
-      setMusicTesting(false);
-    }
-  }
 
   async function saveStyle(e: FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
@@ -249,49 +154,6 @@ export default function Account() {
     }}>刷新登录状态</button>
     {session.account && (
       <>
-      <section className="panel" style={{ marginTop: 20, textAlign: 'left', display: 'grid', gap: 12 }}>
-        <h2>AI 配乐 API</h2>
-        <p className="panel-note" style={{ margin: 0 }}>
-          填写兼容的服务端网关地址与密钥。保存后，创作页的「AI 配乐（音乐模型）」会调用它生成 20 秒循环配乐；密钥只保存在服务端，不会回传浏览器。
-        </p>
-        {session.cloudM0 ? <p className="panel-note" style={{ margin: 0 }}>
-          当前部署为云端 M0 模拟阶段，写入接口尚未开放；账号级配乐设置暂不可用，服务端统一配置仍可通过创作页使用。
-        </p> : musicLoading ? <p className="muted">正在读取配置…</p> : (
-          <>
-            <p className="muted small" role="status" style={{ margin: 0 }}>
-              {musicStatus?.account
-                ? '账号配置：' + musicStatus.account.apiUrl
-                : musicStatus?.server
-                  ? '未保存账号配置，当前使用服务端统一配置。'
-                  : '当前未配置音乐生成接口。'}
-            </p>
-            <form onSubmit={saveMusic} style={{ display: 'grid', gap: 12 }}>
-              <label className="field">
-                <span className="field-label">接口地址</span>
-                <input type="text" inputMode="url" required maxLength={512} value={musicUrl} onChange={(e) => setMusicUrl(e.target.value)} placeholder="https://example.com/api/music" autoComplete="off" />
-              </label>
-              <label className="field">
-                <span className="field-label">显示名称（可选，作为 model 传给接口）</span>
-                <input type="text" maxLength={40} value={musicName} onChange={(e) => setMusicName(e.target.value)} placeholder="例如：music-v1" autoComplete="off" />
-              </label>
-              <label className="field">
-                <span className="field-label">API 密钥</span>
-                <input type="password" maxLength={512} value={musicKey} onChange={(e) => setMusicKey(e.target.value)} placeholder={musicStatus?.account?.hasKey ? '已保存；留空则保持不变' : '输入服务提供的密钥'} autoComplete="new-password" />
-              </label>
-              <p className="panel-note" style={{ margin: 0 }}>
-                仅支持 HTTPS；本机调试可用 http://127.0.0.1 或 http://localhost。保存时不会校验上游；「测试连接」会真实请求一次约 5 秒的短配乐，可能产生调用费用。
-              </p>
-              {musicError && <p role="alert" style={{ margin: 0 }}>{musicError}</p>}
-              {musicNotice && <p role="status" style={{ margin: 0 }}>{musicNotice}</p>}
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button type="button" className="btn" disabled={musicBusy || musicTesting} onClick={() => void testConnection()}>{musicTesting ? '测试中…' : '测试连接'}</button>
-                <button className="btn primary" disabled={musicBusy || musicTesting}>{musicBusy ? '处理中…' : '保存配乐接口'}</button>
-                <button type="button" className="btn danger" disabled={musicBusy || musicTesting || !musicStatus?.account} onClick={() => void clearMusic()}>清除账号配置</button>
-              </div>
-            </form>
-          </>
-        )}
-      </section>
       <section className="panel" style={{ marginTop: 20, textAlign: 'left', display: 'grid', gap: 12 }}>
         <h2>AI 编曲模型（OpenAI 兼容）</h2>
         <p className="panel-note" style={{ margin: 0 }}>

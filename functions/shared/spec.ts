@@ -15,7 +15,6 @@ export type GenerationMode = 'template' | 'model' | 'agent';
 
 export const MUSIC_NAMES = {
   'neon-arcade': '霓虹街机',
-  'ai-generated': 'AI 配乐（音乐模型）',
   'ai-arranged': 'AI 编曲（实时合成）',
   none: '无配乐',
 } as const;
@@ -529,18 +528,18 @@ export function defaultSpec(template: TemplateId = 'breakout', theme: ThemeId = 
   };
 }
 
+// 外部 AI 配乐已移除：旧版本规格里的 ai-generated 统一迁移为浏览器内置的霓虹街机配乐。
+function normalizeMusicPreset(value: unknown): MusicPreset | undefined {
+  if (value === 'ai-generated') return 'neon-arcade';
+  return value === 'neon-arcade' || value === 'ai-arranged' || value === 'none' ? value : undefined;
+}
+
 // 对任意输入（结构化选择、模型返回等）做白名单校验与钳制，绝不信任外部数据
 export function sanitizeSpec(input: unknown, fallback?: GameSpec): GameSpec {
   const base = fallback ?? defaultSpec();
   if (typeof input !== 'object' || input === null) return base;
   const raw = input as Record<string, unknown>;
-  const music =
-    raw.music === 'neon-arcade' ||
-    raw.music === 'ai-generated' ||
-    raw.music === 'ai-arranged' ||
-    raw.music === 'none'
-      ? raw.music
-      : base.music;
+  const music = normalizeMusicPreset(raw.music) ?? normalizeMusicPreset(base.music);
   const musicPrompt = 'musicPrompt' in raw ? sanitizeMusicPrompt(raw.musicPrompt) : base.musicPrompt;
   const styleInput = 'musicStyle' in raw ? raw.musicStyle : base.musicStyle;
   const musicStyle = styleInput === undefined || styleInput === null

@@ -98,7 +98,7 @@ test('账号保存编曲模型后，可选用 AI 编曲并生成带模型参数�
       const button = [...document.querySelectorAll('button')].find((item) => item.textContent === 'AI 编曲（实时合成）');
       return Boolean(button && !button.disabled);
     }, undefined, { timeout: 15000 });
-    assert.equal(await page.getByRole('button', { name: 'AI 配乐（音乐模型）' }).isEnabled(), false);
+    assert.equal(await page.getByRole('button', { name: 'AI 配乐（音乐模型）' }).count(), 0);
     await arrangedButton.click();
     await page.getByText('先用提示词生成编曲试听').waitFor({ timeout: 15000 });
     await page.getByLabel('配乐提示词（可选）').fill('更慢、更悬疑，少一点鼓点');
@@ -124,7 +124,7 @@ test('账号保存编曲模型后，可选用 AI 编曲并生成带模型参数�
     assert.equal(version?.spec.musicStyle?.instrument, 'piano');
     assert.equal(version?.spec.musicStyle?.pad, 'warm');
     assert.equal(version?.spec.musicStyle?.seed, 77);
-    assert.ok(version?.html.includes('createArcadeAudio(null, '));
+    assert.ok(version?.html.includes('createArcadeAudio('));
     assert.ok(version?.html.includes('"bpm":138'));
     assert.ok(version?.html.includes('"progression":"dorian"'));
     assert.ok(version?.html.includes('"instrument":"piano"'));

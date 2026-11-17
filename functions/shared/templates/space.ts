@@ -388,12 +388,11 @@ function script(): string {
 `;
 }
 
-export function renderSpaceShooter(spec: GameSpec, musicTrack?: string): string {
+export function renderSpaceShooter(spec: GameSpec): string {
   const palette = getTheme(spec.theme).palette;
   return gameShell({
     spec,
     gameScript: script(),
-    musicTrack,
     config: {
       title: spec.title,
       palette,

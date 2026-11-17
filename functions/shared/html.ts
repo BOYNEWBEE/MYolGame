@@ -23,16 +23,14 @@ export interface GameShellInput {
   gameScript: string; // 模板内部固定代码，不包含用户输入
   config: Record<string, unknown>; // 由规格派生的配置，经 safeJson 注入
   soundEffects?: boolean;
-  musicTrack?: string; // 音乐 API 返回的 data URI；存在时优先于内置合成配乐
 }
 
 // 输出可独立托管的单文件 HTML：无外部依赖、无网络请求、纯 Canvas 渲染
-export function gameShell({ spec, gameScript, config, soundEffects = false, musicTrack }: GameShellInput): string {
+export function gameShell({ spec, gameScript, config, soundEffects = false }: GameShellInput): string {
   const palette = getTheme(spec.theme).palette;
   const title = escapeHtml(spec.title);
-  const hasTrack = Boolean(musicTrack);
   const preset = getMusicPreset(spec);
-  const hasMusic = hasTrack || preset === 'neon-arcade' || preset === 'ai-arranged';
+  const hasMusic = preset === 'neon-arcade' || preset === 'ai-arranged';
   const hasSound = hasMusic || soundEffects;
   return `<!doctype html>
 <html lang="zh-CN">
@@ -90,12 +88,11 @@ export function gameShell({ spec, gameScript, config, soundEffects = false, musi
   ${hasSound ? soundControls(hasMusic, soundEffects) : '<span class="badge">模板生成 · MYolGame</span>'}
 </div>
 <div class="frame"><canvas id="game" width="800" height="600"${hasSound ? ' tabindex="0" aria-label="游戏画布"' : ''}></canvas></div>
-${hasTrack ? `<audio id="music-track" src="${escapeHtml(musicTrack!)}" loop preload="auto" hidden></audio>` : ''}
 <div class="touch" id="touch"></div>
 <script>const CFG = ${safeJson(config)};</script>
 <script>
 ${hasSound ? ARCADE_AUDIO_SCRIPT : ''}
-const GAME_AUDIO = ${hasSound ? (hasTrack ? `createArcadeAudio('music-track')` : `createArcadeAudio(null, ${safeJson(spec.musicStyle ?? null)})`) : 'null'};
+const GAME_AUDIO = ${hasSound ? `createArcadeAudio(${safeJson(spec.musicStyle ?? null)})` : 'null'};
 ${gameScript}
 </script>
 </body>

@@ -22,7 +22,6 @@ import {
   type ThemeId,
 } from './shared/spec.ts';
 import { modelConfigured, type ModelEnv } from './shared/model.ts';
-import { generateMusicTrack, musicConfigured, parseMusicSettingsInput, probeMusicGateway, type MusicEnv } from './shared/music.ts';
 import { generateMusicStyle, musicStyleConfigured, parseMusicStyleSettingsInput, probeMusicStyle, type MusicStyleEnv } from './shared/music-style.ts';
 import type {
   Game,
@@ -37,7 +36,6 @@ import type {
 
 export interface HandlerEnv {
   model: ModelEnv;
-  music?: MusicEnv;
   musicStyle?: MusicStyleEnv;
 }
 
@@ -156,26 +154,6 @@ async function authenticate(deps: HandlerDeps, req: Request, required: boolean):
   return session;
 }
 
-// 账号保存的网关优先于服务端环境变量：显式配置失败时回退为无配乐，而不是悄悄换用运营方密钥。
-async function musicForSession(deps: HandlerDeps, session: Session): Promise<MusicEnv | undefined> {
-  const settings = await deps.store.getMusicSettings(session.token);
-  if (settings) return { apiUrl: settings.apiUrl, apiKey: settings.apiKey, name: settings.name ?? undefined };
-  return deps.env.music;
-}
-
-async function musicSettingsView(deps: HandlerDeps, session: Session): Promise<Record<string, unknown>> {
-  const settings = await deps.store.getMusicSettings(session.token);
-  const account = settings && settings.apiKey
-    ? { apiUrl: settings.apiUrl, name: settings.name, hasKey: true }
-    : null;
-  const server = musicConfigured(deps.env.music);
-  return {
-    account,
-    server: server ? { name: deps.env.music?.name ?? null } : null,
-    effective: account ? 'account' : server ? 'server' : 'none',
-  };
-}
-
 // 账号保存的编曲模型优先于服务端环境变量；显式配置失败时回退默认合成配乐。
 async function musicStyleForSession(deps: HandlerDeps, session: Session): Promise<MusicStyleEnv | undefined> {
   const settings = await deps.store.getMusicStyleSettings(session.token);
@@ -261,7 +239,6 @@ async function runGenerationTask(
   project: Project,
   prompt: string,
   specOverride: unknown,
-  music?: MusicEnv,
   styleModel?: MusicStyleEnv,
   usePreviewedStyle = false,
 ): Promise<{ task: TaskRecord; version: Version; notes: string[] }> {
@@ -293,7 +270,7 @@ async function runGenerationTask(
     createdAt: now,
   });
 
-  const result = await generateGame({ prompt, baseSpec, env: deps.env.model, music, styleModel, usePreviewedStyle });
+  const result = await generateGame({ prompt, baseSpec, env: deps.env.model, styleModel, usePreviewedStyle });
   task.stages = result.stages;
   task.generationMode = result.mode;
   task.finishedAt = new Date().toISOString();
@@ -386,10 +363,6 @@ function buildRoutes(): Route[] {
             configured: modelConfigured(deps.env.model),
             name: deps.env.model.name ?? null,
           },
-          music: {
-            configured: musicConfigured(deps.env.music),
-            name: deps.env.music?.name ?? null,
-          },
           identityNotice:
             '初版使用匿名会话与创作者令牌（保存在浏览器本地），不是完整账号系统：换浏览器或清除数据后无法找回项目。',
           templates: TEMPLATES,
@@ -399,68 +372,6 @@ function buildRoutes(): Route[] {
           themeIds: THEME_IDS,
           limits: { promptMaxLength: MAX_PROMPT, descriptionMaxLength: MAX_DESCRIPTION },
         }),
-    },
-    {
-      method: 'GET',
-      pattern: /^\/api\/music\/settings$/,
-      handle: async ({ deps, req }) => {
-        const session = await authenticate(deps, req, true);
-        return json(await musicSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
-      },
-    },
-    {
-      method: 'PUT',
-      pattern: /^\/api\/music\/settings$/,
-      handle: async ({ deps, req }) => {
-        const session = await authenticate(deps, req, true);
-        const body = await readBody(req);
-        const previous = await deps.store.getMusicSettings(session!.token);
-        const parsed = parseMusicSettingsInput(body, previous?.apiKey);
-        if (!parsed.ok) return fail(400, 'invalid_music_settings', parsed.error);
-        await deps.store.saveMusicSettings({
-          ownerToken: session!.token,
-          apiUrl: parsed.apiUrl,
-          apiKey: parsed.apiKey,
-          name: parsed.name,
-          updatedAt: new Date().toISOString(),
-        });
-        return json(await musicSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
-      },
-    },
-    {
-      method: 'DELETE',
-      pattern: /^\/api\/music\/settings$/,
-      handle: async ({ deps, req }) => {
-        const session = await authenticate(deps, req, true);
-        await deps.store.deleteMusicSettings(session!.token);
-        return json(await musicSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
-      },
-    },
-    {
-      method: 'POST',
-      pattern: /^\/api\/music\/settings\/test$/,
-      handle: async ({ deps, req }) => {
-        const session = await authenticate(deps, req, true);
-        const body = await readBody(req);
-        const previous = await deps.store.getMusicSettings(session!.token);
-        const parsed = parseMusicSettingsInput({
-          apiUrl: body.apiUrl ?? previous?.apiUrl,
-          apiKey: body.apiKey,
-          name: body.name ?? previous?.name ?? undefined,
-        }, previous?.apiKey);
-        if (!parsed.ok) return fail(400, 'invalid_music_settings', parsed.error);
-
-        const started = Date.now();
-        const result = await probeMusicGateway({
-          apiUrl: parsed.apiUrl,
-          apiKey: parsed.apiKey,
-          name: parsed.name ?? undefined,
-        });
-        const elapsedMs = Date.now() - started;
-        const headers = { 'cache-control': 'no-store' };
-        if (!result.ok) return json({ ok: false, error: result.error, elapsedMs }, 200, headers);
-        return json({ ok: true, mimeType: result.mimeType, bytes: result.bytes, elapsedMs }, 200, headers);
-      },
     },
     {
       method: 'GET',
@@ -540,25 +451,6 @@ function buildRoutes(): Route[] {
           model: styled.model,
           style: styled.style,
         }, 200, { 'cache-control': 'no-store' });
-      },
-    },
-    {
-      method: 'POST',
-      pattern: /^\/api\/music\/preview$/,
-      handle: async ({ deps, req }) => {
-        const session = await authenticate(deps, req, true);
-        const body = await readBody(req);
-        const spec = sanitizeSpec(body.spec);
-        const env = await musicForSession(deps, session!);
-        if (!musicConfigured(env)) {
-          return json({ ok: false, error: 'music_not_configured' }, 200, { 'cache-control': 'no-store' });
-        }
-        // 与生成时使用同一份规格与缓存键，生成游戏时可直接复用这次试听结果。
-        const result = await generateMusicTrack(env, spec);
-        if (!result.ok) {
-          return json({ ok: false, error: result.error }, 200, { 'cache-control': 'no-store' });
-        }
-        return json({ ok: true, track: result.track }, 200, { 'cache-control': 'no-store' });
       },
     },
     {
@@ -754,7 +646,6 @@ function buildRoutes(): Route[] {
             project,
             prompt,
             body.spec,
-            await musicForSession(deps, session!),
             await musicStyleForSession(deps, session!),
             body.musicStylePreviewed === true,
           );
@@ -814,7 +705,7 @@ function buildRoutes(): Route[] {
           const task = await deps.agent.submit(project, prompt, sanitizeSpec(body.spec, project.spec));
           return json({ project: projectSummary(project), task }, 202);
         }
-        const { task, version } = await runGenerationTask(deps, project, prompt, body.spec, await musicForSession(deps, session!), await musicStyleForSession(deps, session!));
+        const { task, version } = await runGenerationTask(deps, project, prompt, body.spec, await musicStyleForSession(deps, session!));
         return json(
           { project: projectSummary(project), version: versionSummary(version), task },
           201,

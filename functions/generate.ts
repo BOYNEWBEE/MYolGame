@@ -2,7 +2,6 @@
 // 每一步记录真实阶段日志；未配置模型时全程为模板模式，并如实标记。
 
 import { modelAdjustSpec, modelConfigured, type ModelEnv } from './shared/model.ts';
-import { generateMusicTrack, musicConfigured, type MusicEnv } from './shared/music.ts';
 import { generateMusicStyle, musicStyleConfigured, type MusicStyleEnv } from './shared/music-style.ts';
 import { parsePrompt, type ParseMatched } from './shared/prompt.ts';
 import { renderGame } from './shared/templates/index.ts';
@@ -23,7 +22,6 @@ export interface GenerateInput {
   prompt: string;
   baseSpec?: GameSpec;
   env: ModelEnv;
-  music?: MusicEnv;
   styleModel?: MusicStyleEnv;
   // 创作页已用提示词生成并试听过编曲参数时，直接复用，不再重复请求模型。
   usePreviewedStyle?: boolean;
@@ -133,38 +131,10 @@ export async function generateGame(input: GenerateInput): Promise<GenerateOutput
     }
   }
 
-  // 阶段四：按需调用服务端音乐生成 API；失败或未配置时回退为无配乐，不伪造结果。
-  let musicTrack: string | undefined;
-  if (spec.music === 'ai-generated') {
-    if (!musicConfigured(input.music)) {
-      spec = { ...spec, music: 'none' };
-      notes.push('音乐生成 API 未配置，已生成无配乐版本。');
-      markStage('生成 AI 配乐', false, 'music_not_configured');
-    } else {
-      const music = await generateMusicTrack(input.music, spec);
-      if (music.ok) {
-        musicTrack = music.track.dataUri;
-        notes.push('背景音乐由服务端音乐生成 API 生成，并内嵌到单文件 HTML。');
-        markStage('生成 AI 配乐', true, music.track.bytes + ' bytes');
-      } else {
-        spec = { ...spec, music: 'none' };
-        notes.push('AI 配乐生成失败，已回退为无配乐版本。');
-        markStage('生成 AI 配乐', false, music.error);
-      }
-    }
-  }
-
-  // 阶段五：渲染内置模板
+  // 阶段四：渲染内置模板
   let html = '';
   try {
-    html = renderGame(spec, musicTrack);
-    if (musicTrack && new TextEncoder().encode(html).length > MAX_HTML_BYTES) {
-      spec = { ...spec, music: 'none' };
-      musicTrack = undefined;
-      html = renderGame(spec);
-      notes.push('AI 配乐体积超出单文件上限，已回退为无配乐版本。');
-      markStage('内嵌 AI 配乐', false, 'artifact_too_large');
-    }
+    html = renderGame(spec);
     markStage('渲染游戏模板', true, spec.template);
   } catch (error) {
     markStage('渲染游戏模板', false, 'render_failed');

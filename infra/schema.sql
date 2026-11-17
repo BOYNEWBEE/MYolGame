@@ -10,15 +10,6 @@ CREATE TABLE app.myol_sessions (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
--- 账号级音乐生成网关；密钥仅服务端读取，接口不回传浏览器。
-CREATE TABLE app.myol_music_settings (
-  owner_token text PRIMARY KEY,
-  api_url text NOT NULL,
-  api_key text NOT NULL,
-  name text,
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-
 -- 账号级 OpenAI 兼容编曲模型；密钥仅服务端读取，接口不回传浏览器。
 CREATE TABLE app.myol_music_style_settings (
   owner_token text PRIMARY KEY,

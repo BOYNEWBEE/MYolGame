@@ -22,11 +22,6 @@ const handle = createM0Application({
     store: { ...store, getSession: async token => principal?.token === token ? principal : null },
     env: {
         model: {},
-        music: {
-          apiUrl: Deno.env.get('APP_MUSIC_API_URL') || undefined,
-          apiKey: Deno.env.get('APP_MUSIC_API_KEY') || undefined,
-          name: Deno.env.get('APP_MUSIC_NAME') || undefined,
-        },
         musicStyle: {
           apiUrl: Deno.env.get('APP_MUSIC_STYLE_API_URL') || undefined,
           apiKey: Deno.env.get('APP_MUSIC_STYLE_API_KEY') || undefined,
