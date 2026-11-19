@@ -102,13 +102,22 @@ Authorization: Bearer <MYOLGAME_AGENT_API_KEY>
   "max_tokens": 8192,
   "stream": false,
   "messages": [
-    {"role": "system", "content": "只输出完整、自包含、可离线的游戏 HTML..."},
+    {"role": "system", "content": "只输出 JSON 修改指令，不要输出完整 HTML..."},
     {"role": "user", "content": "用户需求 + 当前完整源码 + 输出约束 + 上次检查反馈"}
   ]
 }
 ```
 
-服务端只读取 `choices[0].message.content`（字符串或 `{type:"text"}` 分段数组），再从纯文本或 Markdown 代码块中提取 `<!doctype html>` 到 `</html>` 的完整文档。`finish_reason=length` 视为截断并失败。地址可填基址、`/v1` 基址或完整 `/chat/completions` 地址；无路径基址仅在首个地址返回 404 时补试 `/v1/chat/completions`，其他错误不重试。请求不跟随重定向，避免把密钥带到未配置目标。
+模型只返回修改片段，不重写整份游戏，避免完整源码超出输出 token 上限：
+
+```json
+{"edits":[
+  {"find":"源码中逐字复制且全文中唯一的原文","replace":"替换后的代码"},
+  {"find":"另一处唯一锚点","replace":""}
+]}
+```
+
+服务端只读取 `choices[0].message.content`（字符串或 `{type:"text"}` 分段数组），从纯文本或 Markdown 代码块中解析 `{"edits":[...]}`。修改按数组顺序应用：每条 `find` 必须与当前源码完全一致且只出现一次，`replace` 可为空字符串表示删除；任一条失败会把具体原因作为反馈进入下一次修复请求。应用后的结果必须仍是完整 `<!doctype html>`…`</html>` 文档且不超过 512 KiB。若模型仍返回完整 HTML，提取成功时也兼容接受。`finish_reason=length` 仍视为截断并失败。地址可填基址、`/v1` 基址或完整 `/chat/completions` 地址；无路径基址仅在首个地址返回 404 时补试 `/v1/chat/completions`，其他错误不重试。请求不跟随重定向，避免把密钥带到未配置目标。
 
 首次请求的源码基底是用户选择的模板源码；后续请求使用当前有效版本的完整 HTML；回退后基于回退版本继续。模型输出只作为 HTML 数据保存和检查，不在宿主机执行。
 
@@ -136,12 +145,13 @@ Authorization: Bearer <MYOLGAME_AGENT_API_KEY>
 | `model_unreachable` | 网络不可达 |
 | `model_not_configured` | 地址、密钥或模型名缺失 |
 | `invalid_html` | 模型没有返回完整 HTML 文档 |
+| `invalid_edit` | 修改片段 JSON 无效、锚点缺失/重复或结果不再完整 |
 | `check_failed` | 浏览器检查连续未通过 |
 | `browser_unavailable` | 无法启动或创建浏览器上下文 |
 | `version_conflict` | 执行期间项目版本发生变化 |
 | `interrupted` / `worker_failed` / `cancelled` | 重启中断、Worker 异常、用户取消 |
 
-只有 `invalid_html` 与浏览器检查失败会携带候选源码和错误信息进入下一次修复；模型请求本身失败直接结束任务并保留原版本，不会自动重放结果未知的生成请求。密钥只进入发往模型的 `Authorization` 头，不写入任务、错误、版本、导出源码或前端。
+只有 `invalid_html`、`invalid_edit` 与浏览器检查失败会带着当前源码和错误信息进入下一次修复；模型请求本身失败直接结束任务并保留原版本，不会自动重放结果未知的生成请求。密钥只进入发往模型的 `Authorization` 头，不写入任务、错误、版本、导出源码或前端。
 
 ### 可选配置
 

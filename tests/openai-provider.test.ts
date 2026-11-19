@@ -27,6 +27,16 @@ window.__MYOLGAME_TEST__={getState:()=>({moves}),reset};draw();</script></body><
 
 const strictHtml = gameHtml;
 
+// 模板未提供烟测接口；用修改片段追加一个独立按键计数钩子，供检查流程使用。
+const hookEdit = {
+  find: '  requestAnimationFrame(frame);\n})();',
+  replace: '  requestAnimationFrame(frame);\n})();\n' + `window.__MYOLGAME_TEST__ = (function () {
+  var presses = 0;
+  window.addEventListener('keydown', function () { presses += 1; });
+  return { getState: function () { return { presses: presses }; }, reset: function () { presses = 0; } };
+})();`,
+};
+
 interface Captured {
   url: string;
   authorization: string;
@@ -276,6 +286,90 @@ test('首次用模板源码、后续用上一有效版本、回退后用回退�
     }
     assert.match(html, /回退后作品/);
   } finally { await f.cleanup(); }
+});
+
+test('模型只返回修改片段：按唯一锚点应用，二次修改与回退使用对应源码', async () => {
+  const f = await fixture({
+    handler: (_call, captured, res) => {
+      const content = captured.body.messages?.find((message) => message.role === 'user')?.content ?? '';
+      const current = /<title>([^<]*)<\/title>/.exec(content)?.[1] ?? '';
+      const target = content.includes('修改标题为第二版')
+        ? '编辑模式二'
+        : content.includes('在回退版本上继续修改') ? '回退后编辑' : '编辑模式一';
+      const edits = [{ find: '<title>' + current + '</title>', replace: '<title>' + target + '</title>' }];
+      if (!content.slice(content.indexOf('<source>')).includes('__MYOLGAME_TEST__')) edits.push(hookEdit);
+      reply(res, JSON.stringify({ edits }));
+    },
+  });
+  try {
+    const { project, task } = await f.create();
+    const first = await f.waitTask(project.id, task.id);
+    assert.equal(first.status, 'succeeded', first.error || '');
+    const v1 = await f.store.getVersion(first.versionId!);
+    assert.match(v1!.html, /<title>编辑模式一<\/title>/);
+    assert.match(f.userPrompts()[0]!, /只输出一个 JSON 修改指令对象/);
+    assert.match(f.userPrompts()[0]!, /const CFG =/, '修改片段请求仍需携带当前完整源码');
+
+    const second = await f.submit(project.id, '修改标题为第二版');
+    assert.equal(second.status, 202);
+    const done2 = await f.waitTask(project.id, second.json.task!.id);
+    assert.equal(done2.status, 'succeeded', done2.error || '');
+    const secondPrompt = f.userPrompts().find((prompt) => prompt.includes('修改标题为第二版')) ?? '';
+    assert.match(secondPrompt, /<title>编辑模式一<\/title>/, '二次请求必须在上一候选源码上修改');
+    assert.match((await f.store.getVersion(done2.versionId!))!.html, /<title>编辑模式二<\/title>/);
+
+    assert.equal((await f.request('/projects/' + project.id + '/restore', 'POST', { versionId: v1!.id })).status, 200);
+    const third = await f.submit(project.id, '在回退版本上继续修改');
+    assert.equal(third.status, 202);
+    const done3 = await f.waitTask(project.id, third.json.task!.id);
+    assert.equal(done3.status, 'succeeded', done3.error || '');
+    const thirdPrompt = f.userPrompts().find((prompt) => prompt.includes('在回退版本上继续修改')) ?? '';
+    assert.match(thirdPrompt, /<title>编辑模式一<\/title>/);
+    assert.doesNotMatch(thirdPrompt, /编辑模式二/);
+    assert.match((await f.store.getVersion(done3.versionId!))!.html, /<title>回退后编辑<\/title>/);
+  } finally { await f.cleanup(); }
+});
+
+test('修改片段锚点无效时带反馈重试，连续失败不保存版本', async () => {
+  const repaired = await fixture({
+    handler: (call, _captured, res) => {
+      if (call === 1) {
+        reply(res, JSON.stringify({ edits: [{ find: '不存在的锚点-xyz', replace: 'x' }] }));
+        return;
+      }
+      reply(res, JSON.stringify({
+        edits: [
+          { find: '<title>霓虹打砖块 · MYolGame</title>', replace: '<title>修复后作品</title>' },
+          hookEdit,
+        ],
+      }));
+    },
+    maxAttempts: 2,
+  });
+  try {
+    const { project, task } = await repaired.create();
+    const done = await repaired.waitTask(project.id, task.id);
+    assert.equal(done.status, 'succeeded', done.error || '');
+    assert.equal(repaired.fake.captures.length, 2);
+    assert.match(repaired.userPrompts()[1]!, /未在源码中找到/);
+    assert.ok(done.stages.some((stage) => stage.name.includes('修复')));
+    assert.match((await repaired.store.getVersion(done.versionId!))!.html, /修复后作品/);
+  } finally { await repaired.cleanup(); }
+
+  const broken = await fixture({
+    handler: (_call, _captured, res) => {
+      reply(res, JSON.stringify({ edits: [{ find: '始终不存在', replace: 'x' }] }));
+    },
+    maxAttempts: 2,
+  });
+  try {
+    const { project, task } = await broken.create();
+    const done = await broken.waitTask(project.id, task.id);
+    assert.equal(done.status, 'failed');
+    assert.equal(done.errorCode, 'invalid_edit');
+    assert.equal((await broken.store.listVersions(project.id)).length, 0);
+    assert.equal((await broken.store.getProject(project.id))?.currentVersionId, '');
+  } finally { await broken.cleanup(); }
 });
 
 test('浏览器检查失败时带候选源码与错误反馈修复，超过次数保留原版本', async () => {

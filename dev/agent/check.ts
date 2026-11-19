@@ -55,14 +55,19 @@ export async function checkGame(html: string, chromePath: string, screenshotPath
       return JSON.stringify(hook.getState());
     });
     await state();
-    const canvas = await page.locator('canvas').first().evaluate((element) => {
-      const canvas = element as HTMLCanvasElement;
-      const pixels = canvas.getContext('2d')?.getImageData(0, 0, canvas.width, canvas.height).data;
-      if (!pixels || canvas.width < 100 || canvas.height < 100) return false;
-      const colors = new Set<number>();
-      for (let i = 0; i < pixels.length; i += 16) colors.add((pixels[i] << 16) | (pixels[i + 1] << 8) | pixels[i + 2]);
-      return colors.size > 2;
-    });
+    // 首帧可能由 requestAnimationFrame 异步绘制；短暂轮询，避免把慢一帧误判为空画布。
+    let canvas = false;
+    for (let attempt = 0; attempt < 20 && !canvas; attempt++) {
+      canvas = await page.locator('canvas').first().evaluate((element) => {
+        const canvas = element as HTMLCanvasElement;
+        const pixels = canvas.getContext('2d')?.getImageData(0, 0, canvas.width, canvas.height).data;
+        if (!pixels || canvas.width < 100 || canvas.height < 100) return false;
+        const colors = new Set<number>();
+        for (let i = 0; i < pixels.length; i += 16) colors.add((pixels[i] << 16) | (pixels[i + 1] << 8) | pixels[i + 2]);
+        return colors.size > 2;
+      });
+      if (!canvas) await page.waitForTimeout(50);
+    }
     if (!canvas) throw new Error('画布为空或未绘制有效画面');
     const before = await state();
     await page.keyboard.press('Space');

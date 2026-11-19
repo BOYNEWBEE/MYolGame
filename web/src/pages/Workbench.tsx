@@ -34,6 +34,7 @@ const errorCodeLabels: Record<string, string> = {
   model_not_configured: '模型未配置完整',
   browser_unavailable: '浏览器检查不可用',
   invalid_html: '模型未返回完整 HTML',
+  invalid_edit: '模型修改片段无法应用',
   check_failed: '浏览器检查未通过',
   version_conflict: '版本冲突',
   timeout: '任务超时',
