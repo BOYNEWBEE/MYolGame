@@ -119,7 +119,16 @@ Authorization: Bearer <MYOLGAME_AGENT_API_KEY>
 
 服务端只读取 `choices[0].message.content`（字符串或 `{type:"text"}` 分段数组），从纯文本或 Markdown 代码块中解析 `{"edits":[...]}`。修改按数组顺序应用：每条 `find` 必须与当前源码完全一致且只出现一次，`replace` 可为空字符串表示删除；任一条失败会把具体原因作为反馈进入下一次修复请求。应用后的结果必须仍是完整 `<!doctype html>`…`</html>` 文档且不超过 512 KiB。若模型仍返回完整 HTML，提取成功时也兼容接受。`finish_reason=length` 仍视为截断并失败。地址可填基址、`/v1` 基址或完整 `/chat/completions` 地址；无路径基址仅在首个地址返回 404 时补试 `/v1/chat/completions`，其他错误不重试。请求不跟随重定向，避免把密钥带到未配置目标。
 
-首次请求的源码基底是用户选择的模板源码；后续请求使用当前有效版本的完整 HTML；回退后基于回退版本继续。模型输出只作为 HTML 数据保存和检查，不在宿主机执行。
+#### 从零创作
+
+创作页可选择「从零生成」，此时 `POST /api/projects` 携带 `fromScratch: true`，项目记录该标记；未启用 Agent 时接口直接返回 `agent_required`，这类项目也不能回退为模板重渲染。
+
+- 首次任务没有版本基底，Controller 传入空白骨架（只说明 Canvas、响应式布局与 `window.__MYOLGAME_TEST__` 接口，检查接口故意抛错以防原样复制）。
+- Worker 改用整页输出契约与独立的 `OPENAI_SCRATCH_SYSTEM_PROMPT`，要求模型按提示词编写完整原创游戏；`fromScratch` 为空时仍用模板源码或当前版本。
+- 首次输出若 `finish_reason=length`，属于已知且未保存的失败，会在修复次数内携带“精简代码”反馈重新生成；拿到候选后若检查失败，后续修复回到修改片段模式。
+- 成功保存版本后，后续任务与普通项目一致：基于当前有效版本的完整 HTML 做片段修改。
+
+首次请求的源码基底是用户选择的模板源码（从零项目为空白骨架）；后续请求使用当前有效版本的完整 HTML；回退后基于回退版本继续。模型输出只作为 HTML 数据保存和检查，不在宿主机执行。
 
 #### 账号级模型配置
 
@@ -139,7 +148,7 @@ Authorization: Bearer <MYOLGAME_AGENT_API_KEY>
 | `model_auth_failed` | 401/403，密钥或权限不足 |
 | `model_rate_limited` | 429 |
 | `model_empty_output` | 模型返回空内容 |
-| `model_truncated` | `finish_reason=length` |
+| `model_truncated` | `finish_reason=length`；从零首次会在修复次数内精简重试 |
 | `model_invalid_response` | 非 JSON、缺少 choices 或无法解析文本 |
 | `model_too_large` | 响应超过 `MYOLGAME_AGENT_MAX_RESPONSE_BYTES` |
 | `model_unreachable` | 网络不可达 |
@@ -151,7 +160,7 @@ Authorization: Bearer <MYOLGAME_AGENT_API_KEY>
 | `version_conflict` | 执行期间项目版本发生变化 |
 | `interrupted` / `worker_failed` / `cancelled` | 重启中断、Worker 异常、用户取消 |
 
-只有 `invalid_html`、`invalid_edit` 与浏览器检查失败会带着当前源码和错误信息进入下一次修复；模型请求本身失败直接结束任务并保留原版本，不会自动重放结果未知的生成请求。密钥只进入发往模型的 `Authorization` 头，不写入任务、错误、版本、导出源码或前端。
+只有 `invalid_html`、`invalid_edit`、浏览器检查失败，以及从零首次的 `model_truncated` 会进入下一次修复；其他模型请求失败直接结束任务并保留原版本，不会自动重放结果未知的生成请求。密钥只进入发往模型的 `Authorization` 头，不写入任务、错误、版本、导出源码或前端。
 
 ### 可选配置
 

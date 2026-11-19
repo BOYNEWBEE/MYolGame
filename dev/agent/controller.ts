@@ -9,6 +9,7 @@ import type { GameSpec } from '../../functions/shared/spec.ts';
 import { sanitizeTitle } from '../../functions/shared/spec.ts';
 import { retainAttributions } from '../../functions/shared/creation-template.ts';
 import { renderGame } from '../../functions/shared/templates/index.ts';
+import { SCRATCH_BASE } from './scratch.ts';
 import type { GameModelSettings, Project, Store, TaskRecord, Version } from '../../functions/store.ts';
 import type { FileStore } from '../store_file.ts';
 import type { AgentConfig, WorkerInput, WorkerMessage } from './protocol.ts';
@@ -122,7 +123,10 @@ export class LocalAgent implements AgentService {
         this.currentAgentName = config.name;
         const input: WorkerInput = {
           prompt: task.prompt, spec: task.baseSpec || project.spec,
-          html: base?.html || renderGame(task.baseSpec || project.spec),
+          html: base?.html || (project.fromScratch
+            ? SCRATCH_BASE
+            : renderGame(task.baseSpec || project.spec)),
+          fromScratch: Boolean(project.fromScratch && !base),
           directory: join(this.directory, task.id), config, templateOrigin: project.templateOrigin,
         };
         await this.execute(task, input);

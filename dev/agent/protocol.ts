@@ -24,6 +24,8 @@ export interface WorkerInput {
   spec: GameSpec;
   html: string;
   directory: string;
+  // 首次从空白骨架生成完整游戏；已有版本后仍走源码修改。
+  fromScratch?: boolean;
   templateOrigin?: TemplateOrigin;
   config: AgentConfig;
 }

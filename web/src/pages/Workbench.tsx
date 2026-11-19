@@ -273,6 +273,7 @@ export default function Workbench(): ReactNode {
               {sourceMode
                 ? 'AI 源码开发模式 · ' + agentName + agentModelHint
                 : '模板模式 · 只能调整受支持参数'}
+              {project.fromScratch && <span className="badge">从零生成</span>}
             </span>
           </div>
         </div>
@@ -305,8 +306,10 @@ export default function Workbench(): ReactNode {
         <strong>{sourceMode ? 'AI 源码开发模式' : '模板模式'}</strong>
         <span>
           {sourceMode
-            ? '提交需求后由 ' + agentName + (meta?.agent?.model ? '（' + meta.agent.model + '）' : meta?.agent?.accountModelConfig ? '（模型由账号管理配置）' : '') +
-              ' 修改当前有效版本的完整源码，先做隔离浏览器烟测，通过后才保存为新版本。'
+            ? project.fromScratch && versions.length === 0
+              ? '本项目从零生成：由 ' + agentName + ' 按需求编写完整源码，不使用内置模板；完成后先做隔离浏览器烟测，通过后才保存为新版本。'
+              : '提交需求后由 ' + agentName + (meta?.agent?.model ? '（' + meta.agent.model + '）' : meta?.agent?.accountModelConfig ? '（模型由账号管理配置）' : '') +
+                ' 修改当前有效版本的完整源码，先做隔离浏览器烟测，通过后才保存为新版本。'
             : isAgentVersion(currentVersion)
               ? '当前有效版本来自 AI 源码开发。模板模式不能安全地继续修改它：服务端会拒绝模板重渲染，避免覆盖已有玩法；请启用源码开发服务后再提交需求。'
               : '当前只能调整速度、难度、主题、玩法选项和配乐等受支持参数；新增关卡或敌人等源码级需求需要启用源码开发服务。'}

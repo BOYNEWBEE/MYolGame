@@ -216,8 +216,8 @@ async function fixture(options: FixtureOptions) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   token = ((await (await request('/session', 'POST', {})).json()) as { token: string }).token;
-  const create = async (prompt = '创建一个打砖块游戏') => {
-    const response = await request('/projects', 'POST', { prompt, spec: defaultSpec('breakout', 'neon') });
+  const create = async (prompt = '创建一个打砖块游戏', extra: Record<string, unknown> = {}) => {
+    const response = await request('/projects', 'POST', { prompt, spec: defaultSpec('breakout', 'neon'), ...extra });
     assert.equal(response.status, 202);
     return await response.json() as { project: { id: string; currentVersionId: string }; task: TaskRecord };
   };
@@ -328,6 +328,96 @@ test('模型只返回修改片段：按唯一锚点应用，二次修改与回�
     assert.doesNotMatch(thirdPrompt, /编辑模式二/);
     assert.match((await f.store.getVersion(done3.versionId!))!.html, /<title>回退后编辑<\/title>/);
   } finally { await f.cleanup(); }
+});
+
+test('从零生成首次整页输出，后续修改回到片段模式', async () => {
+  const f = await fixture({
+    handler: (_call, captured, res) => {
+      const system = captured.body.messages?.find((message) => message.role === 'system')?.content ?? '';
+      // 从零首次使用独立系统提示，要求整页 HTML；后续修复/修改回到片段模式。
+      if (system.includes('从零实现')) {
+        reply(res, strictHtml('从零作品'));
+        return;
+      }
+      const content = captured.body.messages?.find((message) => message.role === 'user')?.content ?? '';
+      const current = /<title>([^<]*)<\/title>/.exec(content)?.[1] ?? '';
+      reply(res, JSON.stringify({
+        edits: [{ find: '<title>' + current + '</title>', replace: '<title>从零第二版</title>' }],
+      }));
+    },
+  });
+  try {
+    const { project, task } = await f.create('用《星际塔防》做一个塔防游戏，空格开始，方向键移动', { fromScratch: true });
+    const detail = await (await f.request('/projects/' + project.id)).json() as { project: { fromScratch?: boolean } };
+    assert.equal(detail.project.fromScratch, true);
+
+    const first = await f.waitTask(project.id, task.id);
+    assert.equal(first.status, 'succeeded', first.error || '');
+    assert.match((await f.store.getVersion(first.versionId!))!.html, /从零作品/);
+    const scratchSystem = f.fake.captures[0]!.body.messages![0]!.content;
+    assert.match(scratchSystem, /从零实现/);
+    const scratchPrompt = f.userPrompts()[0]!;
+    assert.match(scratchPrompt, /只输出一个完整的 <!doctype html>/);
+    assert.match(scratchPrompt, /起始骨架/);
+    assert.doesNotMatch(scratchPrompt, /const CFG =/, '从零首次不应携带模板源码');
+
+    const second = await f.submit(project.id, '把标题改成第二版');
+    assert.equal(second.status, 202);
+    const done2 = await f.waitTask(project.id, second.json.task!.id);
+    assert.equal(done2.status, 'succeeded', done2.error || '');
+    const editPrompt = f.userPrompts().find((prompt) => prompt.includes('把标题改成第二版')) ?? '';
+    assert.match(editPrompt, /只输出一个 JSON 修改指令对象/);
+    assert.match(editPrompt, /从零作品/, '后续修改必须基于从零生成的候选源码');
+    assert.match((await f.store.getVersion(done2.versionId!))!.html, /<title>从零第二版<\/title>/);
+  } finally { await f.cleanup(); }
+});
+
+test('从零生成首次被截断时精简后重试，仍不保存半截源码', async () => {
+  const f = await fixture({
+    handler: (call, _captured, res) => {
+      if (call === 1) {
+        reply(res, strictHtml('半截作品'), 'length');
+        return;
+      }
+      reply(res, strictHtml('精简作品'));
+    },
+    maxAttempts: 2,
+  });
+  try {
+    const { project, task } = await f.create('用《星际塔防》做一个塔防游戏', { fromScratch: true });
+    const done = await f.waitTask(project.id, task.id);
+    assert.equal(done.status, 'succeeded', done.error || '');
+    assert.equal(f.fake.captures.length, 2);
+    assert.match(f.userPrompts()[1]!, /长度上限/);
+    assert.match(f.userPrompts()[1]!, /精简/);
+    assert.ok(done.stages.some((stage) => stage.name.includes('重新生成')));
+    const versions = await f.store.listVersions(project.id);
+    assert.equal(versions.length, 1);
+    assert.match(versions[0]!.html, /精简作品/);
+    assert.doesNotMatch(versions[0]!.html, /半截作品/);
+  } finally { await f.cleanup(); }
+});
+
+test('未启用源码开发时拒绝从零生成', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'myol-scratch-guard-'));
+  const store = new FileStore(join(dir, 'db.json'));
+  const app = await startLocalServer({ port: 0, store, seed: false, sandboxDir: join(dir, 'sandboxes') });
+  try {
+    const session = await fetch(app.url + '/api/session', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    const token = ((await session.json()) as { token: string }).token;
+    const response = await fetch(app.url + '/api/projects', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
+      body: JSON.stringify({ prompt: '从零做一个塔防', spec: defaultSpec('breakout', 'neon'), fromScratch: true }),
+    });
+    assert.equal(response.status, 409);
+    const body = await response.json() as { error?: { code: string } };
+    assert.equal(body.error?.code, 'agent_required');
+    assert.equal((await store.listProjects(token)).length, 0, '拒绝后不能创建项目');
+  } finally {
+    await app.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('修改片段锚点无效时带反馈重试，连续失败不保存版本', async () => {

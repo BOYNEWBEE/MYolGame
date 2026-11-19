@@ -41,6 +41,8 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   templateOrigin?: TemplateOrigin;
+  // 用户选择不基于模板，由模型从空白骨架生成完整源码。
+  fromScratch?: boolean;
 }
 
 export interface Version {

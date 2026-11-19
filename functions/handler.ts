@@ -256,6 +256,7 @@ function projectSummary(project: Project): Record<string, unknown> {
     gameId: project.gameId,
     allowDownload: project.allowDownload,
     templateOrigin: project.templateOrigin,
+    fromScratch: project.fromScratch === true,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
   };
@@ -281,6 +282,8 @@ async function runGenerationTask(
   usePreviewedStyle = false,
 ): Promise<{ task: TaskRecord; version: Version; notes: string[] }> {
   if (project.templateOrigin) throw httpError(409, 'agent_required', '此项目基于社区源码模板，修改需要启用 Agent 源码开发');
+  // 从零项目没有可重渲染的模板，回退到模板模式会丢失用户选择的创作方式。
+  if (project.fromScratch) throw httpError(409, 'agent_required', '此项目从零生成，继续修改需要启用 Agent 源码开发');
   // AI 版本的真实玩法以源码为准；模板重渲染会覆盖已有修改，必须由源码开发链路继续。
   const current = project.currentVersionId ? await deps.store.getVersion(project.currentVersionId) : null;
   if (current?.generationMode === 'agent') {
@@ -741,6 +744,11 @@ function buildRoutes(): Route[] {
         const session = await authenticate(deps, req, true);
         const body = await readBody(req);
         const prompt = requireString(body.prompt, '提示词', MAX_PROMPT);
+        const fromScratch = body.fromScratch === true;
+        // 从零生成完全依赖模型编写源码，模板模式无法替代。
+        if (fromScratch && !deps.agent) {
+          return fail(409, 'agent_required', '从零生成需要启用 AI 源码开发服务');
+        }
 
         const now = new Date().toISOString();
         const initialSpec = body.spec ? sanitizeSpec(body.spec) : defaultSpec();
@@ -755,13 +763,16 @@ function buildRoutes(): Route[] {
           allowDownload: true,
           createdAt: now,
           updatedAt: now,
+          fromScratch: fromScratch || undefined,
         };
         await deps.store.createProject(project);
         await deps.store.addMessage({
           id: crypto.randomUUID(),
           projectId: project.id,
           role: 'system',
-          content: '项目已创建（私有草稿）。' + (deps.agent ? 'Agent 将在后台开发并检查游戏。' : modelConfigured(deps.env.model) ? '' : '当前平台未配置真实模型，处于模板模式。'),
+          content: fromScratch
+            ? '项目已创建（私有草稿，从零生成）。Agent 将按需求编写完整源码并检查游戏。'
+            : '项目已创建（私有草稿）。' + (deps.agent ? 'Agent 将在后台开发并检查游戏。' : modelConfigured(deps.env.model) ? '' : '当前平台未配置真实模型，处于模板模式。'),
           taskId: null,
           createdAt: now,
         });

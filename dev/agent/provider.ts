@@ -103,8 +103,9 @@ export async function askAgent(
   prompt: string,
   config: AgentConfig,
   timeoutMs = config.requestTimeoutMs ?? config.timeoutMs,
+  systemPrompt?: string,
 ): Promise<string> {
-  if (config.provider === 'openai') return await askOpenAiModel(prompt, config, timeoutMs);
+  if (config.provider === 'openai') return await askOpenAiModel(prompt, config, timeoutMs, systemPrompt);
   if (config.provider === 'http') return await askHttpAgent(prompt, config, timeoutMs);
   return await askQoderCli(prompt, config, timeoutMs);
 }

@@ -62,6 +62,7 @@ export default function Create(): ReactNode {
   const session = useSession();
   const { meta } = useMeta();
   const [prompt, setPrompt] = useState('');
+  const [fromScratch, setFromScratch] = useState(false);
   const [template, setTemplate] = useState<TemplateId>('breakout');
   const [theme, setTheme] = useState<ThemeId>('neon');
   const [music, setMusic] = useState<MusicPreset>();
@@ -176,9 +177,14 @@ export default function Create(): ReactNode {
   }
 
   function applyTemplate(id: TemplateId): void {
+    setFromScratch(false);
     if (id === template) return;
     setTemplate(id);
     setOptions({});
+  }
+
+  function chooseScratch(): void {
+    setFromScratch(true);
   }
 
   function toggleOption(key: string): void {
@@ -196,6 +202,7 @@ export default function Create(): ReactNode {
     const body: Record<string, unknown> = {
       prompt: prompt.trim() || '使用当前配置生成',
       spec,
+      fromScratch: sourceMode && fromScratch,
     };
     // 明确告知服务端复用试听参数，避免生成时再次随机调用模型。
     if (usePreview) body.musicStylePreviewed = true;
@@ -227,7 +234,7 @@ export default function Create(): ReactNode {
         <span>
           {sourceMode
             ? '由 ' + agentName + agentModelHint +
-              ' 直接修改 HTML/JavaScript。首次以所选模板源码为基底，后续继续在上一有效版本上修改；完成后先做浏览器烟测，再保存为新版本。账号可登录后在「账号管理」配置自己的模型密钥。'
+              ' 直接编写或修改 HTML/JavaScript。可选择模板作为起点，也可从零按提示词生成完整游戏；后续继续在上一有效版本上修改，完成后先做浏览器烟测，再保存为新版本。账号可登录后在「账号管理」配置自己的模型密钥。'
             : '未启用源码开发服务：当前只能调整速度、难度、主题、玩法选项和配乐等受支持参数，不能新增第二关、追踪敌人的敌人等源码级玩法。需要这些能力时请由管理员配置游戏开发模型后重启服务。'}
         </span>
       </div>
@@ -274,14 +281,25 @@ export default function Create(): ReactNode {
           </div>
 
           <div className="field">
-            <span className="field-label">{meta?.generationMode === 'agent' ? '起始玩法（Agent 可修改源码）' : '玩法模板'}</span>
+            <span className="field-label">{sourceMode ? '起始方式' : '玩法模板'}</span>
             <div className="template-cards">
+              {sourceMode && (
+                <button
+                  type="button"
+                  className={'template-card' + (fromScratch ? ' active' : '')}
+                  aria-pressed={fromScratch}
+                  onClick={chooseScratch}
+                >
+                  <strong>从零生成</strong>
+                  <span>不使用模板，由模型按提示词编写完整游戏源码</span>
+                </button>
+              )}
               {TEMPLATES.map((t) => (
                 <button
                   key={t.id}
                   type="button"
-                  className={'template-card' + (template === t.id ? ' active' : '')}
-                  aria-pressed={template === t.id}
+                  className={'template-card' + (!fromScratch && template === t.id ? ' active' : '')}
+                  aria-pressed={!fromScratch && template === t.id}
                   onClick={() => applyTemplate(t.id)}
                 >
                   <strong>{t.name}</strong>
@@ -289,6 +307,12 @@ export default function Create(): ReactNode {
                 </button>
               ))}
             </div>
+            {fromScratch && (
+              <p className="panel-note" role="status">
+                已选择从零生成：模板卡片只影响标题、主题、速度与配乐等初始元信息，玩法完全由提示词决定。
+                可在提示词中用《标题》指定游戏名；首次由模型输出完整源码，之后仍按版本继续修改。
+              </p>
+            )}
           </div>
 
           <div className="field">
@@ -474,22 +498,26 @@ export default function Create(): ReactNode {
           <button
             type="button"
             className="btn primary large block"
-            disabled={submitting || previewBusy || !session.ready}
+            disabled={submitting || previewBusy || !session.ready || (fromScratch && !hasPrompt)}
             onClick={() => void submit()}
           >
-            {submitting ? '正在提交…' : '生成游戏并进入工作台'}
+            {submitting ? '正在提交…' : fromScratch ? '从零生成并进入工作台' : '生成游戏并进入工作台'}
           </button>
           <p className="panel-note">
-            生成在服务端完成并保存为独立版本；项目默认为私有草稿，发布与否由你决定。
+            {fromScratch && !hasPrompt
+              ? '从零生成需要先填写需求提示词，说明玩法、操作与目标。'
+              : '生成在服务端完成并保存为独立版本；项目默认为私有草稿，发布与否由你决定。'}
           </p>
         </section>
 
         <aside className="panel preview-panel">
           <h2>生成预览</h2>
           <p className="panel-note">
-            {sourceMode
-              ? '以下为起始模板参考；最终玩法以模型修改后的源码和工作台试玩结果为准。'
-              : '以下为浏览器端用与服务器相同的规则实时解析的结果；模板模式只覆盖受支持参数。'}
+            {fromScratch
+              ? '从零生成不使用模板：以下只反映标题、主题、速度与配乐等元信息，玩法以模型生成的源码和工作台试玩结果为准。'
+              : sourceMode
+                ? '以下为起始模板参考；最终玩法以模型修改后的源码和工作台试玩结果为准。'
+                : '以下为浏览器端用与服务器相同的规则实时解析的结果；模板模式只覆盖受支持参数。'}
           </p>
           <Cover spec={parsed.spec} className="cover preview-cover" />
           <h3>{parsed.spec.title}</h3>

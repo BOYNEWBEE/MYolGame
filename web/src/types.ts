@@ -29,6 +29,8 @@ export interface ProjectSummary {
   createdAt: string;
   updatedAt: string;
   templateOrigin?: TemplateOrigin;
+  // 从零生成的项目没有模板基底，首次由模型编写完整源码。
+  fromScratch?: boolean;
 }
 
 export interface VersionSummary {

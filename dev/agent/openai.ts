@@ -25,6 +25,19 @@ export const OPENAI_SYSTEM_PROMPT = [
   '新增注释使用中文。',
 ].join('\n');
 
+// 从零创作首次没有源码可改，必须整页输出；系统提示随任务切换，避免与修改片段契约冲突。
+export const OPENAI_SCRATCH_SYSTEM_PROMPT = [
+  '你是网页小游戏开发工程师。',
+  '用户没有提供模板，请按需求从零实现一个完整、可玩、原创的网页小游戏。',
+  '只输出一个完整的 <!doctype html> 到 </html>，不得省略代码，也不要输出 JSON 修改指令或多余解释。',
+  '所有 CSS、JavaScript 与素材必须内联；禁止 CDN、远程脚本、外部图片/字体/音频、网络请求、外部导航、iframe、弹窗和 Worker。',
+  '只使用原生 Canvas 2D 与浏览器标准 API；不要执行命令、访问文件系统或尝试与宿主进程交互。',
+  '必须包含操作说明，支持空格开始与方向键操作，并保证初次加载即绘制非空画面。',
+  '必须暴露 window.__MYOLGAME_TEST__ = { getState(), reset() }：getState 返回可 JSON 序列化、与玩法相关且不含时间/动画/随机值的状态；reset 同步恢复初次加载状态。',
+  '源码尽量精简：优先实现核心玩法、操作说明与检查接口，避免冗长注释和未使用代码，确保输出以 </html> 完整结束。',
+  '新增注释使用中文。',
+].join('\n');
+
 type RequestResult =
   | { kind: 'ok'; content: string }
   | { kind: 'not_found' }
@@ -48,6 +61,7 @@ async function requestOnce(
   prompt: string,
   config: AgentConfig,
   timeoutMs: number,
+  systemPrompt: string,
 ): Promise<RequestResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -65,7 +79,7 @@ async function requestOnce(
         max_tokens: config.maxOutputTokens ?? 8192,
         stream: false,
         messages: [
-          { role: 'system', content: OPENAI_SYSTEM_PROMPT },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: prompt },
         ],
       }),
@@ -126,13 +140,14 @@ export async function askOpenAiModel(
   prompt: string,
   config: AgentConfig,
   timeoutMs: number,
+  systemPrompt = OPENAI_SYSTEM_PROMPT,
 ): Promise<string> {
   if (!config.apiUrl || !config.apiKey || !config.model) {
     throw new AgentError('model_not_configured', '游戏开发模型未配置完整（地址、密钥与模型名）');
   }
   const urls = chatCompletionsUrls(config.apiUrl);
   for (let i = 0; i < urls.length; i += 1) {
-    const result = await requestOnce(urls[i]!, prompt, config, timeoutMs);
+    const result = await requestOnce(urls[i]!, prompt, config, timeoutMs, systemPrompt);
     if (result.kind === 'ok') return result.content;
     // 只有 404 且还有 /v1 备选时才换地址重试；这不是重复生成请求。
     if (result.kind === 'not_found' && i < urls.length - 1) continue;
