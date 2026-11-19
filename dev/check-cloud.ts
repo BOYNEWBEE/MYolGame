@@ -1,6 +1,6 @@
 // 发布前检查函数源码依赖和公开产物，不读取运行数据或密钥。
 import { readdir, readFile, access } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 const root = resolve('functions');
 async function inspect(directory: string): Promise<void> {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -14,7 +14,9 @@ async function inspect(directory: string): Promise<void> {
       if (specifier === './_qoder/backend.mjs' && path === join(root, 'index.ts')) continue;
       if (!specifier.startsWith('.')) throw new Error('函数依赖必须为本包内相对模块');
       const target = resolve(dirname(path), specifier);
-      if (!target.startsWith(root + '/')) throw new Error('函数依赖越出上传目录');
+      // 用相对路径判断，避免 Windows 反斜杠路径被误判为越界。
+      const inside = relative(root, target);
+      if (!inside || inside.startsWith('..') || isAbsolute(inside)) throw new Error('函数依赖越出上传目录');
       await access(target);
     }
   }
