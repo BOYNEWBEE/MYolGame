@@ -254,6 +254,9 @@ export default function Workbench(): ReactNode {
   const lastTask = tasks[0];
   const sourceMode = Boolean(meta?.agent?.configured);
   const agentName = meta?.agent?.name || '源码开发模型';
+  const agentModelHint = meta?.agent?.model
+    ? ' · ' + meta.agent.model
+    : meta?.agent?.accountModelConfig ? ' · 模型由账号管理配置' : '';
 
   return (
     <div className="page workbench-page">
@@ -267,7 +270,7 @@ export default function Workbench(): ReactNode {
             <GenerationBadge mode={previewVersion?.generationMode ?? 'template'} />
             <span className="muted small">
               {sourceMode
-                ? 'AI 源码开发模式 · ' + agentName + (meta?.agent?.model ? ' · ' + meta.agent.model : '')
+                ? 'AI 源码开发模式 · ' + agentName + agentModelHint
                 : '模板模式 · 只能调整受支持参数'}
             </span>
           </div>
@@ -301,7 +304,7 @@ export default function Workbench(): ReactNode {
         <strong>{sourceMode ? 'AI 源码开发模式' : '模板模式'}</strong>
         <span>
           {sourceMode
-            ? '提交需求后由 ' + agentName + (meta?.agent?.model ? '（' + meta.agent.model + '）' : '') +
+            ? '提交需求后由 ' + agentName + (meta?.agent?.model ? '（' + meta.agent.model + '）' : meta?.agent?.accountModelConfig ? '（模型由账号管理配置）' : '') +
               ' 修改当前有效版本的完整源码，先做隔离浏览器烟测，通过后才保存为新版本。'
             : isAgentVersion(currentVersion)
               ? '当前有效版本来自 AI 源码开发。模板模式不能安全地继续修改它：服务端会拒绝模板重渲染，避免覆盖已有玩法；请启用源码开发服务后再提交需求。'

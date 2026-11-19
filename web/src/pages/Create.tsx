@@ -113,6 +113,9 @@ export default function Create(): ReactNode {
   const agentName = meta?.agent?.name || '源码开发模型';
   const agentModel = meta?.agent?.model;
   const agentProvider = meta?.agent?.provider;
+  const agentModelHint = agentModel
+    ? '（' + (agentProvider === 'openai' ? 'OpenAI 兼容' : agentProvider) + ' · ' + agentModel + '）'
+    : meta?.agent?.accountModelConfig ? '（模型由账号管理配置）' : '';
   const promptOverridesSettings = hasPrompt && (
     parsed.spec.template !== template ||
     parsed.spec.theme !== theme ||
@@ -223,8 +226,8 @@ export default function Create(): ReactNode {
         <strong>{sourceMode ? 'AI 源码开发模式' : '模板模式'}</strong>
         <span>
           {sourceMode
-            ? '由 ' + agentName + (agentModel ? '（' + (agentProvider === 'openai' ? 'OpenAI 兼容' : agentProvider) + ' · ' + agentModel + '）' : '') +
-              ' 直接修改 HTML/JavaScript。首次以所选模板源码为基底，后续继续在上一有效版本上修改；完成后先做浏览器烟测，再保存为新版本。'
+            ? '由 ' + agentName + agentModelHint +
+              ' 直接修改 HTML/JavaScript。首次以所选模板源码为基底，后续继续在上一有效版本上修改；完成后先做浏览器烟测，再保存为新版本。账号可登录后在「账号管理」配置自己的模型密钥。'
             : '未启用源码开发服务：当前只能调整速度、难度、主题、玩法选项和配乐等受支持参数，不能新增第二关、追踪敌人的敌人等源码级玩法。需要这些能力时请由管理员配置游戏开发模型后重启服务。'}
         </span>
       </div>
@@ -504,7 +507,7 @@ export default function Create(): ReactNode {
           <GenerationBadge mode={meta?.generationMode ?? 'template'} />
           <p className="panel-note">
             {sourceMode
-              ? '源码开发：' + agentName + (agentModel ? ' · ' + agentModel : '')
+              ? '源码开发：' + agentName + (agentModel ? ' · ' + agentModel : meta?.agent?.accountModelConfig ? ' · 账号配置模型' : '')
               : '模板模式：只能调整受支持参数'}
           </p>
         </aside>

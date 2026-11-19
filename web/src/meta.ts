@@ -13,6 +13,7 @@ export interface MetaInfo {
     provider: string | null;
     model: string | null;
     sourceDevelopment: boolean;
+    accountModelConfig: boolean;
   };
   model: { configured: boolean; name: string | null };
   identityNotice: string;

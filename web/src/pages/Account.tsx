@@ -2,6 +2,14 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { appHref } from '../routing.ts';
 import { ApiError, requestJson } from '../api.ts';
 import { fetchMusicStyleSettings, musicStyleErrorText, testMusicStyleSettings, type MusicStyleSettingsView } from '../music-style-settings.ts';
+import {
+  agentModelErrorText,
+  clearAgentModelSettings,
+  fetchAgentModelSettings,
+  saveAgentModelSettings,
+  testAgentModelSettings,
+  type AgentModelSettingsView,
+} from '../game-model-settings.ts';
 import { useSession } from '../session.tsx';
 
 export default function Account() {
@@ -10,6 +18,16 @@ export default function Account() {
   const [register, setRegister] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  const [modelStatus, setModelStatus] = useState<AgentModelSettingsView | null>(null);
+  const [modelUrl, setModelUrl] = useState('');
+  const [modelName, setModelName] = useState('');
+  const [modelKey, setModelKey] = useState('');
+  const [modelLoading, setModelLoading] = useState(false);
+  const [modelBusy, setModelBusy] = useState(false);
+  const [modelTesting, setModelTesting] = useState(false);
+  const [modelError, setModelError] = useState('');
+  const [modelNotice, setModelNotice] = useState('');
 
   const [styleStatus, setStyleStatus] = useState<MusicStyleSettingsView | null>(null);
   const [styleUrl, setStyleUrl] = useState('');
@@ -24,6 +42,21 @@ export default function Account() {
   useEffect(() => {
     if (!session.ready || !session.account || session.cloudM0) return;
     let cancelled = false;
+    setModelLoading(true);
+    setModelError('');
+    fetchAgentModelSettings()
+      .then((view) => {
+        if (cancelled) return;
+        setModelStatus(view);
+        setModelUrl(view.account?.apiUrl ?? '');
+        setModelName(view.account?.model ?? '');
+      })
+      .catch((e) => {
+        if (!cancelled) setModelError(e instanceof Error ? e.message : '游戏模型配置读取失败');
+      })
+      .finally(() => {
+        if (!cancelled) setModelLoading(false);
+      });
     setStyleLoading(true);
     setStyleError('');
     fetchMusicStyleSettings()
@@ -83,6 +116,72 @@ export default function Account() {
       else setStyleError(e instanceof Error ? e.message : '测试失败');
     } finally {
       setStyleTesting(false);
+    }
+  }
+
+  async function saveModel(e: FormEvent<HTMLFormElement>): Promise<void> {
+    e.preventDefault();
+    if (modelBusy) return;
+    setModelBusy(true);
+    setModelError('');
+    setModelNotice('');
+    try {
+      const body: { apiUrl: string; model: string; apiKey?: string } = { apiUrl: modelUrl, model: modelName };
+      if (modelKey.trim()) body.apiKey = modelKey;
+      const view = await saveAgentModelSettings(body);
+      setModelStatus(view);
+      setModelKey('');
+      setModelNotice('已保存。由本账号创建或修改的项目将使用该模型进行源码开发。');
+    } catch (e) {
+      setModelError(e instanceof Error ? e.message : '保存失败');
+    } finally {
+      setModelBusy(false);
+    }
+  }
+
+  async function testModelConnection(): Promise<void> {
+    if (modelBusy || modelTesting) return;
+    setModelTesting(true);
+    setModelError('');
+    setModelNotice('');
+    try {
+      const body: { apiUrl?: string; apiKey?: string; model?: string } = {};
+      if (modelUrl.trim()) body.apiUrl = modelUrl.trim();
+      if (modelName.trim()) body.model = modelName.trim();
+      if (modelKey.trim()) body.apiKey = modelKey.trim();
+      const result = await testAgentModelSettings(body);
+      if (!result.ok) {
+        setModelError('连接失败：' + agentModelErrorText(result.error ?? '')
+          + (result.url ? '（请求地址：' + result.url + '）' : ''));
+        return;
+      }
+      const elapsed = result.elapsedMs === undefined ? '' : '，耗时 ' + (result.elapsedMs / 1000).toFixed(1) + ' 秒';
+      const source = result.source === 'server' ? '（使用服务端配置）' : '';
+      setModelNotice('连接正常：' + (result.model ?? modelName) + ' 回复「' + (result.reply ?? '') + '」' + elapsed + source + '。');
+    } catch (e) {
+      if (e instanceof ApiError) setModelError(e.message || agentModelErrorText(e.code));
+      else setModelError(e instanceof Error ? e.message : '测试失败');
+    } finally {
+      setModelTesting(false);
+    }
+  }
+
+  async function clearModel(): Promise<void> {
+    if (modelBusy) return;
+    setModelBusy(true);
+    setModelError('');
+    setModelNotice('');
+    try {
+      const view = await clearAgentModelSettings();
+      setModelStatus(view);
+      setModelUrl('');
+      setModelName('');
+      setModelKey('');
+      setModelNotice(view.server ? '已清除账号配置，将改用服务端环境配置。' : '已清除账号配置。');
+    } catch (e) {
+      setModelError(e instanceof Error ? e.message : '清除失败');
+    } finally {
+      setModelBusy(false);
     }
   }
 
@@ -154,6 +253,57 @@ export default function Account() {
     }}>刷新登录状态</button>
     {session.account && (
       <>
+      <section className="panel" style={{ marginTop: 20, textAlign: 'left', display: 'grid', gap: 12 }}>
+        <h2>游戏源码开发模型（OpenAI 兼容）</h2>
+        <p className="panel-note" style={{ margin: 0 }}>
+          用于「AI 源码开发模式」直接修改游戏 HTML/JavaScript；与下方编曲模型互相独立，可分别配置。填写 OpenAI 兼容接口地址与模型名，例如 DeepSeek：https://api.deepseek.com + deepseek-chat。密钥只保存在服务端，接口只回传是否已保存。
+        </p>
+        {session.cloudM0 ? <p className="panel-note" style={{ margin: 0 }}>
+          当前部署为云端 M0 模拟阶段，账号级游戏开发模型设置暂不可用。
+        </p> : modelLoading ? <p className="muted">正在读取配置…</p> : !modelStatus?.available ? (
+          <p className="panel-note" style={{ margin: 0 }}>
+            {modelStatus?.provider === 'qoder'
+              ? '当前服务端使用 Qoder CLI 进行源码开发，账号级游戏模型配置不适用。'
+              : modelStatus?.provider === 'http'
+                ? '当前服务端使用自定义 HTTP Agent 进行源码开发，账号级游戏模型配置不适用。'
+                : '服务端未启用源码开发模式：请在启动服务的终端运行 npm run dev:openai 后刷新本页。'}
+          </p>
+        ) : (
+          <>
+            <p className="muted small" role="status" style={{ margin: 0 }}>
+              {modelStatus.account
+                ? '账号配置：' + modelStatus.account.apiUrl + '（模型 ' + modelStatus.account.model + '）'
+                : modelStatus.server
+                  ? '未保存账号配置，当前使用服务端环境配置（模型 ' + (modelStatus.server.model ?? '未知') + '）。'
+                  : '当前尚未配置游戏开发模型，提交源码开发任务会失败。'}
+            </p>
+            <form onSubmit={saveModel} style={{ display: 'grid', gap: 12 }}>
+              <label className="field">
+                <span className="field-label">游戏模型接口地址</span>
+                <input type="text" inputMode="url" required maxLength={512} value={modelUrl} onChange={(e) => setModelUrl(e.target.value)} placeholder="https://api.deepseek.com" autoComplete="off" />
+              </label>
+              <label className="field">
+                <span className="field-label">游戏模型名</span>
+                <input type="text" required maxLength={128} value={modelName} onChange={(e) => setModelName(e.target.value)} placeholder="deepseek-chat" autoComplete="off" />
+              </label>
+              <label className="field">
+                <span className="field-label">游戏模型 API 密钥</span>
+                <input type="password" maxLength={512} value={modelKey} onChange={(e) => setModelKey(e.target.value)} placeholder={modelStatus.account?.hasKey ? '已保存；留空则保持不变' : '输入服务提供的密钥'} autoComplete="new-password" />
+              </label>
+              <p className="panel-note" style={{ margin: 0 }}>
+                仅支持 HTTPS；本机调试回环 HTTP 需服务端设置 MYOLGAME_AGENT_ALLOW_LOCAL=1。留空密钥表示沿用已保存的密钥（或服务端配置）。「测试连接」会真实请求一次模型，可能产生少量调用费用；测试不会保存配置。
+              </p>
+              {modelError && <p role="alert" style={{ margin: 0 }}>{modelError}</p>}
+              {modelNotice && <p role="status" style={{ margin: 0 }}>{modelNotice}</p>}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button type="button" className="btn" disabled={modelBusy || modelTesting} onClick={() => void testModelConnection()}>{modelTesting ? '测试中…' : '测试连接'}</button>
+                <button className="btn primary" disabled={modelBusy || modelTesting}>{modelBusy ? '处理中…' : '保存模型'}</button>
+                <button type="button" className="btn danger" disabled={modelBusy || modelTesting || !modelStatus.account} onClick={() => void clearModel()}>清除账号模型配置</button>
+              </div>
+            </form>
+          </>
+        )}
+      </section>
       <section className="panel" style={{ marginTop: 20, textAlign: 'left', display: 'grid', gap: 12 }}>
         <h2>AI 编曲模型（OpenAI 兼容）</h2>
         <p className="panel-note" style={{ margin: 0 }}>

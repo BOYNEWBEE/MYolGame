@@ -89,6 +89,17 @@ export function createSupabaseStore(client: DatabaseClient): Store {
       check(await client.from('myol_music_style_settings').delete().eq('owner_token', ownerToken).select('owner_token'));
     },
 
+    // 云端暂未建账号级游戏模型表；本地路由也不会在云端开放写入。
+    async getGameModelSettings() {
+      return null;
+    },
+    async saveGameModelSettings() {
+      throw new Error('cloud_game_model_settings_disabled');
+    },
+    async deleteGameModelSettings() {
+      throw new Error('cloud_game_model_settings_disabled');
+    },
+
     async createProject(project) {
       check(await client.from('myol_projects').insert(toRow(project)).select('id').single());
     },

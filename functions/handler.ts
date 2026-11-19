@@ -23,6 +23,13 @@ import {
 } from './shared/spec.ts';
 import { modelConfigured, type ModelEnv } from './shared/model.ts';
 import { generateMusicStyle, musicStyleConfigured, parseMusicStyleSettingsInput, probeMusicStyle, type MusicStyleEnv } from './shared/music-style.ts';
+import {
+  GAME_MODEL_TIMEOUT_MS,
+  gameModelConfigured,
+  parseGameModelSettingsInput,
+  probeGameModel,
+  type GameModelEnv,
+} from './shared/game-model.ts';
 import type {
   Game,
   GameFilter,
@@ -37,6 +44,12 @@ import type {
 export interface HandlerEnv {
   model: ModelEnv;
   musicStyle?: MusicStyleEnv;
+  // 账号级游戏模型配置仅在本地 OpenAI 兼容源码开发模式下开放。
+  agentModel?: {
+    provider: string | null;
+    allowLocal: boolean;
+    server: GameModelEnv | null;
+  };
 }
 
 export interface HandlerDeps {
@@ -171,6 +184,31 @@ async function musicStyleSettingsView(deps: HandlerDeps, session: Session): Prom
     account,
     server: server ? { model: deps.env.musicStyle?.model ?? null } : null,
     effective: account ? 'account' : server ? 'server' : 'none',
+  };
+}
+
+function requireAccountGameModel(deps: HandlerDeps): NonNullable<HandlerEnv['agentModel']> {
+  const policy = deps.env.agentModel;
+  if (!policy || policy.provider !== 'openai') {
+    throw httpError(409, 'agent_model_unavailable', '服务端未启用 OpenAI 兼容源码开发，账号级游戏模型配置暂不可用');
+  }
+  return policy;
+}
+
+async function gameModelSettingsView(deps: HandlerDeps, session: Session): Promise<Record<string, unknown>> {
+  const policy = deps.env.agentModel;
+  const available = policy?.provider === 'openai';
+  const settings = await deps.store.getGameModelSettings(session.token);
+  const server = gameModelConfigured(policy?.server) ? policy!.server! : null;
+  return {
+    available,
+    provider: policy?.provider ?? null,
+    allowLocal: Boolean(policy?.allowLocal),
+    account: settings
+      ? { apiUrl: settings.apiUrl, model: settings.model, hasKey: Boolean(settings.apiKey) }
+      : null,
+    server: server ? { model: server.model } : null,
+    effective: settings ? 'account' : server ? 'server' : 'none',
   };
 }
 
@@ -369,6 +407,8 @@ function buildRoutes(): Route[] {
             provider: deps.agent?.provider ?? null,
             model: deps.agent?.model ?? null,
             sourceDevelopment: Boolean(deps.agent),
+            // 账号级模型配置仅在 openai provider 下可用。
+            accountModelConfig: deps.env.agentModel?.provider === 'openai',
           },
           model: {
             configured: modelConfigured(deps.env.model),
@@ -471,6 +511,85 @@ function buildRoutes(): Route[] {
         const session = await authenticate(deps, req, true);
         await deps.store.deleteMusicStyleSettings(session!.token);
         return json(await musicStyleSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
+      },
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/agent\/model$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        return json(await gameModelSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
+      },
+    },
+    {
+      method: 'PUT',
+      pattern: /^\/api\/agent\/model$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        const policy = requireAccountGameModel(deps);
+        const body = await readBody(req);
+        const previous = await deps.store.getGameModelSettings(session!.token);
+        const parsed = parseGameModelSettingsInput(body, previous?.apiKey, policy.allowLocal);
+        if (!parsed.ok) return fail(400, 'invalid_game_model_settings', parsed.error);
+        await deps.store.saveGameModelSettings({
+          ownerToken: session!.token,
+          apiUrl: parsed.apiUrl,
+          apiKey: parsed.apiKey,
+          model: parsed.model,
+          updatedAt: new Date().toISOString(),
+        });
+        return json(await gameModelSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/agent\/model\/test$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        const policy = requireAccountGameModel(deps);
+        const body = await readBody(req);
+        const previous = await deps.store.getGameModelSettings(session!.token);
+        const server = gameModelConfigured(policy.server) ? policy.server! : null;
+        const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value : undefined);
+        const hasForm = Boolean(text(body.apiUrl) || text(body.apiKey) || text(body.model));
+        // 未填写的字段依次沿用账号已保存配置与服务端环境配置，便于先测试后再保存。
+        const parsed = parseGameModelSettingsInput(
+          {
+            apiUrl: text(body.apiUrl) ?? previous?.apiUrl ?? server?.apiUrl,
+            apiKey: text(body.apiKey),
+            model: text(body.model) ?? previous?.model ?? server?.model,
+          },
+          previous?.apiKey ?? server?.apiKey,
+          policy.allowLocal,
+        );
+        if (!parsed.ok) return fail(400, 'invalid_game_model_settings', parsed.error);
+
+        const started = Date.now();
+        const result = await probeGameModel(parsed, GAME_MODEL_TIMEOUT_MS);
+        const elapsedMs = Date.now() - started;
+        const source = hasForm ? 'form' : previous ? 'account' : 'server';
+        const headers = { 'cache-control': 'no-store' };
+        if (!result.ok) {
+          return json({ ok: false, error: result.error, url: result.url, elapsedMs, source }, 200, headers);
+        }
+        return json({
+          ok: true,
+          model: result.model,
+          reply: result.reply,
+          url: result.url,
+          elapsedMs,
+          source,
+        }, 200, headers);
+      },
+    },
+    {
+      method: 'DELETE',
+      pattern: /^\/api\/agent\/model$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        requireAccountGameModel(deps);
+        await deps.store.deleteGameModelSettings(session!.token);
+        return json(await gameModelSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
       },
     },
     {

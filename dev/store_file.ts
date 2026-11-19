@@ -7,6 +7,7 @@ import type { CreationTemplate, CreationTemplateFilter } from '../functions/shar
 import type {
   Game,
   GameFilter,
+  GameModelSettings,
   Message,
   MusicStyleSettings,
   Project,
@@ -26,6 +27,7 @@ interface DbShape {
   accountSessions: AccountSession[];
   creationTemplates: CreationTemplate[];
   musicStyleSettings: MusicStyleSettings[];
+  gameModelSettings: GameModelSettings[];
   sessions: Session[];
   projects: Project[];
   versions: Version[];
@@ -41,6 +43,7 @@ function emptyDb(): DbShape {
     accountSessions: [],
     creationTemplates: [],
     musicStyleSettings: [],
+    gameModelSettings: [],
     sessions: [],
     projects: [],
     versions: [],
@@ -144,6 +147,14 @@ export class FileStore implements Store {
           this.db.musicStyleSettings.push({ ...guestStyle, ownerToken: account.ownerToken });
         }
       }
+      // 游客在登录前保存的游戏模型配置同样迁移给账号，避免重复填写密钥。
+      const guestGameModel = this.db.gameModelSettings.find(s => s.ownerToken === guest.token);
+      if (guestGameModel) {
+        this.db.gameModelSettings = this.db.gameModelSettings.filter(s => s.ownerToken !== guest.token);
+        if (!this.db.gameModelSettings.some(s => s.ownerToken === account.ownerToken)) {
+          this.db.gameModelSettings.push({ ...guestGameModel, ownerToken: account.ownerToken });
+        }
+      }
       this.db.sessions = this.db.sessions.filter(s => s.token !== guest.token);
     }
     await this.persist();
@@ -182,6 +193,21 @@ export class FileStore implements Store {
 
   async deleteMusicStyleSettings(ownerToken: string): Promise<void> {
     this.db.musicStyleSettings = this.db.musicStyleSettings.filter((s) => s.ownerToken !== ownerToken);
+    await this.persist();
+  }
+
+  async getGameModelSettings(ownerToken: string): Promise<GameModelSettings | null> {
+    return this.db.gameModelSettings.find((s) => s.ownerToken === ownerToken) ?? null;
+  }
+
+  async saveGameModelSettings(settings: GameModelSettings): Promise<void> {
+    this.db.gameModelSettings = this.db.gameModelSettings.filter((s) => s.ownerToken !== settings.ownerToken);
+    this.db.gameModelSettings.push(settings);
+    await this.persist();
+  }
+
+  async deleteGameModelSettings(ownerToken: string): Promise<void> {
+    this.db.gameModelSettings = this.db.gameModelSettings.filter((s) => s.ownerToken !== ownerToken);
     await this.persist();
   }
 

@@ -20,6 +20,15 @@ export interface MusicStyleSettings {
   updatedAt: string;
 }
 
+// 账号级游戏源码开发模型配置；密钥只保存在服务端，接口只回传 hasKey。
+export interface GameModelSettings {
+  ownerToken: string;
+  apiUrl: string;
+  apiKey: string;
+  model: string;
+  updatedAt: string;
+}
+
 export interface Project {
   id: string;
   ownerToken: string;
@@ -133,6 +142,10 @@ export interface Store {
   getMusicStyleSettings(ownerToken: string): Promise<MusicStyleSettings | null>;
   saveMusicStyleSettings(settings: MusicStyleSettings): Promise<void>;
   deleteMusicStyleSettings(ownerToken: string): Promise<void>;
+
+  getGameModelSettings(ownerToken: string): Promise<GameModelSettings | null>;
+  saveGameModelSettings(settings: GameModelSettings): Promise<void>;
+  deleteGameModelSettings(ownerToken: string): Promise<void>;
 
   createProject(project: Project): Promise<void>;
   createProjectFromTemplate(project: Project, version: Version, message: Message): Promise<void>;

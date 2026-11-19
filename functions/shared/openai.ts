@@ -3,6 +3,24 @@
 
 export const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
+// 服务端请求的目标地址：默认只允许 HTTPS；本机 HTTP 需管理员显式放行。
+export function validateModelEndpoint(raw: string, localAllowed: boolean): string {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error('模型接口地址不是合法的 URL');
+  }
+  if (url.username || url.password) throw new Error('模型接口地址不能包含账号密码');
+  if (url.hash) throw new Error('模型接口地址不能包含 # 片段');
+  if (url.protocol === 'https:') return raw;
+  if (url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname)) {
+    if (localAllowed) return raw;
+    throw new Error('本机 HTTP 模型地址需显式设置 MYOLGAME_AGENT_ALLOW_LOCAL=1');
+  }
+  throw new Error('模型接口地址必须使用 HTTPS；本机调试需显式放行回环 HTTP');
+}
+
 // 兼容填基址、/v1 基址或完整 /chat/completions 地址。
 export function chatCompletionsUrl(apiUrl: string): string {
   const trimmed = apiUrl.trim().replace(/\/+$/, '');

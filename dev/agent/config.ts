@@ -1,32 +1,17 @@
-// 所有配置仅由宿主机管理员设置，不接受浏览器请求覆盖。
-import { LOOPBACK_HOSTS } from '../../functions/shared/openai.ts';
+// 所有环境变量配置仅由宿主机管理员设置；openai provider 的账号级配置由 API 路由单独校验。
+
+import { validateModelEndpoint } from '../../functions/shared/openai.ts';
 import { resolveChromePath } from '../chrome.ts';
 import type { AgentConfig } from './protocol.ts';
+
+export { validateModelEndpoint };
 
 const ALLOWED_PROVIDERS = ['qoder', 'http', 'openai'] as const;
 type Provider = (typeof ALLOWED_PROVIDERS)[number];
 
-function allowLocal(): boolean {
+export function agentAllowLocal(): boolean {
   const value = (process.env.MYOLGAME_AGENT_ALLOW_LOCAL ?? '').toLowerCase();
   return value === '1' || value === 'true';
-}
-
-// 服务端请求的目标地址：默认只允许 HTTPS；本机 HTTP 需管理员显式放行。
-export function validateModelEndpoint(raw: string, localAllowed: boolean): string {
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    throw new Error('模型接口地址不是合法的 URL');
-  }
-  if (url.username || url.password) throw new Error('模型接口地址不能包含账号密码');
-  if (url.hash) throw new Error('模型接口地址不能包含 # 片段');
-  if (url.protocol === 'https:') return raw;
-  if (url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname)) {
-    if (localAllowed) return raw;
-    throw new Error('本机 HTTP 模型地址需显式设置 MYOLGAME_AGENT_ALLOW_LOCAL=1');
-  }
-  throw new Error('模型接口地址必须使用 HTTPS；本机调试需显式放行回环 HTTP');
 }
 
 function parseBoundedInt(name: string, raw: string | undefined, fallback: number, min: number, max: number): number {
@@ -90,29 +75,31 @@ export function loadAgentConfig(): AgentConfig | undefined {
     };
   }
 
-  const apiUrl = validateModelEndpoint(process.env.MYOLGAME_AGENT_API_URL || '', allowLocal());
-  if (!process.env.MYOLGAME_AGENT_API_KEY) {
-    throw new Error('请通过环境变量配置 Agent API 密钥');
-  }
+  const apiUrlRaw = (process.env.MYOLGAME_AGENT_API_URL || '').trim();
+  const apiKeyRaw = process.env.MYOLGAME_AGENT_API_KEY || '';
+  const model = (process.env.MYOLGAME_AGENT_MODEL || '').trim();
 
   if (provider === 'http') {
+    if (!apiUrlRaw) throw new Error('自定义 HTTP Agent 需要配置 MYOLGAME_AGENT_API_URL');
+    if (!apiKeyRaw) throw new Error('请通过环境变量配置 Agent API 密钥');
     return {
       ...base,
       name: process.env.MYOLGAME_AGENT_NAME || '自定义 Agent',
-      apiUrl,
-      apiKey: process.env.MYOLGAME_AGENT_API_KEY,
+      apiUrl: validateModelEndpoint(apiUrlRaw, agentAllowLocal()),
+      apiKey: apiKeyRaw,
     };
   }
 
-  const model = (process.env.MYOLGAME_AGENT_MODEL || '').trim();
-  if (!model || model.length > 128 || !/^[A-Za-z0-9._:/-]+$/.test(model)) {
+  if (model && (model.length > 128 || !/^[A-Za-z0-9._:/-]+$/.test(model))) {
     throw new Error('MYOLGAME_AGENT_MODEL 必须为 1–128 位字母、数字或 . _ : / -');
   }
+  // openai provider 的地址、密钥与模型可由各账号在账号管理中配置；
+  // 环境变量存在时作为服务端默认值，缺失时不阻止服务启动。
   return {
     ...base,
-    name: process.env.MYOLGAME_AGENT_NAME || 'OpenAI 兼容（' + model + '）',
-    apiUrl,
-    apiKey: process.env.MYOLGAME_AGENT_API_KEY,
-    model,
+    name: process.env.MYOLGAME_AGENT_NAME || (model ? 'OpenAI 兼容（' + model + '）' : 'OpenAI 兼容（账号级配置）'),
+    apiUrl: apiUrlRaw ? validateModelEndpoint(apiUrlRaw, agentAllowLocal()) : undefined,
+    apiKey: apiKeyRaw || undefined,
+    model: model || undefined,
   };
 }

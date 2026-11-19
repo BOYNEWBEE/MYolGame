@@ -1,6 +1,6 @@
 # 本地 Agent 后端
 
-2026-11-09，2026-11-19 更新 OpenAI 兼容 provider。本文件描述已实现的本地单文件游戏链路；原 MVP 方案中的真实云端 Worker 和多文件 Phaser 工程不因此视为已实现。账号和云端 M0 模拟任务的最新范围见 [M0 云端部署](M0云端部署.md)。
+2026-11-09，2026-11-19 更新 OpenAI 兼容 provider 与账号级游戏模型配置。本文件描述已实现的本地单文件游戏链路；原 MVP 方案中的真实云端 Worker 和多文件 Phaser 工程不因此视为已实现。账号和云端 M0 模拟任务的最新范围见 [M0 云端部署](M0云端部署.md)。
 
 ## 启动与使用
 
@@ -112,6 +112,16 @@ Authorization: Bearer <MYOLGAME_AGENT_API_KEY>
 
 首次请求的源码基底是用户选择的模板源码；后续请求使用当前有效版本的完整 HTML；回退后基于回退版本继续。模型输出只作为 HTML 数据保存和检查，不在宿主机执行。
 
+#### 账号级模型配置
+
+以 `MYOLGAME_AGENT_PROVIDER=openai` 启动后，登录账号可在「账号管理」→「游戏源码开发模型（OpenAI 兼容）」保存自己的接口地址、模型名与密钥，并对当前填写（未填写时依次沿用已保存配置、服务端默认配置）执行一次连接测试。
+
+- 任务按项目所有者执行：账号配置优先于 `MYOLGAME_AGENT_API_URL`／`MYOLGAME_AGENT_API_KEY`／`MYOLGAME_AGENT_MODEL` 环境默认值；两者都缺失时任务以 `model_not_configured` 失败并保留原版本，不回退模板。
+- 接口为 `GET/PUT/DELETE /api/agent/model` 与 `POST /api/agent/model/test`，均需创作者令牌。仅在 openai provider 下开放保存与测试，Qoder CLI 或自定义 HTTP 网关模式返回 `agent_model_unavailable`。
+- 读取结果只返回 `hasKey`；密钥保存在服务端 FileStore（`data/db.json`），不进入前端、任务、日志、错误响应或导出源码。游客保存的配置在注册/登录时迁移到账号。
+- 连接测试发送一次 `max_tokens: 16` 的最小请求，不生成游戏、不保存配置，可能产生少量模型费用；404 时按同样规则补试 `/v1`，错误沿用 `model_*` 分类。
+- 地址默认 HTTPS；回环 HTTP 需服务端显式设置 `MYOLGAME_AGENT_ALLOW_LOCAL=1`。云端入口尚未建表，也未开放该功能。
+
 错误分类（任务会记录 `errorCode`，界面显示中文说明）：
 
 | 错误码 | 含义 |
@@ -140,9 +150,9 @@ Authorization: Bearer <MYOLGAME_AGENT_API_KEY>
 | `MYOLGAME_AGENT_PROVIDER` | 未设置时不启用；支持 `qoder`、`http`、`openai` |
 | `MYOLGAME_AGENT_COMMAND` | `qoderclicn`，仅管理员可配置的可执行文件路径 |
 | `MYOLGAME_AGENT_NAME` | `Qoder CLI`、`自定义 Agent` 或 `OpenAI 兼容（model）` |
-| `MYOLGAME_AGENT_API_URL` | HTTP/OpenAI 模式地址；默认仅 HTTPS，本机回环 HTTP 需显式放行 |
-| `MYOLGAME_AGENT_API_KEY` | HTTP/OpenAI 模式服务端密钥 |
-| `MYOLGAME_AGENT_MODEL` | OpenAI 模式必填；1–128 位字母、数字或 `._:/-` |
+| `MYOLGAME_AGENT_API_URL` | HTTP 模式必填；OpenAI 模式可选，作为账号配置缺失时的默认地址；默认仅 HTTPS |
+| `MYOLGAME_AGENT_API_KEY` | HTTP 模式必填；OpenAI 模式可选默认密钥 |
+| `MYOLGAME_AGENT_MODEL` | HTTP/Qoder 模式不需要；OpenAI 模式可选默认模型，账号配置可覆盖；1–128 位字母、数字或 `._:/-` |
 | `MYOLGAME_AGENT_TIMEOUT_MS` | `180000`，任务总预算；范围 1000–600000 |
 | `MYOLGAME_AGENT_REQUEST_TIMEOUT_MS` | 单次模型请求超时，默认 `min(TIMEOUT_MS, 120000)` |
 | `MYOLGAME_AGENT_MAX_REPAIRS` | 可选 0–3；设置后总尝试数 = 修复次数 + 1 |
@@ -192,7 +202,7 @@ npm run build
 npm test
 ```
 
-`tests/agent.test.ts` 使用受控 HTTP 网关、真实独立 Worker 和系统 Chrome，覆盖生成、二次源码修改、页面刷新继续查询、修复、取消、失败保留旧版、超时、回退冲突、权限、发布隔离和持久化恢复；不会消耗真实模型额度。`tests/openai-provider.test.ts` 使用受控 OpenAI 兼容假服务，覆盖请求格式、Markdown 提取、模板/上一版本/回退版本源码链、修复、401/429/超时/空输出/截断/非法响应、并发与取消、密钥边界；`tests/platform.test.ts` 覆盖数据文件损坏保护、Windows 启动与浏览器路径解析。
+`tests/agent.test.ts` 使用受控 HTTP 网关、真实独立 Worker 和系统 Chrome，覆盖生成、二次源码修改、页面刷新继续查询、修复、取消、失败保留旧版、超时、回退冲突、权限、发布隔离和持久化恢复；不会消耗真实模型额度。`tests/openai-provider.test.ts` 使用受控 OpenAI 兼容假服务，覆盖请求格式、Markdown 提取、模板/上一版本/回退版本源码链、修复、401/429/超时/空输出/截断/非法响应、并发与取消、密钥边界；`tests/game-model.test.ts` 覆盖账号级配置解析、连接测试与 404 回退、保存/掩码/清除、账号隔离、账号配置优先于服务端默认、缺失配置失败，以及真实 Chrome 中的账号管理面板保存与连接测试；`tests/platform.test.ts` 覆盖数据文件损坏保护、Windows 启动与浏览器路径解析。
 
 本次实现期间实际 Qoder 连通性检查在代理和临时直连下均遭遇上游重试失败，因此真实 Qoder 模型生成尚未验证成功。测试网关通过不等价于真实模型能满足玩法需求。
 

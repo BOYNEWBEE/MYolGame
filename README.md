@@ -77,28 +77,30 @@ npm run dev:agent
 
 ### OpenAI 兼容游戏开发模型
 
-希望由通用模型直接修改游戏源码时，在服务端配置游戏开发模型（管理员配置，不接受浏览器传入密钥）：
+希望由通用模型直接修改游戏源码时，以 OpenAI 兼容模式启动服务。游戏模型由登录账号在「账号管理」中配置，服务端环境变量可选作所有账号的默认值：
 
-```bash
+```powershell
 # Windows PowerShell
 $env:MYOLGAME_AGENT_PROVIDER = "openai"
-$env:MYOLGAME_AGENT_API_URL = "https://api.example.com/v1"
-$env:MYOLGAME_AGENT_API_KEY = "服务端密钥"
-$env:MYOLGAME_AGENT_MODEL = "your-model-name"
 $env:MYOLGAME_CHROME_PATH = "C:\Program Files\Google\Chrome\Application\chrome.exe"
-npm run dev
+npm run dev:openai
 ```
 
 ```bash
 # macOS / Linux
 export MYOLGAME_AGENT_PROVIDER=openai
-export MYOLGAME_AGENT_API_URL=https://api.example.com/v1
-export MYOLGAME_AGENT_API_KEY=服务端密钥
-export MYOLGAME_AGENT_MODEL=your-model-name
-npm run dev
+npm run dev:openai
 ```
 
-也可使用 `npm run dev:openai`（只预设 provider，其余变量仍需在 shell 中设置）。地址可填基址、`/v1` 基址或完整 `/chat/completions` 地址；无路径基址仅在首个地址返回 404 时补试 `/v1/chat/completions`。可用变量还包括 `MYOLGAME_AGENT_REQUEST_TIMEOUT_MS`、`MYOLGAME_AGENT_MAX_REPAIRS`（0–3）、`MYOLGAME_AGENT_MAX_OUTPUT_TOKENS`、`MYOLGAME_AGENT_MAX_RESPONSE_BYTES` 与 `MYOLGAME_AGENT_ALLOW_LOCAL=1`（仅本机回环 HTTP 调试时使用）。示例见 `.env.example`；该文件不会自动加载。
+启动后注册或登录 →「账号管理」→「游戏源码开发模型（OpenAI 兼容）」：
+
+1. 填写接口地址（如 `https://api.deepseek.com`）、模型名（如 `deepseek-chat`）与密钥；
+2. 先点「测试连接」，服务端会真实请求一次模型，显示模型回复与耗时，测试不会保存配置；
+3. 点「保存模型」，此后由本账号创建或修改的项目优先使用该配置，密钥输入框只显示是否已保存。
+
+留空密钥再次保存会沿用已保存的密钥；「清除账号模型配置」后回退到服务端环境变量。配置优先级为**账号配置 > 服务端环境变量**；两者都缺失时任务失败并标记 `model_not_configured`，不会静默回退模板。接口为 `GET/PUT/DELETE /api/agent/model` 与 `POST /api/agent/model/test`，只回传 `hasKey`；密钥只保存在服务端 `data/db.json` 或进程环境，不进入页面、日志、错误响应或导出源码。服务端也可用 `MYOLGAME_AGENT_API_URL`、`MYOLGAME_AGENT_API_KEY`、`MYOLGAME_AGENT_MODEL` 提供统一默认值。
+
+地址可填基址、`/v1` 基址或完整 `/chat/completions` 地址；无路径基址仅在首个地址返回 404 时补试 `/v1/chat/completions`。默认只允许 HTTPS；本机回环 HTTP 调试需服务端设置 `MYOLGAME_AGENT_ALLOW_LOCAL=1`。可用变量还包括 `MYOLGAME_AGENT_REQUEST_TIMEOUT_MS`、`MYOLGAME_AGENT_MAX_REPAIRS`（0–3）、`MYOLGAME_AGENT_MAX_OUTPUT_TOKENS`、`MYOLGAME_AGENT_MAX_RESPONSE_BYTES`。示例见 `.env.example`；该文件不会自动加载。
 
 界面操作：
 
@@ -108,7 +110,7 @@ npm run dev
 4. 失败、取消或超时不会替换当前版本；模型请求失败不会自动重试，只有非法 HTML 或浏览器检查失败才会在修复次数内继续。
 5. 可下载当前预览版本的 HTML 或源码包。浏览器烟测只代表画布、按键与重启的基础运行正常，不代表所有需求均已实现。
 
-密钥只保存在服务端进程环境；不进入前端、日志、Git、导出源码或错误响应。
+密钥只保存在服务端；账号级配置写入 `data/db.json`，请保护并备份该文件，不要提交到 Git。
 
 ## 验证
 
@@ -129,6 +131,7 @@ npm test
 - 提示词解析、ZIP/源码包、handler 权限、FileStore 持久化；
 - Agent 异步源码生成、二次修改、检查后修复、取消、超时、回退冲突、重启恢复和私有预览资源限制；
 - OpenAI 兼容假模型：请求地址／鉴权／模型名／输出上限、纯 HTML 与 Markdown 提取、首次带模板源码、二次带上一有效版本源码、回退后使用回退版本、检查失败修复、超时／401／429／空输出／截断／非法响应、取消与并发 409、密钥不出现在响应与产物；
+- 账号级游戏模型：配置解析与回环放行、连接测试的 404 回退与鉴权失败、保存／掩码／清除、账号隔离、账号配置优先于服务端默认、缺失配置失败不保存版本，以及真实 Chrome 在「账号管理」保存并完成连接测试；
 - 数据文件损坏停止启动且不覆盖原文件、Windows `npm.cmd` 启动、`with-env` 跨平台变量传递与浏览器路径解析；
 - 社区模板发布、参数约束、跨会话套用、源码继承、许可导出、上下架与副本隔离；
 - 编曲模型：风格参数钳制与白名单、OpenAI 兼容地址归一化与无路径基址的 `/v1` 回退、代码块 JSON 提取、上游失败／非 JSON／无关字段回退、仅霓虹街机调用、账号级编曲配置的保存、掩码、隔离、环境变量回退与生成接入，以及试听参数复用。
@@ -139,7 +142,8 @@ npm test
 
 ## 限制说明
 
-- 默认启动为**模板模式**；`npm run dev:agent` 使用本机 Qoder CLI，配置 `MYOLGAME_AGENT_PROVIDER=openai` 后改用 OpenAI 兼容游戏开发模型；模板模式只能调整受支持参数，若当前版本来自 AI 源码开发，服务端会拒绝模板重渲染以避免覆盖玩法。
+- 默认启动为**模板模式**；`npm run dev:agent` 使用本机 Qoder CLI，`npm run dev:openai` 或设置 `MYOLGAME_AGENT_PROVIDER=openai` 后改用 OpenAI 兼容游戏开发模型；模板模式只能调整受支持参数，若当前版本来自 AI 源码开发，服务端会拒绝模板重渲染以避免覆盖玩法。
+- 账号级游戏模型配置仅本地服务开放；云端尚未建对应表，也不参与云端生成。服务端以 Qoder CLI 或自定义 HTTP 网关运行时，账号级模型配置不适用。
 - OpenAI 兼容模型按单次请求计费，超时或输出上限会直接失败；可在配置中调整请求超时、输出 token 上限与修复次数，不会对结果未知的生成请求自动重试。
 - Agent 当前仅支持本机 Node Worker 与自包含 HTML 游戏；未实现云端 Worker、多文件依赖构建或任意命令执行。模型返回的内容只作为 HTML 数据保存与检查，不在宿主机执行。
 - 浏览器检查为画布、按键状态与重启烟测，不能证明用户需求的所有玩法均正确。

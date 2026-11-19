@@ -9,7 +9,7 @@ import type { GameSpec } from '../../functions/shared/spec.ts';
 import { sanitizeTitle } from '../../functions/shared/spec.ts';
 import { retainAttributions } from '../../functions/shared/creation-template.ts';
 import { renderGame } from '../../functions/shared/templates/index.ts';
-import type { Project, Store, TaskRecord, Version } from '../../functions/store.ts';
+import type { GameModelSettings, Project, Store, TaskRecord, Version } from '../../functions/store.ts';
 import type { FileStore } from '../store_file.ts';
 import type { AgentConfig, WorkerInput, WorkerMessage } from './protocol.ts';
 
@@ -38,6 +38,8 @@ export class LocalAgent implements AgentService {
   private locks = new Map<string, Promise<unknown>>();
   private child?: ChildProcess;
   private currentTask?: string;
+  // 当前任务实际使用的模型名，写入版本记录而非仅显示全局默认值。
+  private currentAgentName?: string;
   private stopped = false;
   private pumping = false;
   private idle: Promise<void> = Promise.resolve();
@@ -114,10 +116,14 @@ export class LocalAgent implements AgentService {
       this.currentTask = id;
       try {
         const base = task.baseVersionId ? await this.store.getVersion(task.baseVersionId) : null;
+        // 账号级配置按项目所有者读取；没有账号配置时才回退到服务端环境配置。
+        const account = await this.store.getGameModelSettings(project.ownerToken);
+        const config = this.resolveConfig(account);
+        this.currentAgentName = config.name;
         const input: WorkerInput = {
           prompt: task.prompt, spec: task.baseSpec || project.spec,
           html: base?.html || renderGame(task.baseSpec || project.spec),
-          directory: join(this.directory, task.id), config: this.config, templateOrigin: project.templateOrigin,
+          directory: join(this.directory, task.id), config, templateOrigin: project.templateOrigin,
         };
         await this.execute(task, input);
       } catch {
@@ -126,6 +132,7 @@ export class LocalAgent implements AgentService {
         this.killWorker();
         this.child = undefined;
         this.currentTask = undefined;
+        this.currentAgentName = undefined;
       }
     }
   }
@@ -182,6 +189,18 @@ export class LocalAgent implements AgentService {
     });
   }
 
+  private resolveConfig(account: GameModelSettings | null): AgentConfig {
+    // 只有 openai provider 支持账号级地址、密钥与模型名覆盖；qoder/http 仍用服务端配置。
+    if (this.config.provider !== 'openai' || !account) return this.config;
+    return {
+      ...this.config,
+      apiUrl: account.apiUrl,
+      apiKey: account.apiKey,
+      model: account.model,
+      name: 'OpenAI 兼容（' + account.model + '）',
+    };
+  }
+
   private async commit(task: TaskRecord, result: Extract<WorkerMessage, { type: 'result' }>): Promise<void> {
     const current = await this.store.getProject(task.projectId);
     if (!current) return;
@@ -198,7 +217,7 @@ export class LocalAgent implements AgentService {
       prompt: task.prompt, spec, html: retainAttributions(result.html, current.templateOrigin),
       note: 'v' + ((await this.store.listVersions(current.id)).length + 1),
       generationMode: 'agent', createdAt: now, artifactHash: createHash('sha256').update(retainAttributions(result.html, current.templateOrigin)).digest('hex'),
-      checks: result.checks, agentName: this.name, templateOrigin: current.templateOrigin,
+      checks: result.checks, agentName: this.currentAgentName ?? this.name, templateOrigin: current.templateOrigin,
     };
     const updated = { ...current, currentVersionId: version.id, spec, title: spec.title, updatedAt: now };
     const done: TaskRecord = { ...task, status: 'succeeded', versionId: version.id, finishedAt: now,

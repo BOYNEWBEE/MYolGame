@@ -13,7 +13,7 @@ import { runSeed } from './seed.ts';
 import { runTemplateSeed } from './template-seed.ts';
 import type { Store } from '../functions/store.ts';
 import { LocalAgent, recoverAgentTasks } from './agent/controller.ts';
-import { loadAgentConfig } from './agent/config.ts';
+import { agentAllowLocal, loadAgentConfig } from './agent/config.ts';
 import type { AgentConfig } from './agent/protocol.ts';
 
 export interface LocalServerOptions {
@@ -137,7 +137,19 @@ export async function startLocalServer(options: LocalServerOptions = {}): Promis
   const config = options.agent === false ? undefined : options.agent ?? loadAgentConfig();
   if (config && !(store instanceof FileStore)) throw new Error('本地 Agent 需要使用 FileStore');
   const agent = config ? new LocalAgent(store as FileStore, config, options.sandboxDir ?? join(rootDir, '.sandboxes')) : undefined;
-  const businessHandler = createHandler({ store, env: options.env ?? handlerEnvFromProcess(), agent });
+  const baseEnv = options.env ?? handlerEnvFromProcess();
+  const env: HandlerEnv = {
+    ...baseEnv,
+    agentModel: baseEnv.agentModel ?? {
+      provider: config?.provider ?? null,
+      allowLocal: agentAllowLocal(),
+      // 服务端环境配置仅作为账号级配置缺失时的回退，密钥不会离开服务端。
+      server: config?.provider === 'openai'
+        ? { apiUrl: config.apiUrl, apiKey: config.apiKey, model: config.model }
+        : null,
+    },
+  };
+  const businessHandler = createHandler({ store, env, agent });
   const handler = store instanceof FileStore ? withLocalAccounts(store, businessHandler) : businessHandler;
   let ready = false;
 
