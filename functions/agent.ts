@@ -4,6 +4,9 @@ import type { Project, TaskRecord } from './store.ts';
 
 export interface AgentService {
   name: string;
+  // 实际启用的源码开发提供方式与模型，用于界面如实展示。
+  provider?: string;
+  model?: string | null;
   submit(project: Project, prompt: string, spec: GameSpec): Promise<TaskRecord>;
   cancel(task: TaskRecord): Promise<void>;
   exclusive<T>(projectId: string, action: () => Promise<T>): Promise<T>;

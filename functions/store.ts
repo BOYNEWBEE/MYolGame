@@ -83,6 +83,8 @@ export interface TaskRecord {
   stages: TaskStage[];
   versionId: string | null;
   error: string | null;
+  // 可分类的失败原因，例如 model_auth_failed、model_rate_limited、check_failed。
+  errorCode?: string;
   generationMode: GenerationMode;
   createdAt: string;
   finishedAt: string | null;

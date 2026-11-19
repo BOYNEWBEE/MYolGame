@@ -243,6 +243,11 @@ async function runGenerationTask(
   usePreviewedStyle = false,
 ): Promise<{ task: TaskRecord; version: Version; notes: string[] }> {
   if (project.templateOrigin) throw httpError(409, 'agent_required', '此项目基于社区源码模板，修改需要启用 Agent 源码开发');
+  // AI 版本的真实玩法以源码为准；模板重渲染会覆盖已有修改，必须由源码开发链路继续。
+  const current = project.currentVersionId ? await deps.store.getVersion(project.currentVersionId) : null;
+  if (current?.generationMode === 'agent') {
+    throw httpError(409, 'agent_required', '当前版本由 AI 源码开发产生，模板模式重新渲染会覆盖玩法；请启用源码开发服务后继续修改');
+  }
   const baseSpec = specOverride
     ? sanitizeSpec(specOverride, project.spec)
     : project.spec;
@@ -358,7 +363,13 @@ function buildRoutes(): Route[] {
         json({
           siteName: 'MYolGame',
           generationMode: deps.agent ? 'agent' : modelConfigured(deps.env.model) ? 'model' : 'template',
-          agent: { configured: Boolean(deps.agent), name: deps.agent?.name ?? null },
+          agent: {
+            configured: Boolean(deps.agent),
+            name: deps.agent?.name ?? null,
+            provider: deps.agent?.provider ?? null,
+            model: deps.agent?.model ?? null,
+            sourceDevelopment: Boolean(deps.agent),
+          },
           model: {
             configured: modelConfigured(deps.env.model),
             name: deps.env.model.name ?? null,

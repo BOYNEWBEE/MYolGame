@@ -4,13 +4,21 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { chromium } from 'playwright-core';
+import { chromium, type Browser } from 'playwright-core';
 import { startLocalServer } from '../dev/local-server.ts';
+import { resolveChromePath } from '../dev/chrome.ts';
 
 test('浏览器注册、另一浏览器登录、密码修改和退出', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'myol-account-ui-'));
   const app = await startLocalServer({ port: 0, dataFile: join(dir, 'db.json'), seed: false, agent: false });
-  const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', headless: true });
+  let browser: Browser | undefined;
+  try {
+    browser = await chromium.launch({ executablePath: resolveChromePath(), headless: true });
+  } catch (error) {
+    await app.close();
+    await rm(dir, { recursive: true, force: true });
+    throw error;
+  }
   try {
     const a = await browser.newContext();
     const page = await a.newPage();
@@ -47,5 +55,5 @@ test('浏览器注册、另一浏览器登录、密码修改和退出', async ()
     await other.getByRole('button', { name: '退出登录', exact: true }).click();
     await other.waitForURL('**/projects');
     await other.getByRole('link', { name: '登录 / 注册' }).waitFor();
-  } finally { await browser.close(); await app.close(); await rm(dir, { recursive: true, force: true }); }
+  } finally { await browser?.close(); await app.close(); await rm(dir, { recursive: true, force: true }); }
 });

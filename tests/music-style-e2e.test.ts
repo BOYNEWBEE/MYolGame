@@ -6,15 +6,12 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright-core';
+import { chromium, type Browser } from 'playwright-core';
 import { startLocalServer } from '../dev/local-server.ts';
+import { resolveChromePath } from '../dev/chrome.ts';
 import { FileStore } from '../dev/store_file.ts';
 
-const CHROME_PATH =
-  process.env.MYOLGAME_CHROME_PATH ??
-  (process.platform === 'win32'
-    ? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
-    : '/usr/bin/google-chrome');
+const CHROME_PATH = resolveChromePath();
 const rootDir = fileURLToPath(new URL('..', import.meta.url));
 
 test('账号保存编曲模型后，可选用 AI 编曲并生成带模型参数的实时合成配乐', async () => {
@@ -56,7 +53,16 @@ test('账号保存编曲模型后，可选用 AI 编曲并生成带模型参数�
     distDir: join(rootDir, 'web', 'dist'),
     env: { model: {} },
   });
-  const browser = await chromium.launch({ executablePath: CHROME_PATH, headless: true });
+  let browser: Browser | undefined;
+  try {
+    browser = await chromium.launch({ executablePath: CHROME_PATH, headless: true });
+  } catch (error) {
+    await app.close();
+    chat.closeAllConnections();
+    await new Promise<void>((resolve) => chat.close(() => resolve()));
+    await rm(dir, { recursive: true, force: true });
+    throw error;
+  }
   try {
     const page = await browser.newPage();
     const errors: string[] = [];
@@ -154,7 +160,7 @@ test('账号保存编曲模型后，可选用 AI 编曲并生成带模型参数�
     assert.equal(await guestArranged.isEnabled(), false);
     assert.deepEqual(errors, []);
   } finally {
-    await browser.close();
+    await browser?.close();
     await app.close();
     chat.closeAllConnections();
     await new Promise<void>((resolve) => chat.close(() => resolve()));
@@ -173,7 +179,14 @@ test('未配置编曲模型时，提示词里的钢琴音色也能试听并写�
     distDir: join(rootDir, 'web', 'dist'),
     env: { model: {} },
   });
-  const browser = await chromium.launch({ executablePath: CHROME_PATH, headless: true });
+  let browser: Browser | undefined;
+  try {
+    browser = await chromium.launch({ executablePath: CHROME_PATH, headless: true });
+  } catch (error) {
+    await app.close();
+    await rm(dir, { recursive: true, force: true });
+    throw error;
+  }
   try {
     const page = await browser.newPage();
     const errors: string[] = [];
@@ -232,7 +245,7 @@ test('未配置编曲模型时，提示词里的钢琴音色也能试听并写�
     assert.ok(version?.html.includes('"progression":"suspended"'));
     assert.deepEqual(errors, []);
   } finally {
-    await browser.close();
+    await browser?.close();
     await app.close();
     await rm(dir, { recursive: true, force: true });
   }

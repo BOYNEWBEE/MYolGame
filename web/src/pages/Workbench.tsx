@@ -18,8 +18,34 @@ import type {
 } from '../types.ts';
 
 const activeTask = (task: TaskItem) => ['queued', 'running', 'checking', 'repairing'].includes(task.status);
-const taskLabels: Record<TaskItem['status'], string> = { queued: '排队中', running: '开发中', checking: '检查中', repairing: '修复中', succeeded: '成功', failed: '失败', cancelled: '已取消', timed_out: '已超时' };
-const modeLabel = (mode: string) => mode === 'agent' ? 'Agent 源码开发' : mode === 'model' ? '模型辅助' : '模板生成';
+const taskLabels: Record<TaskItem['status'], string> = {
+  queued: '等待', running: '生成源码', checking: '检查', repairing: '修复',
+  succeeded: '成功', failed: '失败', cancelled: '取消', timed_out: '超时',
+};
+const errorCodeLabels: Record<string, string> = {
+  model_timeout: '模型请求超时',
+  model_auth_failed: '模型鉴权失败',
+  model_rate_limited: '模型服务限流',
+  model_empty_output: '模型返回空内容',
+  model_truncated: '模型输出被截断',
+  model_invalid_response: '模型响应格式异常',
+  model_too_large: '模型响应过大',
+  model_unreachable: '无法连接模型服务',
+  model_not_configured: '模型未配置完整',
+  browser_unavailable: '浏览器检查不可用',
+  invalid_html: '模型未返回完整 HTML',
+  check_failed: '浏览器检查未通过',
+  version_conflict: '版本冲突',
+  timeout: '任务超时',
+  worker_failed: 'Worker 异常',
+  interrupted: '服务重启中断',
+  cancelled: '任务取消',
+};
+const modeLabel = (mode: string) =>
+  mode === 'agent' ? 'AI 源码开发' : mode === 'model' ? '模型辅助规格' : '模板生成';
+const errorText = (task: TaskItem) =>
+  (task.errorCode ? '[' + (errorCodeLabels[task.errorCode] ?? task.errorCode) + '] ' : '') + (task.error ?? '');
+const isAgentVersion = (version?: VersionSummary | null) => version?.generationMode === 'agent';
 
 interface ProjectDetail {
   project: ProjectSummary;
@@ -62,9 +88,9 @@ export default function Workbench(): ReactNode {
         observedTask.current = null;
         if (completed.status === 'succeeded' && completed.versionId) {
           setPreviewVersionId(completed.versionId);
-          setNotice('新版本已生成，请试玩确认需求。');
+          setNotice('新版本已生成，请试玩确认需求。浏览器烟测只代表基础运行正常。');
         } else {
-          setError(completed.error || taskLabels[completed.status]);
+          setError(errorText(completed));
         }
       }
       if (pending && !observedTask.current) observedTask.current = data.tasks.find(activeTask)!.id;
@@ -100,6 +126,11 @@ export default function Workbench(): ReactNode {
 
   async function generate(basePrompt: string): Promise<void> {
     if (detail?.project.templateOrigin && !meta?.agent?.configured) { setError('此项目的修改需要启用 Agent 源码开发'); return; }
+    const currentVersion = detail?.versions.find((v) => v.id === detail.project.currentVersionId);
+    if (isAgentVersion(currentVersion) && !meta?.agent?.configured) {
+      setError('当前版本由 AI 源码开发产生，模板模式重新渲染会覆盖已有玩法；请启用源码开发服务后继续修改。');
+      return;
+    }
     if (!id || requestInFlight.current || processing || !basePrompt.trim()) return;
     requestInFlight.current = true;
     setGenerating(true);
@@ -215,11 +246,14 @@ export default function Workbench(): ReactNode {
 
   const { project, versions, messages, tasks } = detail;
   const orderedVersions = [...versions].reverse();
+  const currentVersion = versions.find((v) => v.id === project.currentVersionId);
   const previewVersion =
     versions.find((v) => v.id === previewVersionId) ??
-    versions.find((v) => v.id === project.currentVersionId) ??
+    currentVersion ??
     versions[versions.length - 1];
   const lastTask = tasks[0];
+  const sourceMode = Boolean(meta?.agent?.configured);
+  const agentName = meta?.agent?.name || '源码开发模型';
 
   return (
     <div className="page workbench-page">
@@ -231,9 +265,11 @@ export default function Workbench(): ReactNode {
               {project.visibility === 'public' ? '已发布到社区' : '私有草稿'}
             </span>
             <GenerationBadge mode={previewVersion?.generationMode ?? 'template'} />
-            {meta?.generationMode === 'template' && (
-              <span className="muted small">平台处于模板模式（未配置真实模型）</span>
-            )}
+            <span className="muted small">
+              {sourceMode
+                ? 'AI 源码开发模式 · ' + agentName + (meta?.agent?.model ? ' · ' + meta.agent.model : '')
+                : '模板模式 · 只能调整受支持参数'}
+            </span>
           </div>
         </div>
         <div className="detail-actions">
@@ -260,7 +296,18 @@ export default function Workbench(): ReactNode {
         </div>
       )}
 
-      {project.templateOrigin && <div className="panel template-origin"><span>来源：<Link to={'/templates/' + project.templateOrigin.templateId}>{project.templateOrigin.title}</Link> · {project.templateOrigin.versionLabel} · MIT · 独立私有副本</span>{!meta?.agent?.configured && <p className="panel-note">当前未启用源码开发，仍可试玩、下载和发布；启用 Agent 后可继续修改。</p>}</div>}
+      {project.templateOrigin && <div className="panel template-origin"><span>来源：<Link to={'/templates/' + project.templateOrigin.templateId}>{project.templateOrigin.title}</Link> · {project.templateOrigin.versionLabel} · MIT · 独立私有副本</span>{!meta?.agent?.configured && <p className="panel-note">当前未启用源码开发，仍可试玩、下载和发布；启用后可在现有源码上继续修改。</p>}</div>}
+      <div className={'mode-banner ' + (sourceMode ? 'agent' : 'template')} role="status">
+        <strong>{sourceMode ? 'AI 源码开发模式' : '模板模式'}</strong>
+        <span>
+          {sourceMode
+            ? '提交需求后由 ' + agentName + (meta?.agent?.model ? '（' + meta.agent.model + '）' : '') +
+              ' 修改当前有效版本的完整源码，先做隔离浏览器烟测，通过后才保存为新版本。'
+            : isAgentVersion(currentVersion)
+              ? '当前有效版本来自 AI 源码开发。模板模式不能安全地继续修改它：服务端会拒绝模板重渲染，避免覆盖已有玩法；请启用源码开发服务后再提交需求。'
+              : '当前只能调整速度、难度、主题、玩法选项和配乐等受支持参数；新增关卡或敌人等源码级需求需要启用源码开发服务。'}
+        </span>
+      </div>
       <div className="workbench-layout">
         <section className="panel chat-panel">
           <h2>创作对话</h2>
@@ -284,21 +331,23 @@ export default function Workbench(): ReactNode {
               rows={3}
               value={prompt}
               maxLength={meta?.limits.promptMaxLength ?? 2000}
-              placeholder="提出修改需求，例如：换成糖果主题、难度改为困难、开启穿墙、名字叫《小蛇快跑》"
+              placeholder={sourceMode
+                ? '提出源码修改需求，例如：打砖块增加第二关，第一关清空后进入第二关，第二关砖块耐久为两次，重新开始恢复第一关'
+                : '提出参数修改，例如：换成糖果主题、难度改为困难、开启穿墙、名字叫《小蛇快跑》'}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void generate(prompt);
               }}
             />
             <div className="chat-actions">
-              <span className="muted small">Ctrl/Cmd + Enter 快速生成</span>
+              <span className="muted small">Ctrl/Cmd + Enter 快速提交</span>
               <button
                 type="button"
                 className="btn primary"
                 disabled={generating || processing || !prompt.trim()}
                 onClick={() => void generate(prompt)}
               >
-                {generating || processing ? '生成中…' : '生成新版本'}
+                {generating || processing ? '处理中…' : sourceMode ? '提交源码修改' : '生成新版本'}
               </button>
             </div>
           </div>
@@ -309,8 +358,17 @@ export default function Workbench(): ReactNode {
                 {modeLabel(lastTask.generationMode)} ·{' '}
                 {new Date(lastTask.createdAt).toLocaleString('zh-CN')}
               </summary>
+              {processing && (
+                <div className="stage-live" role="status">
+                  <span className="spinner small" />
+                  <span>
+                    {taskLabels[lastTask.status]}
+                    {lastTask.stages.length > 0 && ' · ' + lastTask.stages[lastTask.stages.length - 1]!.name}
+                  </span>
+                </div>
+              )}
               {processing && <button className="btn small" type="button" onClick={() => void cancel()}>取消任务</button>}
-              {lastTask.error && <p role="alert">{lastTask.error}</p>}
+              {!processing && lastTask.status !== 'succeeded' && lastTask.error && <p role="alert">{errorText(lastTask)}</p>}
               <ol>
                 {lastTask.stages.map((stage, i) => (
                   <li key={i} className={stage.ok ? 'ok' : 'bad'}>
@@ -391,7 +449,11 @@ export default function Workbench(): ReactNode {
                       </span>
                     </div>
                   </div>
-                  {v.checks && <p className="muted small">浏览器烟测通过：画布、按键、重启</p>}
+                  {v.checks && (
+                    <p className="muted small">
+                      浏览器烟测通过：画布、按键、重启（仅代表基础运行正常，不代表所有需求均已实现）
+                    </p>
+                  )}
                   <div className="version-actions">
                     <button type="button" className="btn tiny" onClick={() => setPreviewVersionId(v.id)}>
                       预览

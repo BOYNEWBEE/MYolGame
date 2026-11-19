@@ -11,6 +11,7 @@
 - 浏览器内置合成配乐：提示词里的乐器与情绪关键词直接切换音色、调性与旋律，不依赖外部音乐接口；
 - 可选的 AI 编曲：配置 OpenAI 兼容模型后，模型只输出受限的音乐风格参数，用于调整浏览器内置霓虹合成配乐的 BPM、和弦与音色，不生成或执行代码；
 - 可选的本地 Agent 源码开发：异步任务、独立 Worker、单文件源码修改、浏览器烟测、失败修复、取消与版本回退；
+- 可选的 OpenAI 兼容游戏开发模型：直接修改当前有效版本的完整 HTML/JavaScript，首次以所选模板源码为基底，回退后从回退版本继续；与 AI 编曲模型分开配置；
 - 社区首页、创作页、工作台、我的项目、我的收藏、游戏详情与试玩；
 - 本地文件持久化、账号注册／登录／密码修改，以及游客身份；
 - 源码包 ZIP、单文件 HTML 下载；
@@ -74,6 +75,41 @@ npm run dev:agent
 模型失败会记录失败并保留旧版本，不会伪装成 Agent 成功或回退模板。
 也支持接入自定义 HTTP Agent 服务，配置、协议与运行边界见 [Agent 后端说明](docs/Agent后端.md)。
 
+### OpenAI 兼容游戏开发模型
+
+希望由通用模型直接修改游戏源码时，在服务端配置游戏开发模型（管理员配置，不接受浏览器传入密钥）：
+
+```bash
+# Windows PowerShell
+$env:MYOLGAME_AGENT_PROVIDER = "openai"
+$env:MYOLGAME_AGENT_API_URL = "https://api.example.com/v1"
+$env:MYOLGAME_AGENT_API_KEY = "服务端密钥"
+$env:MYOLGAME_AGENT_MODEL = "your-model-name"
+$env:MYOLGAME_CHROME_PATH = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+npm run dev
+```
+
+```bash
+# macOS / Linux
+export MYOLGAME_AGENT_PROVIDER=openai
+export MYOLGAME_AGENT_API_URL=https://api.example.com/v1
+export MYOLGAME_AGENT_API_KEY=服务端密钥
+export MYOLGAME_AGENT_MODEL=your-model-name
+npm run dev
+```
+
+也可使用 `npm run dev:openai`（只预设 provider，其余变量仍需在 shell 中设置）。地址可填基址、`/v1` 基址或完整 `/chat/completions` 地址；无路径基址仅在首个地址返回 404 时补试 `/v1/chat/completions`。可用变量还包括 `MYOLGAME_AGENT_REQUEST_TIMEOUT_MS`、`MYOLGAME_AGENT_MAX_REPAIRS`（0–3）、`MYOLGAME_AGENT_MAX_OUTPUT_TOKENS`、`MYOLGAME_AGENT_MAX_RESPONSE_BYTES` 与 `MYOLGAME_AGENT_ALLOW_LOCAL=1`（仅本机回环 HTTP 调试时使用）。示例见 `.env.example`；该文件不会自动加载。
+
+界面操作：
+
+1. 打开「创作新游戏」，确认顶部显示「AI 源码开发模式」及当前模型。填写需求，例如“打砖块增加第二关，第一关清空后进入第二关，第二关砖块耐久为两次，重新开始恢复第一关”，再生成。
+2. 进入工作台后，「最近任务」会展示等待、生成源码、检查、修复、成功或失败的真实阶段；成功后试玩预览，并在版本历史查看需求与烟测结果。
+3. 在同一输入框继续提交源码修改，按钮显示「提交源码修改」。新版本以上一有效版本源码为基础；回退到旧版本后，下一次修改以该回退版本为基础。
+4. 失败、取消或超时不会替换当前版本；模型请求失败不会自动重试，只有非法 HTML 或浏览器检查失败才会在修复次数内继续。
+5. 可下载当前预览版本的 HTML 或源码包。浏览器烟测只代表画布、按键与重启的基础运行正常，不代表所有需求均已实现。
+
+密钥只保存在服务端进程环境；不进入前端、日志、Git、导出源码或错误响应。
+
 ## 验证
 
 ```bash
@@ -82,7 +118,7 @@ npm run build
 npm test
 ```
 
-测试使用系统 Chrome（`/usr/bin/google-chrome`）与 `playwright-core`，覆盖：
+测试使用系统 Chrome（优先 `MYOLGAME_CHROME_PATH`，否则按平台查找 Chrome/Edge）与 `playwright-core`，覆盖：
 
 - 首页浏览与进入游戏详情；
 - 三种内置游戏在真实 Chrome 中启动，空格/方向键/R 操作后 Canvas HUD 与画面持续渲染，并收集页面错误；
@@ -92,6 +128,8 @@ npm test
 - 私有项目他人无法访问；
 - 提示词解析、ZIP/源码包、handler 权限、FileStore 持久化；
 - Agent 异步源码生成、二次修改、检查后修复、取消、超时、回退冲突、重启恢复和私有预览资源限制；
+- OpenAI 兼容假模型：请求地址／鉴权／模型名／输出上限、纯 HTML 与 Markdown 提取、首次带模板源码、二次带上一有效版本源码、回退后使用回退版本、检查失败修复、超时／401／429／空输出／截断／非法响应、取消与并发 409、密钥不出现在响应与产物；
+- 数据文件损坏停止启动且不覆盖原文件、Windows `npm.cmd` 启动、`with-env` 跨平台变量传递与浏览器路径解析；
 - 社区模板发布、参数约束、跨会话套用、源码继承、许可导出、上下架与副本隔离；
 - 编曲模型：风格参数钳制与白名单、OpenAI 兼容地址归一化与无路径基址的 `/v1` 回退、代码块 JSON 提取、上游失败／非 JSON／无关字段回退、仅霓虹街机调用、账号级编曲配置的保存、掩码、隔离、环境变量回退与生成接入，以及试听参数复用。
 - 创作页试听：编曲试听接口返回模型参数并由 iframe 实际播放，真实 Chrome 确认参数展示与生成时不再重复请求模型；未配置模型时关键词试听与生成保持一致。
@@ -101,8 +139,9 @@ npm test
 
 ## 限制说明
 
-- 默认启动为**模板模式**；`npm run dev:agent` 使用本机 Qoder CLI，需安装、登录且能访问其模型服务。版本分别标记模板、模型辅助或 Agent 源码开发。
-- Agent 当前仅支持本机 Node Worker 与自包含 HTML 游戏；未实现云端 Worker、多文件依赖构建或任意命令执行。
+- 默认启动为**模板模式**；`npm run dev:agent` 使用本机 Qoder CLI，配置 `MYOLGAME_AGENT_PROVIDER=openai` 后改用 OpenAI 兼容游戏开发模型；模板模式只能调整受支持参数，若当前版本来自 AI 源码开发，服务端会拒绝模板重渲染以避免覆盖玩法。
+- OpenAI 兼容模型按单次请求计费，超时或输出上限会直接失败；可在配置中调整请求超时、输出 token 上限与修复次数，不会对结果未知的生成请求自动重试。
+- Agent 当前仅支持本机 Node Worker 与自包含 HTML 游戏；未实现云端 Worker、多文件依赖构建或任意命令执行。模型返回的内容只作为 HTML 数据保存与检查，不在宿主机执行。
 - 浏览器检查为画布、按键状态与重启烟测，不能证明用户需求的所有玩法均正确。
 - 本地版支持**用户名＋密码**注册登录，入口为顶部“登录 / 注册”或 `/account`；游客项目、收藏及模板在注册或登录时自动合并，旧游客令牌撤销。同一本地服务内可跨浏览器登录。账号、密码哈希和会话保存在 `data/db.json`，请保护并备份该文件；不要提交到 Git。密码为 8–128 位，使用带随机盐的 scrypt 哈希；登录 Cookie 为 HttpOnly、SameSite=Strict，有效期 7 天。支持退出当前登录、修改密码并撤销所有登录；暂不提供邮件验证、忘记密码恢复、管理员账号面板。云端入口使用独立的邮箱账号模块，两个账号存储不自动同步。
 - 云端 M0 需 Qoder `function_backend`、当前注入 SDK 和应用凭据透传支持；独立云端调度调用消费接口。迁移和发布已完成；公网双账号业务验收和后台调度运行仍待完成。

@@ -70,6 +70,7 @@ export interface TaskItem {
   stages: TaskStage[];
   versionId: string | null;
   error: string | null;
+  errorCode?: string;
   generationMode: GenerationMode;
   createdAt: string;
   finishedAt: string | null;

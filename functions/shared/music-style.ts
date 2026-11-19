@@ -1,7 +1,10 @@
 // OpenAI 兼容的编曲模型：只输出受限的音乐风格参数，不生成或执行任何浏览器代码。
 // 模型失败、超时或输出不合法时返回 null，由调用方回退到默认合成配乐。
 
+import { LOOPBACK_HOSTS, chatCompletionsUrls } from './openai.ts';
 import { applyPromptStyle, promptMood, promptSeed, sanitizeMusicStyle, type GameSpec, type MusicStyle } from './spec.ts';
+
+export { chatCompletionsUrl, chatCompletionsUrls } from './openai.ts';
 
 export interface MusicStyleEnv {
   apiUrl?: string;
@@ -14,7 +17,6 @@ const MAX_API_KEY = 512;
 const MAX_MODEL = 64;
 const REQUEST_TIMEOUT_MS = 20000;
 const MAX_RESPONSE_CHARS = 64 * 1024;
-const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
 const STYLE_KEYS = [
   'bpm', 'progression', 'transpose', 'leadWave', 'bassWave', 'kickWave',
@@ -38,28 +40,6 @@ const SYSTEM_PROMPT = [
 
 export function musicStyleConfigured(env: MusicStyleEnv | undefined): boolean {
   return Boolean(env?.apiUrl && env.apiKey && env.model);
-}
-
-// 兼容填基址、/v1 基址或完整 /chat/completions 地址；DeepSeek 基址为 https://api.deepseek.com。
-export function chatCompletionsUrl(apiUrl: string): string {
-  const trimmed = apiUrl.trim().replace(/\/+$/, '');
-  return /\/chat\/completions$/.test(trimmed) ? trimmed : trimmed + '/chat/completions';
-}
-
-// 无路径基址再补一个 /v1 备选：OpenAI 等服务必须带版本前缀，DeepSeek 两种都可用。
-// 仅在首个地址返回 404 时才尝试，避免正常请求产生额外调用。
-export function chatCompletionsUrls(apiUrl: string): string[] {
-  const trimmed = apiUrl.trim().replace(/\/+$/, '');
-  if (/\/chat\/completions$/.test(trimmed)) return [trimmed];
-  const primary = trimmed + '/chat/completions';
-  try {
-    if (!new URL(trimmed).pathname.replace(/\/+$/, '')) {
-      return [primary, trimmed + '/v1/chat/completions'];
-    }
-  } catch {
-    // 非法地址交给请求阶段返回 style_failed。
-  }
-  return [primary];
 }
 
 export type MusicStyleSettingsParse =

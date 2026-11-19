@@ -109,6 +109,10 @@ export default function Create(): ReactNode {
   const synthMusic = resolvedMusic === 'neon-arcade' || resolvedMusic === 'ai-arranged';
   const hasPrompt = Boolean(prompt.trim());
   const activeTemplate = TEMPLATES.find((t) => t.id === template)!;
+  const sourceMode = Boolean(meta?.agent?.configured);
+  const agentName = meta?.agent?.name || '源码开发模型';
+  const agentModel = meta?.agent?.model;
+  const agentProvider = meta?.agent?.provider;
   const promptOverridesSettings = hasPrompt && (
     parsed.spec.template !== template ||
     parsed.spec.theme !== theme ||
@@ -213,14 +217,16 @@ export default function Create(): ReactNode {
       <div className="page-head">
         <h1>创作新游戏</h1>
         <p><Link to="/templates">也可以从社区模板开始 →</Link></p>
-        <p className="muted">
-          选择玩法与参数，也可以填写提示词补充需求。
-          {meta?.generationMode === 'agent'
-            ? 'Agent 将根据需求开发源码，完成后请试玩确认。'
-            : meta?.generationMode === 'model'
-            ? '当前已配置真实模型辅助调整规格。'
-            : '当前使用内置模板生成。'}
-        </p>
+      </div>
+
+      <div className={'mode-banner ' + (sourceMode ? 'agent' : 'template')} role="status">
+        <strong>{sourceMode ? 'AI 源码开发模式' : '模板模式'}</strong>
+        <span>
+          {sourceMode
+            ? '由 ' + agentName + (agentModel ? '（' + (agentProvider === 'openai' ? 'OpenAI 兼容' : agentProvider) + ' · ' + agentModel + '）' : '') +
+              ' 直接修改 HTML/JavaScript。首次以所选模板源码为基底，后续继续在上一有效版本上修改；完成后先做浏览器烟测，再保存为新版本。'
+            : '未启用源码开发服务：当前只能调整速度、难度、主题、玩法选项和配乐等受支持参数，不能新增第二关、追踪敌人的敌人等源码级玩法。需要这些能力时请由管理员配置游戏开发模型后重启服务。'}
+        </span>
       </div>
 
       <div className="create-layout">
@@ -232,15 +238,19 @@ export default function Create(): ReactNode {
               maxLength={meta?.limits.promptMaxLength ?? 2000}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="例如：复古像素贪吃蛇，简单上手，可以穿墙"
+              placeholder={sourceMode
+                ? '例如：打砖块增加第二关，第一关清空后进入第二关，第二关砖块耐久为两次，重新开始恢复第一关'
+                : '例如：复古像素贪吃蛇，简单上手，可以穿墙'}
               aria-describedby="create-prompt-help"
             />
           </label>
           <div className="prompt-help">
             <p id="create-prompt-help" className="panel-note" role="status">
-              {promptOverridesSettings
-                ? '提示词覆盖了部分手动设置，实际采用的参数见生成预览。'
-                : '提示词中识别出的参数优先。留空时按手动设置生成。'}
+              {sourceMode
+                ? '需求会交给模型修改完整源码；未要求删除的原有玩法会保留。'
+                : promptOverridesSettings
+                  ? '提示词覆盖了部分手动设置，实际采用的参数见生成预览。'
+                  : '模板模式只解析速度、难度、主题、玩法选项等关键词。'}
             </p>
             {hasPrompt && (
               <button type="button" className="btn small" onClick={() => setPrompt('')}>
@@ -474,7 +484,9 @@ export default function Create(): ReactNode {
         <aside className="panel preview-panel">
           <h2>生成预览</h2>
           <p className="panel-note">
-            {meta?.generationMode === 'agent' ? '以下为起始模板参考，最终玩法以 Agent 开发后的试玩结果为准。' : '以下为浏览器端用与服务器相同的规则实时解析的结果，最终以服务端生成为准。'}
+            {sourceMode
+              ? '以下为起始模板参考；最终玩法以模型修改后的源码和工作台试玩结果为准。'
+              : '以下为浏览器端用与服务器相同的规则实时解析的结果；模板模式只覆盖受支持参数。'}
           </p>
           <Cover spec={parsed.spec} className="cover preview-cover" />
           <h3>{parsed.spec.title}</h3>
@@ -490,6 +502,11 @@ export default function Create(): ReactNode {
             </div>
           )}
           <GenerationBadge mode={meta?.generationMode ?? 'template'} />
+          <p className="panel-note">
+            {sourceMode
+              ? '源码开发：' + agentName + (agentModel ? ' · ' + agentModel : '')
+              : '模板模式：只能调整受支持参数'}
+          </p>
         </aside>
       </div>
     </div>

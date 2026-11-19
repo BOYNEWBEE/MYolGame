@@ -6,9 +6,10 @@ import { readFile, mkdtemp, rm } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, extname } from 'node:path';
-import { chromium } from 'playwright-core';
+import { chromium, type Browser } from 'playwright-core';
 import { createM0Application } from '../functions/m0/app.ts';
 import { tick } from '../functions/m0/tasks.ts';
+import { resolveChromePath } from '../dev/chrome.ts';
 import { M0TestDatabase } from './helpers/m0-db.ts';
 
 test('M0 HTTPS 邮箱登录、关闭页面后任务推进、刷新恢复和 SSE 进度', async () => {
@@ -34,7 +35,14 @@ test('M0 HTTPS 邮箱登录、关闭页面后任务推进、刷新恢复和 SSE 
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   origin = 'https://127.0.0.1:' + (server.address() as { port: number }).port;
-  const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', headless: true });
+  let browser: Browser | undefined;
+  try {
+    browser = await chromium.launch({ executablePath: resolveChromePath(), headless: true });
+  } catch (error) {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+    await rm(dir, { recursive: true, force: true });
+    throw error;
+  }
   try {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const page = await context.newPage();
@@ -70,6 +78,6 @@ test('M0 HTTPS 邮箱登录、关闭页面后任务推进、刷新恢复和 SSE 
     await login.waitForURL('**/m0');
     await login.getByRole('heading', { name: '模拟进度：模拟完成' }).waitFor();
   } finally {
-    await browser.close(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(dir, { recursive: true, force: true });
+    await browser?.close(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(dir, { recursive: true, force: true });
   }
 });

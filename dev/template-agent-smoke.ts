@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FileStore } from './store_file.ts';
 import { startLocalServer } from './local-server.ts';
+import { resolveChromePath } from './chrome.ts';
 import { runTemplateSeed } from './template-seed.ts';
 import type { Project, TaskRecord } from '../functions/store.ts';
 
@@ -14,7 +15,7 @@ if (!process.argv.includes('--allow-external-source')) {
 const dir = await mkdtemp(join(tmpdir(), 'myol-template-qoder-'));
 const store = new FileStore(join(dir, 'db.json'));
 const app = await startLocalServer({ port: 0, store, seed: false, sandboxDir: join(dir, 'sandboxes'),
-  agent: { provider: 'qoder', name: 'Qoder CLI', timeoutMs: 180000, maxAttempts: 2, chromePath: '/usr/bin/google-chrome' } });
+  agent: { provider: 'qoder', name: 'Qoder CLI', timeoutMs: 180000, maxAttempts: 2, chromePath: resolveChromePath() } });
 let token = '';
 async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const response = await fetch(app.url + '/api' + path, { method,

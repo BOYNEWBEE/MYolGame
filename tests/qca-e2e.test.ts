@@ -4,13 +4,21 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { chromium } from 'playwright-core';
+import { chromium, type Browser } from 'playwright-core';
 import { startQcaLab } from '../dev/qca-lab.ts';
+import { resolveChromePath } from '../dev/chrome.ts';
 
 test('QCA 实验页面：一次提交、关闭页面、恢复同一任务并试玩保存的候选', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'myol-qca-'));
   const lab = await startQcaLab({ directory: dir, autoComplete: false });
-  const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', headless: true });
+  let browser: Browser | undefined;
+  try {
+    browser = await chromium.launch({ executablePath: resolveChromePath(), headless: true });
+  } catch (error) {
+    await lab.close();
+    await rm(dir, { recursive: true, force: true });
+    throw error;
+  }
   try {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const page = await context.newPage();
@@ -37,13 +45,20 @@ test('QCA 实验页面：一次提交、关闭页面、恢复同一任务并试�
     await reopened.reload();
     await reopened.getByRole('heading', { name: '状态：结果已保存', exact: true }).waitFor();
     assert.equal(lab.cloud.calls.filter(c => c.method === 'POST' && c.path.endsWith('/events')).length, 1);
-  } finally { await browser.close(); await lab.close(); await rm(dir, { recursive: true, force: true }); }
+  } finally { await browser?.close(); await lab.close(); await rm(dir, { recursive: true, force: true }); }
 });
 
 test('已有 Cookie 但页面误判未登录时，登录冲突会同步真实身份且不重发密码', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'myol-qca-session-'));
   const lab = await startQcaLab({ directory: dir });
-  const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', headless: true });
+  let browser: Browser | undefined;
+  try {
+    browser = await chromium.launch({ executablePath: resolveChromePath(), headless: true });
+  } catch (error) {
+    await lab.close();
+    await rm(dir, { recursive: true, force: true });
+    throw error;
+  }
   try {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const registered = await context.request.post(lab.origin + '/functions/v1/app/api/auth/register', {
@@ -72,13 +87,20 @@ test('已有 Cookie 但页面误判未登录时，登录冲突会同步真实身
     await page.waitForURL('**/m0');
     await page.getByText('请先登录邮箱账号再创建任务。', { exact: true }).waitFor();
     assert.equal(loginCalls, 1);
-  } finally { await browser.close(); await lab.close(); await rm(dir, { recursive: true, force: true }); }
+  } finally { await browser?.close(); await lab.close(); await rm(dir, { recursive: true, force: true }); }
 });
 
 test('旧任务模型不可用时，选择目录模型继续原任务，不创建第三个任务', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'myol-qca-model-'));
   const lab = await startQcaLab({ directory: dir, autoComplete: false });
-  const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', headless: true });
+  let browser: Browser | undefined;
+  try {
+    browser = await chromium.launch({ executablePath: resolveChromePath(), headless: true });
+  } catch (error) {
+    await lab.close();
+    await rm(dir, { recursive: true, force: true });
+    throw error;
+  }
   try {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     const auth = await context.request.post(lab.origin + '/functions/v1/app/api/auth/register', {
@@ -102,5 +124,5 @@ test('旧任务模型不可用时，选择目录模型继续原任务，不创�
     assert.equal(lab.cloud.resources.agents[0].model, 'actual-enabled-model');
     lab.cloud.completeAll();
     await page.getByRole('heading', { name: '状态：结果已保存', exact: true }).waitFor();
-  } finally { await browser.close(); await lab.close(); await rm(dir, { recursive: true, force: true }); }
+  } finally { await browser?.close(); await lab.close(); await rm(dir, { recursive: true, force: true }); }
 });

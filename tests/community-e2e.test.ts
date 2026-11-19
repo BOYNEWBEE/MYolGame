@@ -6,8 +6,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { chromium } from 'playwright-core';
+import { chromium, type Browser } from 'playwright-core';
 import { startLocalServer } from '../dev/local-server.ts';
+import { resolveChromePath } from '../dev/chrome.ts';
 import { FileStore } from '../dev/store_file.ts';
 import type { TaskRecord } from '../functions/store.ts';
 
@@ -33,8 +34,17 @@ test('作者发布可调模板，另一会话搜索试玩并由 Agent 基于源�
   const store = new FileStore(join(dir, 'db.json'));
   const app = await startLocalServer({ port: 0, store, seed: false, sandboxDir: join(dir, 'sandboxes'),
     agent: { provider: 'http', name: '受控模板 Agent', apiUrl: 'http://127.0.0.1:' + (gateway.address() as { port: number }).port,
-      apiKey: 'synthetic-test-key', timeoutMs: 30000, maxAttempts: 1, chromePath: '/usr/bin/google-chrome' } });
-  const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', headless: true });
+      apiKey: 'synthetic-test-key', timeoutMs: 30000, maxAttempts: 1, chromePath: resolveChromePath() } });
+  let browser: Browser | undefined;
+  try {
+    browser = await chromium.launch({ executablePath: resolveChromePath(), headless: true });
+  } catch (error) {
+    await app.close();
+    gateway.closeAllConnections();
+    await new Promise<void>((resolve) => gateway.close(() => resolve()));
+    await rm(dir, { recursive: true, force: true });
+    throw error;
+  }
   const api = (path: string, method = 'GET', body?: unknown, token = '') => fetch(app.url + '/api' + path, {
     method, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -86,20 +96,20 @@ test('作者发布可调模板，另一会话搜索试玩并由 Agent 基于源�
     await page.getByRole('searchbox', { name: '搜索创作模板' }).fill('森林');
     await page.getByRole('button', { name: '搜索', exact: true }).click();
     await page.getByRole('link', { name: '怪兽伙伴 · 森林肉鸽', exact: true }).waitFor();
-    await page.screenshot({ path: '/tmp/myol-community-list.png', fullPage: true, animations: 'disabled' });
+    await page.screenshot({ path: join(tmpdir(), 'myol-community-list.png'), fullPage: true, animations: 'disabled' });
     await page.getByRole('link', { name: '怪兽伙伴 · 森林肉鸽', exact: true }).click();
     await page.frameLocator('.sandbox-frame iframe').locator('canvas').waitFor();
     await page.locator('.page').evaluate(async (element) => { await Promise.all(element.getAnimations().map((animation) => animation.finished.catch(() => {}))); });
     await page.getByLabel('单局时长').fill('180');
     await page.getByLabel('游戏难度').selectOption('困难');
     await page.getByLabel('补充你的创意').fill('加入森林伙伴');
-    await page.screenshot({ path: '/tmp/myol-community-detail.png', fullPage: true, animations: 'disabled' });
+    await page.screenshot({ path: join(tmpdir(), 'myol-community-detail.png'), fullPage: true, animations: 'disabled' });
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, '窄屏模板详情不应横向溢出');
     const navigation = page.getByRole('link', { name: '社区模板', exact: true });
     const navBox = await navigation.boundingBox();
     assert.ok(navBox && navBox.width > navBox.height, '手机导航不应被挤成竖排');
-    await page.screenshot({ path: '/tmp/myol-community-mobile.png', fullPage: true, animations: 'disabled' });
+    await page.screenshot({ path: join(tmpdir(), 'myol-community-mobile.png'), fullPage: true, animations: 'disabled' });
     await page.setViewportSize({ width: 1440, height: 1100 });
     await page.getByRole('button', { name: '按参数创建并生成' }).click();
     await page.waitForURL('**/projects/*');
@@ -134,7 +144,7 @@ test('作者发布可调模板，另一会话搜索试玩并由 Agent 基于源�
     await authorPage.getByRole('button', { name: '重新上架模板' }).click();
     await authorPage.getByRole('button', { name: '下架此模板' }).waitFor();
     assert.equal((await api('/templates/' + template.id)).status, 200);
-    await page.screenshot({ path: '/tmp/myol-community-workbench.png', fullPage: true, animations: 'disabled' });
+    await page.screenshot({ path: join(tmpdir(), 'myol-community-workbench.png'), fullPage: true, animations: 'disabled' });
     assert.deepEqual(errors, []);
   } finally {
     await browser.close(); await app.close();

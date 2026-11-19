@@ -1,20 +1,33 @@
 // 在独立 Chrome 沙箱与无凭据上下文中执行游戏；阻止网络、弹窗、下载与外部导航。
 import { createHash } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
-import { chromium } from 'playwright-core';
+import { chromium, type Browser, type BrowserContext } from 'playwright-core';
 import { GAME_CSP, validateArtifact } from '../../functions/shared/artifact.ts';
 import type { ArtifactChecks } from '../../functions/store.ts';
+import { BrowserUnavailableError, errorMessage } from './errors.ts';
 
 export async function checkGame(html: string, chromePath: string, screenshotPath: string): Promise<ArtifactChecks> {
+  // 产物问题可由模型修复；浏览器无法启动属于基础设施问题，不应继续请求模型。
   validateArtifact(html);
-  const browser = await chromium.launch({
-    executablePath: chromePath, headless: true, chromiumSandbox: true,
-    args: ['--disable-dev-shm-usage', '--js-flags=--max-old-space-size=128'],
-  });
+  let browser: Browser;
   try {
-    const context = await browser.newContext({
+    browser = await chromium.launch({
+      executablePath: chromePath, headless: true, chromiumSandbox: true,
+      args: ['--disable-dev-shm-usage', '--js-flags=--max-old-space-size=128'],
+    });
+  } catch (error) {
+    throw new BrowserUnavailableError('浏览器检查启动失败：' + errorMessage(error, '未知错误', 200));
+  }
+  let context: BrowserContext;
+  try {
+    context = await browser.newContext({
       viewport: { width: 960, height: 720 }, serviceWorkers: 'block', acceptDownloads: false,
     });
+  } catch (error) {
+    await browser.close();
+    throw new BrowserUnavailableError('浏览器检查环境创建失败：' + errorMessage(error, '未知错误', 200));
+  }
+  try {
     const errors: string[] = [];
     const url = 'https://myolgame.invalid/index.html';
     let served = false;

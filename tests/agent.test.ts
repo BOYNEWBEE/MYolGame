@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { chromium } from 'playwright-core';
 import { startLocalServer } from '../dev/local-server.ts';
+import { resolveChromePath } from '../dev/chrome.ts';
 import { FileStore } from '../dev/store_file.ts';
 import { LocalAgent } from '../dev/agent/controller.ts';
 import type { TaskRecord, Version } from '../functions/store.ts';
@@ -39,7 +40,7 @@ async function fixture(reply: (prompt: string, call: number) => Promise<string> 
   await new Promise<void>((resolve) => gateway.listen(0, '127.0.0.1', resolve));
   const config: AgentConfig = { provider: 'http', name: '受控测试 Agent', apiKey: 'test-key',
     apiUrl: 'http://127.0.0.1:' + (gateway.address() as { port: number }).port,
-    timeoutMs, maxAttempts, chromePath: '/usr/bin/google-chrome' };
+    timeoutMs, maxAttempts, chromePath: resolveChromePath() };
   const store = new FileStore(join(dir, 'db.json'));
   const app = await startLocalServer({ port: 0, store, seed: false, agent: config,
     sandboxDir: join(dir, 'sandboxes') });
@@ -115,10 +116,13 @@ test('异步源码开发、真实 Chrome 检查、二次修改、发布隔离、
 
 test('工作台提交后刷新继续轮询，成功预览、修改版本与源码下载', async () => {
   const f = await fixture(async (_prompt, call) => { await new Promise((r) => setTimeout(r, 400)); return html('浏览器游戏 ' + call); });
-  const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', headless: true });
+  const browser = await chromium.launch({ executablePath: resolveChromePath(), headless: true });
   try {
     const page = await browser.newPage();
     await page.addInitScript((token) => localStorage.setItem('myol.token', token), f.token);
+    await page.goto(f.app.url + '/create');
+    await page.locator('.mode-banner.agent').getByText('AI 源码开发模式', { exact: true }).waitFor();
+    await page.getByPlaceholder(/第二关/).waitFor();
     const { project } = await f.create();
     await page.goto(f.app.url + '/projects/' + project.id);
     await page.reload();
@@ -126,9 +130,9 @@ test('工作台提交后刷新继续轮询，成功预览、修改版本与源�
       console.error(await page.locator('body').innerText());
       throw error;
     });
-    await page.getByText('浏览器烟测通过：画布、按键、重启', { exact: true }).waitFor();
+    await page.getByText(/浏览器烟测通过：画布、按键、重启/).waitFor();
     await page.locator('.chat-input textarea').fill('新增计步机制');
-    await page.getByRole('button', { name: '生成新版本', exact: true }).click();
+    await page.getByRole('button', { name: '提交源码修改', exact: true }).click();
     await page.getByText('版本历史（2）', { exact: true }).waitFor({ timeout: 45000 });
     await page.getByRole('status').filter({ hasText: '新版本已生成，请试玩确认需求。' }).waitFor();
     const frame = page.frameLocator('.sandbox-frame iframe');
@@ -142,7 +146,7 @@ test('工作台提交后刷新继续轮询，成功预览、修改版本与源�
     });
     assert.equal(blocked, true, '私有 srcDoc 预览也必须保留资源限制');
     assert.equal(networkRequests, 0);
-    await page.screenshot({ path: '/tmp/myol-agent-workbench.png', fullPage: true });
+    await page.screenshot({ path: join(tmpdir(), 'myol-agent-workbench.png'), fullPage: true });
   } finally { await browser.close(); await f.cleanup(); }
 });
 
@@ -169,7 +173,7 @@ test('浏览器发现脚本错误后反馈修复，再提交通过检查的版�
     const done = await f.waitTask(project.id, task.id);
     assert.equal(done.status, 'succeeded', done.error || '');
     assert.equal(f.prompts.length, 2);
-    assert.ok(f.prompts[1].includes('上次浏览器检查失败'));
+    assert.ok(f.prompts[1].includes('上次生成或检查未通过'));
     assert.ok(done.stages.some((stage) => stage.name.includes('修复')));
   } finally { await f.cleanup(); }
 });
@@ -226,7 +230,7 @@ test('重启将持久化未完成任务标记为中断', async () => {
   const reloaded = new FileStore(join(dir, 'db.json'));
   await reloaded.init();
   const agent = new LocalAgent(reloaded, { provider: 'qoder', name: 'test', timeoutMs: 1000,
-    maxAttempts: 1, chromePath: '/usr/bin/google-chrome' }, join(dir, 'sandbox'));
+    maxAttempts: 1, chromePath: resolveChromePath() }, join(dir, 'sandbox'));
   try {
     await agent.init();
     assert.equal((await reloaded.getTask(task.id))?.status, 'failed');

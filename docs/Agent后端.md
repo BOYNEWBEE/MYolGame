@@ -1,11 +1,11 @@
 # 本地 Agent 后端
 
-2026-11-09。本文件描述已实现的本地单文件游戏链路；原 MVP 方案中的真实云端 Worker 和多文件 Phaser 工程不因此视为已实现。账号和云端 M0 模拟任务的最新范围见 [M0 云端部署](M0云端部署.md)。
+2026-11-09，2026-11-19 更新 OpenAI 兼容 provider。本文件描述已实现的本地单文件游戏链路；原 MVP 方案中的真实云端 Worker 和多文件 Phaser 工程不因此视为已实现。账号和云端 M0 模拟任务的最新范围见 [M0 云端部署](M0云端部署.md)。
 
 ## 启动与使用
 
 ```bash
-cd /home/sakara/MYolGame
+cd <项目目录>
 npm install
 npm run dev:agent
 ```
@@ -83,20 +83,74 @@ Authorization: Bearer <MYOLGAME_AGENT_API_KEY>
 {"html":"<!doctype html><html>完整游戏源码</html>"}
 ```
 
-这是项目自定义网关协议，不能直接填写模型供应商的聊天接口地址。服务错误不会进入模板兜底。响应限制 1 MiB，最终 HTML 限制 512 KiB。地址必须为 HTTPS 或本机 HTTP；重定向不跟随。密钥仅通过服务端配置传递，不写入游戏、前端、任务消息或 Git。
+这是项目自定义网关协议，不能直接填写模型供应商的聊天接口地址；需要直接调用聊天接口时使用 `openai` provider。服务错误不会进入模板兜底。响应限制 1 MiB，最终 HTML 限制 512 KiB。地址默认必须为 HTTPS；本机回环 HTTP 仅在 `MYOLGAME_AGENT_ALLOW_LOCAL=1` 时放行，重定向不跟随。密钥仅通过服务端配置传递，不写入游戏、前端、任务消息或 Git。
+
+### OpenAI 兼容游戏开发模型
+
+`MYOLGAME_AGENT_PROVIDER=openai` 时，Worker 直接请求 OpenAI 兼容的聊天接口，不经过自定义网关：
+
+```http
+POST <API_URL 归一化后的 /chat/completions>
+Content-Type: application/json
+Authorization: Bearer <MYOLGAME_AGENT_API_KEY>
+```
+
+```json
+{
+  "model": "your-model-name",
+  "temperature": 0.2,
+  "max_tokens": 8192,
+  "stream": false,
+  "messages": [
+    {"role": "system", "content": "只输出完整、自包含、可离线的游戏 HTML..."},
+    {"role": "user", "content": "用户需求 + 当前完整源码 + 输出约束 + 上次检查反馈"}
+  ]
+}
+```
+
+服务端只读取 `choices[0].message.content`（字符串或 `{type:"text"}` 分段数组），再从纯文本或 Markdown 代码块中提取 `<!doctype html>` 到 `</html>` 的完整文档。`finish_reason=length` 视为截断并失败。地址可填基址、`/v1` 基址或完整 `/chat/completions` 地址；无路径基址仅在首个地址返回 404 时补试 `/v1/chat/completions`，其他错误不重试。请求不跟随重定向，避免把密钥带到未配置目标。
+
+首次请求的源码基底是用户选择的模板源码；后续请求使用当前有效版本的完整 HTML；回退后基于回退版本继续。模型输出只作为 HTML 数据保存和检查，不在宿主机执行。
+
+错误分类（任务会记录 `errorCode`，界面显示中文说明）：
+
+| 错误码 | 含义 |
+| --- | --- |
+| `model_timeout` | 请求超时或任务总预算耗尽 |
+| `model_auth_failed` | 401/403，密钥或权限不足 |
+| `model_rate_limited` | 429 |
+| `model_empty_output` | 模型返回空内容 |
+| `model_truncated` | `finish_reason=length` |
+| `model_invalid_response` | 非 JSON、缺少 choices 或无法解析文本 |
+| `model_too_large` | 响应超过 `MYOLGAME_AGENT_MAX_RESPONSE_BYTES` |
+| `model_unreachable` | 网络不可达 |
+| `model_not_configured` | 地址、密钥或模型名缺失 |
+| `invalid_html` | 模型没有返回完整 HTML 文档 |
+| `check_failed` | 浏览器检查连续未通过 |
+| `browser_unavailable` | 无法启动或创建浏览器上下文 |
+| `version_conflict` | 执行期间项目版本发生变化 |
+| `interrupted` / `worker_failed` / `cancelled` | 重启中断、Worker 异常、用户取消 |
+
+只有 `invalid_html` 与浏览器检查失败会携带候选源码和错误信息进入下一次修复；模型请求本身失败直接结束任务并保留原版本，不会自动重放结果未知的生成请求。密钥只进入发往模型的 `Authorization` 头，不写入任务、错误、版本、导出源码或前端。
 
 ### 可选配置
 
 | 环境变量 | 默认值 / 说明 |
 | --- | --- |
-| `MYOLGAME_AGENT_PROVIDER` | 未设置时不启用；支持 `qoder`、`http` |
+| `MYOLGAME_AGENT_PROVIDER` | 未设置时不启用；支持 `qoder`、`http`、`openai` |
 | `MYOLGAME_AGENT_COMMAND` | `qoderclicn`，仅管理员可配置的可执行文件路径 |
-| `MYOLGAME_AGENT_NAME` | `Qoder CLI` 或 `自定义 Agent` |
-| `MYOLGAME_AGENT_API_URL` | HTTP 模式完整请求地址 |
-| `MYOLGAME_AGENT_API_KEY` | HTTP 模式服务访问令牌 |
+| `MYOLGAME_AGENT_NAME` | `Qoder CLI`、`自定义 Agent` 或 `OpenAI 兼容（model）` |
+| `MYOLGAME_AGENT_API_URL` | HTTP/OpenAI 模式地址；默认仅 HTTPS，本机回环 HTTP 需显式放行 |
+| `MYOLGAME_AGENT_API_KEY` | HTTP/OpenAI 模式服务端密钥 |
+| `MYOLGAME_AGENT_MODEL` | OpenAI 模式必填；1–128 位字母、数字或 `._:/-` |
 | `MYOLGAME_AGENT_TIMEOUT_MS` | `180000`，任务总预算；范围 1000–600000 |
-| `MYOLGAME_AGENT_MAX_ATTEMPTS` | `3`，含首次开发；范围 1–3 |
-| `MYOLGAME_CHROME_PATH` | `/usr/bin/google-chrome` |
+| `MYOLGAME_AGENT_REQUEST_TIMEOUT_MS` | 单次模型请求超时，默认 `min(TIMEOUT_MS, 120000)` |
+| `MYOLGAME_AGENT_MAX_REPAIRS` | 可选 0–3；设置后总尝试数 = 修复次数 + 1 |
+| `MYOLGAME_AGENT_MAX_ATTEMPTS` | 未设置 `MAX_REPAIRS` 时生效，默认 3；范围 1–4 |
+| `MYOLGAME_AGENT_MAX_OUTPUT_TOKENS` | `8192`；范围 256–32768 |
+| `MYOLGAME_AGENT_MAX_RESPONSE_BYTES` | `1048576`；范围 64 KiB–4 MiB |
+| `MYOLGAME_AGENT_ALLOW_LOCAL` | 设为 `1`/`true` 时允许回环 HTTP 模型地址；默认拒绝 |
+| `MYOLGAME_CHROME_PATH` | 未设置时按平台查找 Chrome/Edge |
 
 `.env.example` 仅为配置参考；当前启动器不会自动加载 `.env`。
 
@@ -138,7 +192,7 @@ npm run build
 npm test
 ```
 
-`tests/agent.test.ts` 使用受控 HTTP 网关、真实独立 Worker 和系统 Chrome，覆盖生成、二次源码修改、页面刷新继续查询、修复、取消、失败保留旧版、超时、回退冲突、权限、发布隔离和持久化恢复；不会消耗真实模型额度。
+`tests/agent.test.ts` 使用受控 HTTP 网关、真实独立 Worker 和系统 Chrome，覆盖生成、二次源码修改、页面刷新继续查询、修复、取消、失败保留旧版、超时、回退冲突、权限、发布隔离和持久化恢复；不会消耗真实模型额度。`tests/openai-provider.test.ts` 使用受控 OpenAI 兼容假服务，覆盖请求格式、Markdown 提取、模板/上一版本/回退版本源码链、修复、401/429/超时/空输出/截断/非法响应、并发与取消、密钥边界；`tests/platform.test.ts` 覆盖数据文件损坏保护、Windows 启动与浏览器路径解析。
 
 本次实现期间实际 Qoder 连通性检查在代理和临时直连下均遭遇上游重试失败，因此真实 Qoder 模型生成尚未验证成功。测试网关通过不等价于真实模型能满足玩法需求。
 

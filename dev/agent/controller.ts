@@ -1,6 +1,6 @@
 // API 进程独占 FileStore；Worker 仅收发 IPC，避免多个进程覆盖同一 JSON 数据库。
 import { createHash } from 'node:crypto';
-import { fork, type ChildProcess } from 'node:child_process';
+import { fork, spawn, type ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AgentService } from '../../functions/agent.ts';
@@ -18,6 +18,7 @@ export async function recoverAgentTasks(store: Store): Promise<void> {
   for (const task of await store.listPendingTasks()) {
     task.status = 'failed';
     task.error = '服务重启导致任务中断，请重新提交需求';
+    task.errorCode = 'interrupted';
     task.finishedAt = new Date().toISOString();
     task.stages.push({ name: task.error, at: task.finishedAt, ok: false });
     await store.updateTask(task);
@@ -28,6 +29,8 @@ export async function recoverAgentTasks(store: Store): Promise<void> {
 
 export class LocalAgent implements AgentService {
   name: string;
+  provider: string;
+  model: string | null;
   private store: FileStore;
   private config: AgentConfig;
   private directory: string;
@@ -44,6 +47,8 @@ export class LocalAgent implements AgentService {
     this.store = store;
     this.config = config;
     this.name = config.name;
+    this.provider = config.provider;
+    this.model = config.model ?? null;
     this.directory = directory;
   }
 
@@ -143,11 +148,12 @@ export class LocalAgent implements AgentService {
       const timer = setTimeout(() => {
         messages = messages.then(async () => {
           await this.exclusive(task.projectId, async () => {
-            if (taskActive(task)) await this.finish(task, 'timed_out', '任务超过执行时间预算');
+            if (taskActive(task)) await this.finish(task, 'timed_out', '任务超过执行时间预算', 'timeout');
           });
           this.killWorker();
         });
-      }, this.config.timeoutMs);
+      // 略晚于 Worker 自身与模型请求超时，让可分类的超时先写入任务记录。
+      }, this.config.timeoutMs + 1500);
       child.on('message', (message: WorkerMessage) => {
         messages = messages.then(() => this.exclusive(task.projectId, async () => {
           if (!taskActive(task)) return;
@@ -156,7 +162,7 @@ export class LocalAgent implements AgentService {
             task.stages.push({ name: message.name, at: new Date().toISOString(), ok: true });
             await this.store.updateTask(task);
           } else if (message.type === 'error') {
-            await this.finish(task, 'failed', message.error);
+            await this.finish(task, 'failed', message.error, message.code);
           } else {
             await this.commit(task, message);
           }
@@ -167,7 +173,7 @@ export class LocalAgent implements AgentService {
       const ended = () => {
         clearTimeout(timer);
         void messages.then(() => this.exclusive(task.projectId, async () => {
-          if (taskActive(task)) await this.finish(task, 'failed', 'Worker 异常退出，已保留原版本');
+          if (taskActive(task)) await this.finish(task, 'failed', 'Worker 异常退出，已保留原版本', 'worker_failed');
         })).finally(resolve);
       };
       child.once('exit', ended);
@@ -180,7 +186,7 @@ export class LocalAgent implements AgentService {
     const current = await this.store.getProject(task.projectId);
     if (!current) return;
     if (current.currentVersionId !== task.baseVersionId || current.updatedAt !== task.baseUpdatedAt) {
-      await this.finish(task, 'failed', '项目版本在执行期间发生变化，结果未提交；请基于当前版本重新生成');
+      await this.finish(task, 'failed', '项目版本在执行期间发生变化，结果未提交；请基于当前版本重新生成', 'version_conflict');
       return;
     }
     const spec = { ...(task.baseSpec || current.spec) };
@@ -204,9 +210,12 @@ export class LocalAgent implements AgentService {
     Object.assign(task, done);
   }
 
-  private async finish(task: TaskRecord, status: 'failed' | 'cancelled' | 'timed_out', error: string): Promise<void> {
-    task.status = status;
+  private async finish(task: TaskRecord, status: 'failed' | 'cancelled' | 'timed_out', error: string, code?: string): Promise<void> {
+    // 模型/网关超时统一归为任务超时，但保留更细的错误码供界面区分。
+    const finalStatus = status === 'failed' && code?.endsWith('_timeout') ? 'timed_out' : status;
+    task.status = finalStatus;
     task.error = error;
+    task.errorCode = code;
     task.finishedAt = new Date().toISOString();
     task.stages.push({ name: error, at: task.finishedAt, ok: false });
     await this.store.updateTask(task);
@@ -215,15 +224,20 @@ export class LocalAgent implements AgentService {
   }
 
   private killWorker(): void {
-    if (this.child?.pid) {
-      // 整组终止 Qoder 与 Chrome 后代，取消和超时均不留下后台任务。
-      try { process.kill(-this.child.pid, 'SIGKILL'); } catch { /* 进程组已退出 */ }
+    const pid = this.child?.pid;
+    if (!pid) return;
+    if (process.platform === 'win32') {
+      // Windows 没有进程组信号，用 taskkill 结束 Worker 与 Chrome 后代。
+      try { spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* 进程已退出 */ }
+      return;
     }
+    // 整组终止 Qoder 与 Chrome 后代，取消和超时均不留下后台任务。
+    try { process.kill(-pid, 'SIGKILL'); } catch { /* 进程组已退出 */ }
   }
 
   async cancel(task: TaskRecord): Promise<void> {
     if (!taskActive(task)) return;
-    await this.finish(task, 'cancelled', '任务已取消');
+    await this.finish(task, 'cancelled', '任务已取消', 'cancelled');
     this.queue = this.queue.filter((id) => id !== task.id);
     if (this.currentTask === task.id) this.killWorker();
   }

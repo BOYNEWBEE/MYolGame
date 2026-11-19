@@ -63,18 +63,40 @@ export class FileStore implements Store {
 
   async init(): Promise<void> {
     if (this.loaded) return;
+    let raw: string | null = null;
     try {
-      const raw = await readFile(this.filePath, 'utf8');
-      const parsed = JSON.parse(raw) as Partial<DbShape>;
-      this.db = { ...emptyDb(), ...parsed };
+      raw = await readFile(this.filePath, 'utf8');
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error('读取本地数据失败，使用空数据启动：', (error as Error).message);
+        // 读取失败可能意味着权限或磁盘问题；停止启动并保留原文件。
+        throw new Error('读取本地数据失败：' + ((error as Error).message || '未知错误'));
       }
+    }
+
+    if (raw === null) {
+      // 只有文件不存在时才创建空数据库，避免损坏文件被空数据覆盖。
       this.db = emptyDb();
+      await this.persist();
+    } else {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new Error('本地数据文件不是合法 JSON，已停止启动并保留原文件：' + this.filePath);
+      }
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        throw new Error('本地数据文件结构无效，已停止启动并保留原文件：' + this.filePath);
+      }
+      const record = parsed as Record<string, unknown>;
+      const merged = { ...emptyDb(), ...record } as DbShape;
+      for (const key of Object.keys(emptyDb()) as (keyof DbShape)[]) {
+        if (!Array.isArray(merged[key])) {
+          throw new Error('本地数据文件字段 ' + key + ' 不是数组，已停止启动并保留原文件：' + this.filePath);
+        }
+      }
+      this.db = merged;
     }
     this.loaded = true;
-    await this.persist();
   }
 
   private persist(): Promise<void> {
