@@ -1,4 +1,4 @@
-﻿import { useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+﻿import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { usePrefs } from './prefs.ts';
 import { NavLink, Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useSession } from './session.tsx';
@@ -40,6 +40,7 @@ function Logo(): ReactNode {
 export default function App(): ReactNode {
   const session = useSession();
   const prefs = usePrefs();
+  const [pillLabel, setPillLabel] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
   const navRef = useRef<HTMLElement | null>(null);
@@ -59,6 +60,7 @@ export default function App(): ReactNode {
       pill.style.opacity = '1';
       pill.style.width = box.width + 'px';
       pill.style.transform = 'translate(' + (box.left - navBox.left) + 'px, -50%)';
+      setPillLabel(active.textContent?.trim() ?? '');
       pill.style.setProperty('--lens-x', (-box.left) + 'px');
       pill.style.setProperty('--lens-y', (-box.top) + 'px');
     };
@@ -172,6 +174,7 @@ export default function App(): ReactNode {
                 {prefs.backdrop && <img className="nav-pill-lens-img" src={prefs.backdrop} alt="" draggable={false} />}
               </span>
               <span className="nav-pill-tint" aria-hidden="true" />
+              <span className="nav-pill-label">{pillLabel}</span>
             </span>
             <NavLink to="/" end>社区首页</NavLink>
             <NavLink to="/templates">社区模板</NavLink>
