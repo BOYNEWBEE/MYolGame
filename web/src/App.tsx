@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react';
-import { NavLink, Link, Route, Routes } from 'react-router-dom';
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { NavLink, Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useSession } from './session.tsx';
 import Backdrop from './components/Backdrop.tsx';
 import Welcome from './components/Welcome.tsx';
@@ -40,6 +40,76 @@ function Logo(): ReactNode {
 export default function App(): ReactNode {
   const session = useSession();
   const [welcomeActive, setWelcomeActive] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const navRef = useRef<HTMLElement | null>(null);
+  const pillRef = useRef<HTMLSpanElement | null>(null);
+  const dragRef = useRef<{ startX: number; startLeft: number; moved: boolean } | null>(null);
+
+  // 让顶部胶囊玻璃跟随当前路由的位置
+  useLayoutEffect(() => {
+    const place = (): void => {
+      const nav = navRef.current;
+      const pill = pillRef.current;
+      if (!nav || !pill) return;
+      const active = nav.querySelector<HTMLAnchorElement>('a.active');
+      if (!active) { pill.style.opacity = '0'; return; }
+      const navBox = nav.getBoundingClientRect();
+      const box = active.getBoundingClientRect();
+      pill.style.opacity = '1';
+      pill.style.width = box.width + 'px';
+      pill.style.transform = 'translate(' + (box.left - navBox.left) + 'px, -50%)';
+    };
+    place();
+    const timer = window.setTimeout(place, 80);
+    window.addEventListener('resize', place);
+    return () => { window.clearTimeout(timer); window.removeEventListener('resize', place); };
+  }, [location.pathname, session.cloudM0, session.qcaExperiment]);
+
+  function pillDown(event: ReactPointerEvent<HTMLSpanElement>): void {
+    const nav = navRef.current;
+    const pill = pillRef.current;
+    if (!nav || !pill) return;
+    const navBox = nav.getBoundingClientRect();
+    const pillBox = pill.getBoundingClientRect();
+    dragRef.current = { startX: event.clientX, startLeft: pillBox.left - navBox.left, moved: false };
+    pill.classList.add('is-dragging');
+    pill.setPointerCapture(event.pointerId);
+  }
+
+  function pillMove(event: ReactPointerEvent<HTMLSpanElement>): void {
+    const drag = dragRef.current;
+    const nav = navRef.current;
+    const pill = pillRef.current;
+    if (!drag || !nav || !pill) return;
+    const dx = event.clientX - drag.startX;
+    if (Math.abs(dx) > 4) drag.moved = true;
+    const width = pill.getBoundingClientRect().width;
+    const maxLeft = Math.max(0, nav.clientWidth - width);
+    const left = Math.min(Math.max(0, drag.startLeft + dx), maxLeft);
+    pill.style.transform = 'translate(' + left + 'px, -50%)';
+  }
+
+  function pillUp(): void {
+    const drag = dragRef.current;
+    const nav = navRef.current;
+    const pill = pillRef.current;
+    dragRef.current = null;
+    if (!nav || !pill) return;
+    pill.classList.remove('is-dragging');
+    if (!drag?.moved) return;
+    const pillBox = pill.getBoundingClientRect();
+    const center = pillBox.left + pillBox.width / 2;
+    let best: HTMLAnchorElement | undefined;
+    let bestDist = Number.POSITIVE_INFINITY;
+    for (const link of nav.querySelectorAll<HTMLAnchorElement>('a')) {
+      const box = link.getBoundingClientRect();
+      const dist = Math.abs(box.left + box.width / 2 - center);
+      if (dist < bestDist) { bestDist = dist; best = link; }
+    }
+    const href = best?.getAttribute('href');
+    if (href) navigate(href);
+  }
   return (
     <div className={'app' + (welcomeActive ? ' is-welcoming' : '')}>
       <Backdrop />
@@ -47,7 +117,16 @@ export default function App(): ReactNode {
       <header className="nav">
         <div className="nav-inner">
           <Logo />
-          <nav className="nav-links" aria-label="主导航">
+          <nav className="nav-links" aria-label="主导航" ref={navRef}>
+            <span
+              className="nav-pill"
+              ref={pillRef}
+              aria-hidden="true"
+              onPointerDown={pillDown}
+              onPointerMove={pillMove}
+              onPointerUp={pillUp}
+              onPointerCancel={pillUp}
+            />
             <NavLink to="/" end>社区首页</NavLink>
             <NavLink to="/templates">社区模板</NavLink>
             <NavLink to="/create">创作游戏</NavLink>

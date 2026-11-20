@@ -1,4 +1,4 @@
-/* MYolGame 设计系统：深色靛蓝/紫色游戏创作社区 */
+﻿/* MYolGame 设计系统：深色靛蓝/紫色游戏创作社区 */
 
 :root {
   /* Sites 设计参数：默认值保持现有深色视觉，可由设计工作台调整 */
@@ -644,7 +644,6 @@ h1, h2, h3 { line-height: 1.3; margin: 0 0 8px; }
   gap: 10px;
   color: var(--muted);
   font-size: 13px;
-  z-index: 2;
   pointer-events: none;
 }
 
@@ -940,7 +939,6 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
   object-fit: cover;
   /* 背景不模糊：清晰显示原图，质感交给上层的液态玻璃 */
   opacity: var(--backdrop-opacity, 1);
-  animation: ken-burns calc(42s * var(--site-motion, 1)) ease-in-out infinite alternate;
   will-change: transform;
 }
 
@@ -990,33 +988,11 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
   50% { box-shadow: 0 12px 34px rgba(139, 92, 246, 0.55); }
 }
 
-.page { animation: page-in calc(320ms * var(--site-motion, 1)) cubic-bezier(0.22, 0.61, 0.36, 1); }
 
-.hero-text h1 { animation: rise-in calc(420ms * var(--site-motion, 1)) cubic-bezier(0.22, 0.61, 0.36, 1) backwards; }
-.hero-text > p {
-  animation: rise-in calc(460ms * var(--site-motion, 1)) cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
-  animation-delay: calc(60ms * var(--site-motion, 1));
-}
-.hero-actions {
-  animation: rise-in calc(500ms * var(--site-motion, 1)) cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
-  animation-delay: calc(120ms * var(--site-motion, 1));
-}
 
 /* 标题里的渐变字缓慢流光（参考时间轴驱动的做法：把位移/颜色交给关键帧，时长走变量） */
-.hero-text h1 em {
-  background-size: 200% auto;
-  animation: shimmer calc(7s * var(--site-motion, 1)) linear infinite;
-}
 
 /* 卡片入场与悬停：动画用 backwards，结束后不占用 transform，避免压掉 :hover 位移 */
-.game-grid > * { animation: rise-in calc(300ms * var(--site-motion, 1)) cubic-bezier(0.22, 0.61, 0.36, 1) backwards; }
-.game-grid > *:nth-child(2) { animation-delay: calc(40ms * var(--site-motion, 1)); }
-.game-grid > *:nth-child(3) { animation-delay: calc(80ms * var(--site-motion, 1)); }
-.game-grid > *:nth-child(4) { animation-delay: calc(120ms * var(--site-motion, 1)); }
-.game-grid > *:nth-child(5) { animation-delay: calc(160ms * var(--site-motion, 1)); }
-.game-grid > *:nth-child(6) { animation-delay: calc(200ms * var(--site-motion, 1)); }
-.game-grid > *:nth-child(7) { animation-delay: calc(240ms * var(--site-motion, 1)); }
-.game-grid > *:nth-child(8) { animation-delay: calc(280ms * var(--site-motion, 1)); }
 
 .game-card {
   transition:
@@ -1066,7 +1042,6 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
   background: rgba(7, 8, 20, 0.52);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
   text-align: center;
-  animation: welcome-card-in calc(560ms * var(--site-motion, 1)) cubic-bezier(0.22, 0.61, 0.36, 1) 60ms both;
 }
 
 .welcome.is-leaving .welcome-inner {
@@ -1417,3 +1392,54 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
 
 .setting-inline { display: flex; gap: 10px; align-items: center; margin: 12px 0 16px; flex-wrap: wrap; }
 .setting-inline input[type="url"] { flex: 1 1 220px; min-width: 0; }
+
+/* ---------- 顶部可拖动的液态玻璃胶囊 ---------- */
+
+.nav-links { position: relative; }
+.nav-links a { position: relative; z-index: 1; }
+
+.nav-pill {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  height: 34px;
+  width: 0;
+  transform: translate(0, -50%);
+  border-radius: 999px;
+  background: linear-gradient(158deg, rgba(255, 255, 255, 0.42) 0%, rgba(150, 120, 240, 0.34) 45%, rgba(96, 66, 180, 0.4) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.2),
+    0 10px 26px rgba(76, 48, 180, 0.38);
+  /* 不能给胶囊加 backdrop-filter：它会把下面当前项的链接文字一起模糊掉 */
+  transition:
+    transform 520ms cubic-bezier(0.2, 0.9, 0.25, 1.3),
+    width 520ms cubic-bezier(0.2, 0.9, 0.25, 1.3),
+    opacity 200ms ease;
+  cursor: grab;
+  touch-action: none;
+  /* 盖在链接之上，才能接住 pointerdown 开始拖动；未被胶囊覆盖的其它链接仍可点击 */
+  z-index: 2;
+}
+
+.nav-pill.is-dragging {
+  transition: none;
+  cursor: grabbing;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 14px 34px rgba(76, 48, 180, 0.5);
+}
+
+/* 当前项交给胶囊显示，去掉原来的实色底 */
+.nav-links a.active {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: #fff;
+}
+
+/* 手机上导航会换行，胶囊定位会错，直接隐藏 */
+@media (max-width: 700px) {
+  .nav-pill { display: none; }
+}

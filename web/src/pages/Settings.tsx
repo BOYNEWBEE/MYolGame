@@ -1,4 +1,4 @@
-﻿// 设置页：背景图片与液态玻璃参数全部本地生效（localStorage），不进服务端、不影响游戏产物。
+// 设置页：背景图片与液态玻璃参数全部本地生效（localStorage），不进服务端、不影响游戏产物。
 
 import { useRef, useState, type ReactNode } from 'react';
 import {
@@ -183,21 +183,7 @@ export default function Settings(): ReactNode {
         </section>
 
         <section className="panel">
-          <h2>动效</h2>
-          <Slider
-            label="动效倍率"
-            hint="0 = 关闭全部过渡与入场动画"
-            value={prefs.motion}
-            min={0}
-            max={1.5}
-            step={0.05}
-            format={(value) => value.toFixed(2) + '×'}
-            onChange={(value) => setPrefs({ motion: value })}
-          />
-          <p className="setting-hint">
-            系统开启「减少动效」时，动画会自动关闭，这里调多少都不生效。
-          </p>
-
+          <h2>重置</h2>
           <div className="setting-actions">
             <button
               type="button"
@@ -209,12 +195,20 @@ export default function Settings(): ReactNode {
             >
               恢复默认外观
             </button>
-            <button type="button" className="btn" onClick={() => { setGlass({ ...DEFAULT_GLASS }); setNotice('玻璃参数已重置'); }}>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setGlass({ ...DEFAULT_GLASS });
+                setNotice('玻璃参数已重置');
+              }}
+            >
               只重置玻璃
             </button>
           </div>
           {notice && <p className="setting-hint" role="status">{notice}</p>}
         </section>
+
       </div>
     </div>
   );

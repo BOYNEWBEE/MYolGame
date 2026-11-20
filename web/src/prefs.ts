@@ -21,8 +21,6 @@ export interface Prefs {
   backdrop: string | null;
   /** 背景图不透明度 0.05–1 */
   backdropOpacity: number;
-  /** 全局动效倍率 0–1.5，写进 --site-motion */
-  motion: number;
   glass: GlassSettings;
 }
 
@@ -42,7 +40,6 @@ const LEGACY_KEYS = ['myol.prefs.v2', 'myol.prefs'];
 const DEFAULTS: Prefs = {
   backdrop: DEFAULT_BACKDROP,
   backdropOpacity: 1,
-  motion: 1,
   glass: DEFAULT_GLASS,
 };
 
@@ -73,7 +70,6 @@ function normalize(raw: unknown, fallback: Prefs = DEFAULTS): Prefs {
   return {
     backdrop,
     backdropOpacity: clamp(Number(input.backdropOpacity), 0.05, 1, fallback.backdropOpacity),
-    motion: clamp(Number(input.motion), 0, 1.5, fallback.motion),
     glass: normalizeGlass(input.glass, fallback.glass ?? DEFAULT_GLASS),
   };
 }
@@ -112,7 +108,6 @@ export function applyPrefs(prefs: Prefs): void {
   const root = document.documentElement;
   const glass = prefs.glass;
   root.style.setProperty('--backdrop-opacity', String(prefs.backdropOpacity));
-  root.style.setProperty('--site-motion', String(prefs.motion));
   root.style.setProperty('--glass-blur', glass.blur + 'px');
   root.style.setProperty('--glass-saturate', glass.saturate + '%');
   root.style.setProperty('--glass-brightness', String(glass.brightness));
