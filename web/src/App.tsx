@@ -1,4 +1,5 @@
-import { useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+﻿import { useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { usePrefs } from './prefs.ts';
 import { NavLink, Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useSession } from './session.tsx';
 import Backdrop from './components/Backdrop.tsx';
@@ -38,6 +39,7 @@ function Logo(): ReactNode {
 
 export default function App(): ReactNode {
   const session = useSession();
+  const prefs = usePrefs();
   const location = useLocation();
   const navigate = useNavigate();
   const navRef = useRef<HTMLElement | null>(null);
@@ -57,6 +59,8 @@ export default function App(): ReactNode {
       pill.style.opacity = '1';
       pill.style.width = box.width + 'px';
       pill.style.transform = 'translate(' + (box.left - navBox.left) + 'px, -50%)';
+      pill.style.setProperty('--lens-x', (-box.left) + 'px');
+      pill.style.setProperty('--lens-y', (-box.top) + 'px');
     };
     place();
     const timer = window.setTimeout(place, 80);
@@ -65,6 +69,7 @@ export default function App(): ReactNode {
   }, [location.pathname, session.cloudM0, session.qcaExperiment]);
 
   function pillDown(event: ReactPointerEvent<HTMLSpanElement>): void {
+    event.preventDefault();
     const nav = navRef.current;
     const pill = pillRef.current;
     if (!nav || !pill) return;
@@ -96,12 +101,15 @@ export default function App(): ReactNode {
     const now = performance.now();
     const dt = Math.max(16, now - drag.lastT);
     const speed = Math.min(2.4, Math.abs(event.clientX - drag.lastX) / dt);
-    const stretch = Math.min(0.26, speed * 0.45);
+    const stretch = Math.min(0.5, speed * 0.9);
     drag.lastX = event.clientX;
     drag.lastT = now;
 
     pill.style.transform =
-      'translate(' + left + 'px, -50%) scaleX(' + (1 + stretch).toFixed(3) + ') scaleY(' + (1 - stretch * 0.45).toFixed(3) + ')';
+      'translate(' + left + 'px, -50%) scaleX(' + (1 + stretch).toFixed(3) + ') scaleY(' + (1 - stretch * 0.6).toFixed(3) + ')';
+    const pillRect = pill.getBoundingClientRect();
+    pill.style.setProperty('--lens-x', (-pillRect.left) + 'px');
+    pill.style.setProperty('--lens-y', (-pillRect.top) + 'px');
   }
 
   function pillUp(): void {
@@ -136,6 +144,15 @@ export default function App(): ReactNode {
   }
   return (
     <div className="app">
+      <svg className="svg-defs" aria-hidden="true" focusable="false">
+        <filter id="liquid-warp" x="-25%" y="-25%" width="150%" height="150%" colorInterpolationFilters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency="0.012 0.02" numOctaves="2" seed="7" result="noise">
+            <animate attributeName="baseFrequency" dur="7s" values="0.012 0.02;0.018 0.012;0.012 0.02" repeatCount="indefinite" />
+          </feTurbulence>
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="16" xChannelSelector="R" yChannelSelector="G" />
+          <feGaussianBlur stdDeviation="0.5" />
+        </filter>
+      </svg>
       <Backdrop />
       <header className="nav">
         <div className="nav-inner">
@@ -149,7 +166,13 @@ export default function App(): ReactNode {
               onPointerMove={pillMove}
               onPointerUp={pillUp}
               onPointerCancel={pillUp}
-            />
+              onDragStart={(event) => event.preventDefault()}
+            >
+              <span className="nav-pill-lens" aria-hidden="true">
+                {prefs.backdrop && <img className="nav-pill-lens-img" src={prefs.backdrop} alt="" draggable={false} />}
+              </span>
+              <span className="nav-pill-tint" aria-hidden="true" />
+            </span>
             <NavLink to="/" end>社区首页</NavLink>
             <NavLink to="/templates">社区模板</NavLink>
             <NavLink to="/create">创作游戏</NavLink>
