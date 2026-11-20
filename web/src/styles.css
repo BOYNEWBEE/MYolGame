@@ -1016,8 +1016,6 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
   50% { box-shadow: 0 12px 34px rgba(139, 92, 246, 0.55); }
 }
 
-.ease-out-back { animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1); }
-
 .page { animation: page-in calc(320ms * var(--site-motion, 1)) cubic-bezier(0.22, 0.61, 0.36, 1); }
 
 .hero-text h1 { animation: rise-in calc(420ms * var(--site-motion, 1)) cubic-bezier(0.22, 0.61, 0.36, 1) backwards; }
