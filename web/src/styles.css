@@ -1065,49 +1065,18 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 .panel,
 .creation-template-card {
   position: relative;
-  isolation: isolate;
-  /* 兜底底色：即使背板图层晚一帧绘制，也不会露出透明 */
-  background-color: rgba(10, 12, 26, 0.62);
-  border: 1px solid rgba(255, 255, 255, var(--glass-edge-alpha));
-  box-shadow: var(--glass-rim), var(--glass-shadow);
-}
-
-/* 玻璃背板：--backdrop-soft 的对应切片 + 玻璃底色；位置由 glass-layer.ts 每帧算好 */
-.nav::before,
-.nav-user::before,
-.nav-backdrop::before,
-.btn::before,
-.chip::before,
-.segmented::before,
-.search-input::before,
-.hero-text::before,
-.game-card::before,
-.panel::before,
-.creation-template-card::before,
-.page-head::before,
-.footer-inner::before,
-.empty-state::before,
-.mode-banner::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  pointer-events: none;
-  /* 背景层顺序：写在前面的是上层。玻璃底色压在上面，模糊背景切片在下面 */
-  background-image:
+  background:
     linear-gradient(
       158deg,
       rgba(255, 255, 255, var(--glass-sheen)) 0%,
       rgba(10, 12, 26, var(--glass-body)) 24%,
       rgba(10, 12, 26, var(--glass-body)) 68%,
       rgba(255, 255, 255, calc(var(--glass-sheen) * 0.6)) 100%
-    ),
-    var(--backdrop-soft, none);
-  background-attachment: scroll, fixed;
-  background-size: auto, cover;
-  background-position: center center, center center;
-  background-repeat: no-repeat, no-repeat;
+    );
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  border: 1px solid rgba(255, 255, 255, var(--glass-edge-alpha));
+  box-shadow: var(--glass-rim), var(--glass-shadow);
 }
 
 /* 斜向反射：玻璃表面那道光 */
@@ -1187,8 +1156,8 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 .error-box {
   position: relative;
   background: linear-gradient(158deg, rgba(255, 255, 255, var(--glass-sheen)) 0%, rgba(10, 12, 26, var(--glass-body)) 30%, rgba(10, 12, 26, var(--glass-body)) 100%);
-  background-color: rgba(10, 12, 26, 0.62);
-  isolation: isolate;
+  -webkit-backdrop-filter: blur(14px) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  backdrop-filter: blur(14px) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
   border: 1px solid var(--glass-edge);
   box-shadow: var(--glass-rim), 0 14px 34px rgba(3, 4, 12, 0.4);
 }
@@ -1309,10 +1278,7 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
   width: 0;
   transform: translate(0, -50%);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  /* 只折射、不模糊也不压暗：采样的是导航自身已经磨砂过的表面 */
-  -webkit-backdrop-filter: url(#liquid-warp) saturate(1.1);
-  backdrop-filter: url(#liquid-warp) saturate(1.1);
+  background: none;
   border: 1px solid rgba(255, 255, 255, 0.55);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.7),
@@ -1332,7 +1298,38 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
   z-index: 2;
 }
 
+/* 折射层：把背景图按窗口坐标复制一份塞进胶囊，再用 SVG 位移滤镜捏出弯折 */
+.nav-pill-lens {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+  filter: url(#liquid-warp) blur(3px) brightness(0.84) saturate(1.35);
+}
+.nav-pill-lens-img {
+  position: absolute;
+  left: var(--lens-x, 0px);
+  top: var(--lens-y, 0px);
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+  transform: scale(1.06);
+  transform-origin: 0 0;
+  opacity: 0.92;
+}
 
+/* 玻璃本体：底色 + 亮边，压在折射层之上 */
+.nav-pill-tint {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(158deg, rgba(255, 255, 255, 0.2) 0%, rgba(150, 120, 240, 0.26) 45%, rgba(70, 46, 140, 0.4) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.25);
+}
 
 /* SVG 滤镜定义容器：不占布局 */
 .svg-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
@@ -1353,6 +1350,7 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
 .nav-links a.active {
   color: #fff;
   text-shadow: 0 1px 3px rgba(4, 5, 14, 0.75);
+  /* 文字压在胶囊之上，胶囊在它下面滑 */
   z-index: 3;
   pointer-events: none;
   background: transparent;
@@ -1385,9 +1383,9 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
     box-shadow 240ms ease;
 }
 
-.game-card:hover { box-shadow: var(--glass-rim), 0 26px 56px rgba(3, 4, 12, 0.55); }
+.game-card:hover { transform: translateY(-4px) scale(1.008); }
 .game-card:active { transform: translateY(-1px) scale(0.995); }
-.creation-template-card:hover { box-shadow: var(--glass-rim), 0 20px 46px rgba(3, 4, 12, 0.5); }
+.creation-template-card:hover { transform: translateY(-2px) scale(1.004); }
 .panel:active { transform: scale(0.998); }
 
 /* 表面高光随 hover 移动，制造“玻璃被推了一下”的错觉 */
@@ -1407,21 +1405,6 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
 /* ---------- 关闭液态玻璃：回到项目初版的纯色界面 ---------- */
 
 .no-glass .backdrop-image { filter: none; animation: none; }
-.no-glass .nav::before,
-.no-glass .nav-user::before,
-.no-glass .nav-backdrop::before,
-.no-glass .btn::before,
-.no-glass .chip::before,
-.no-glass .segmented::before,
-.no-glass .search-input::before,
-.no-glass .hero-text::before,
-.no-glass .game-card::before,
-.no-glass .panel::before,
-.no-glass .creation-template-card::before,
-.no-glass .page-head::before,
-.no-glass .footer-inner::before,
-.no-glass .empty-state::before,
-.no-glass .mode-banner::before { display: none; }
 
 .no-glass .nav {
   -webkit-backdrop-filter: none !important;
@@ -1513,3 +1496,10 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
   margin: 6px 0 0;
 }
 
+
+/* 路由切换：内容淡出 140ms → 换页 → 淡入，遮住玻璃首帧还在采样那一下 */
+.main { transition: opacity 170ms ease; }
+.main.is-fading { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .main, .main.is-fading { transition: none; opacity: 1; }
+}

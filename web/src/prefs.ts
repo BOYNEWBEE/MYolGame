@@ -2,7 +2,6 @@
 // 存 localStorage（几行文本）；背景图目前支持内置预设 / 远程 URL / 本地上传（dataURL，≤1.5 MB）。
 
 import { useEffect, useState } from 'react';
-import { scheduleSoftBackdrop } from './soft-backdrop.ts';
 
 export interface GlassSettings {
   /** 背景模糊半径 0–40px */
@@ -114,12 +113,6 @@ export function applyPrefs(prefs: Prefs): void {
   const glass = prefs.glass;
   root.style.setProperty('--backdrop-opacity', String(prefs.backdropOpacity));
   root.classList.toggle('no-glass', !prefs.glassEnabled);
-  scheduleSoftBackdrop({
-    src: prefs.backdrop,
-    blur: glass.blur,
-    saturate: glass.saturate,
-    brightness: glass.brightness,
-  });
   root.style.setProperty('--glass-blur', glass.blur + 'px');
   root.style.setProperty('--glass-saturate', glass.saturate + '%');
   root.style.setProperty('--glass-brightness', String(glass.brightness));

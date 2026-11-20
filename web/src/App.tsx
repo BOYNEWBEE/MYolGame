@@ -1,4 +1,5 @@
-﻿import { useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+﻿import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { usePrefs } from './prefs.ts';
 import { NavLink, Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useSession } from './session.tsx';
 import Backdrop from './components/Backdrop.tsx';
@@ -38,8 +39,27 @@ function Logo(): ReactNode {
 
 export default function App(): ReactNode {
   const session = useSession();
+  const prefs = usePrefs();
   const location = useLocation();
   const navigate = useNavigate();
+  // 路由切换时先淡出旧内容、再淡入新内容，让玻璃的模糊有足够时间就位
+  const [shownLocation, setShownLocation] = useState(location);
+  const [fading, setFading] = useState(false);
+  const fadeTimers = useRef<number[]>([]);
+  useEffect(() => {
+    if (location.key === shownLocation.key) return;
+    setFading(true);
+    // 淡出 170ms → 换页 → 静置 60ms（让玻璃背板先绘出来）→ 再淡入
+    const first = window.setTimeout(() => {
+      setShownLocation(location);
+      const second = window.setTimeout(() => setFading(false), 60);
+      fadeTimers.current.push(second);
+    }, 170);
+    fadeTimers.current.push(first);
+  }, [location, shownLocation]);
+  useEffect(() => () => {
+    for (const id of fadeTimers.current) window.clearTimeout(id);
+  }, []);
   const navRef = useRef<HTMLElement | null>(null);
   const pillRef = useRef<HTMLSpanElement | null>(null);
   const dragRef = useRef<{ startX: number; startLeft: number; moved: boolean; lastX: number; lastT: number } | null>(null);
@@ -57,6 +77,8 @@ export default function App(): ReactNode {
       pill.style.opacity = '1';
       pill.style.width = box.width + 'px';
       pill.style.transform = 'translate(' + (box.left - navBox.left) + 'px, -50%)';
+      pill.style.setProperty('--lens-x', (-box.left) + 'px');
+      pill.style.setProperty('--lens-y', (-box.top) + 'px');
     };
     place();
     const timer = window.setTimeout(place, 80);
@@ -104,6 +126,8 @@ export default function App(): ReactNode {
     pill.style.transform =
       'translate(' + left + 'px, -50%) scaleX(' + (1 + stretch).toFixed(3) + ') scaleY(' + (1 - stretch * 0.6).toFixed(3) + ')';
     const pillRect = pill.getBoundingClientRect();
+    pill.style.setProperty('--lens-x', (-pillRect.left) + 'px');
+    pill.style.setProperty('--lens-y', (-pillRect.top) + 'px');
   }
 
   function pillUp(): void {
@@ -162,7 +186,10 @@ export default function App(): ReactNode {
               onPointerCancel={pillUp}
               onDragStart={(event) => event.preventDefault()}
             >
-
+              <span className="nav-pill-lens" aria-hidden="true">
+                {prefs.backdrop && <img className="nav-pill-lens-img" src={prefs.backdrop} alt="" draggable={false} />}
+              </span>
+              <span className="nav-pill-tint" aria-hidden="true" />
             </span>
             <NavLink to="/" end>社区首页</NavLink>
             <NavLink to="/templates">社区模板</NavLink>
@@ -181,9 +208,9 @@ export default function App(): ReactNode {
         </div>
       </header>
 
-      <main className="main">
+      <main className={"main" + (fading ? " is-fading" : "")}>
         {session.cloudM0 && <div className="page" role="status">{session.qcaExperiment ? '当前部署提供新路线实验；M0 任务仍为模拟，实验执行方式以实验页标记为准。' : '当前为云端 M0：任务仅模拟基础设施执行，不调用 AI、不生成游戏。'}<Link to="/m0">进入云端任务</Link></div>}
-        <Routes>
+        <Routes location={shownLocation}>
           <Route path="/experiments/qca" element={<QcaExperiment />} />
           <Route path="/m0" element={<M0 />} />
           <Route path="/account" element={<Account />} />
