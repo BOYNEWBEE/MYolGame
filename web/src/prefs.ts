@@ -8,8 +8,6 @@ export interface Prefs {
   backdrop: string | null;
   /** 背景图不透明度 0.05–0.6 */
   backdropOpacity: number;
-  /** 背景图模糊半径 0–12px */
-  backdropBlur: number;
   /** 全局动效倍率 0–1.5，写进 --site-motion */
   motion: number;
 }
@@ -21,7 +19,6 @@ const STORAGE_KEY = 'myol.prefs';
 const DEFAULTS: Prefs = {
   backdrop: DEFAULT_BACKDROP,
   backdropOpacity: 0.28,
-  backdropBlur: 0,
   motion: 1,
 };
 
@@ -36,7 +33,6 @@ function normalize(raw: unknown): Prefs {
   return {
     backdrop,
     backdropOpacity: clamp(Number(input.backdropOpacity), 0.05, 0.6, DEFAULTS.backdropOpacity),
-    backdropBlur: clamp(Number(input.backdropBlur), 0, 12, DEFAULTS.backdropBlur),
     motion: clamp(Number(input.motion), 0, 1.5, DEFAULTS.motion),
   };
 }
@@ -60,7 +56,6 @@ export function getPrefs(): Prefs {
 export function applyPrefs(prefs: Prefs): void {
   const root = document.documentElement;
   root.style.setProperty('--backdrop-opacity', String(prefs.backdropOpacity));
-  root.style.setProperty('--backdrop-blur', prefs.backdropBlur + 'px');
   root.style.setProperty('--site-motion', String(prefs.motion));
 }
 

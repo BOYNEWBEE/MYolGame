@@ -939,7 +939,6 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
   height: 108%;
   object-fit: cover;
   opacity: var(--backdrop-opacity, 0.28);
-  filter: blur(var(--backdrop-blur, 0px)) saturate(1.06);
   animation: ken-burns calc(42s * var(--site-motion, 1)) ease-in-out infinite alternate;
   will-change: transform;
 }
@@ -951,7 +950,6 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
     radial-gradient(38% 32% at 22% 28%, rgba(168, 85, 247, 0.26), transparent 70%),
     radial-gradient(34% 30% at 78% 40%, rgba(56, 189, 248, 0.20), transparent 72%),
     radial-gradient(30% 28% at 55% 82%, rgba(232, 121, 249, 0.18), transparent 70%);
-  filter: blur(34px);
   animation: aurora-drift calc(26s * var(--site-motion, 1)) ease-in-out infinite alternate;
   will-change: transform, opacity;
 }
