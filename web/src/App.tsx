@@ -1,5 +1,4 @@
 ﻿import { useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { usePrefs } from './prefs.ts';
 import { NavLink, Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useSession } from './session.tsx';
 import Backdrop from './components/Backdrop.tsx';
@@ -39,7 +38,6 @@ function Logo(): ReactNode {
 
 export default function App(): ReactNode {
   const session = useSession();
-  const prefs = usePrefs();
   const location = useLocation();
   const navigate = useNavigate();
   const navRef = useRef<HTMLElement | null>(null);
@@ -59,8 +57,6 @@ export default function App(): ReactNode {
       pill.style.opacity = '1';
       pill.style.width = box.width + 'px';
       pill.style.transform = 'translate(' + (box.left - navBox.left) + 'px, -50%)';
-      pill.style.setProperty('--lens-x', (-box.left) + 'px');
-      pill.style.setProperty('--lens-y', (-box.top) + 'px');
     };
     place();
     const timer = window.setTimeout(place, 80);
@@ -108,8 +104,6 @@ export default function App(): ReactNode {
     pill.style.transform =
       'translate(' + left + 'px, -50%) scaleX(' + (1 + stretch).toFixed(3) + ') scaleY(' + (1 - stretch * 0.6).toFixed(3) + ')';
     const pillRect = pill.getBoundingClientRect();
-    pill.style.setProperty('--lens-x', (-pillRect.left) + 'px');
-    pill.style.setProperty('--lens-y', (-pillRect.top) + 'px');
   }
 
   function pillUp(): void {
@@ -168,10 +162,7 @@ export default function App(): ReactNode {
               onPointerCancel={pillUp}
               onDragStart={(event) => event.preventDefault()}
             >
-              <span className="nav-pill-lens" aria-hidden="true">
-                {prefs.backdrop && <img className="nav-pill-lens-img" src={prefs.backdrop} alt="" draggable={false} />}
-              </span>
-              <span className="nav-pill-tint" aria-hidden="true" />
+
             </span>
             <NavLink to="/" end>社区首页</NavLink>
             <NavLink to="/templates">社区模板</NavLink>
