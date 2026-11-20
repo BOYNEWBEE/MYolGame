@@ -168,7 +168,6 @@ export default function App(): ReactNode {
       </header>
 
       <main className="main">
-        <div className="glass-sheet" aria-hidden="true" />
         {session.cloudM0 && <div className="page" role="status">{session.qcaExperiment ? '当前部署提供新路线实验；M0 任务仍为模拟，实验执行方式以实验页标记为准。' : '当前为云端 M0：任务仅模拟基础设施执行，不调用 AI、不生成游戏。'}<Link to="/m0">进入云端任务</Link></div>}
         <Routes>
           <Route path="/experiments/qca" element={<QcaExperiment />} />

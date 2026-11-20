@@ -95,7 +95,7 @@ export default function Settings(): ReactNode {
           <p className="setting-hint">当前：{prefs.backdrop ? (prefs.backdrop.startsWith('data:') ? '本地图片' : prefs.backdrop) : '已关闭'}</p>
 
           <div className="setting-actions">
-            <button type="button" className="chip" onClick={() => { setPrefs({ backdrop: DEFAULT_BACKDROP }); setNotice('已切换到「我的图片」背景'); }}>我的图片</button>
+            <button type="button" className="chip" onClick={() => { setPrefs({ backdrop: DEFAULT_BACKDROP }); setNotice('已切换到预设背景'); }}>预设</button>
             <button type="button" className="chip" onClick={() => { setPrefs({ backdrop: null }); setNotice('已切换到初版背景（无图片）'); }}>初版（无图）</button>
             <button type="button" className="chip" onClick={() => fileRef.current?.click()}>上传本地图片</button>
             <input
@@ -131,6 +131,18 @@ export default function Settings(): ReactNode {
 
         <section className="panel">
           <h2>液态玻璃</h2>
+          <label className="setting-row setting-switch">
+            <span className="row-head">
+              <span>启用液态玻璃</span>
+              <b>{prefs.glassEnabled ? '开' : '关'}</b>
+            </span>
+            <input
+              type="checkbox"
+              checked={prefs.glassEnabled}
+              onChange={(event) => setPrefs({ glassEnabled: event.target.checked })}
+            />
+            <span className="setting-hint">关闭后回到项目初版的纯色界面（无模糊、无玻璃底）</span>
+          </label>
 
           <Slider
             label="背景模糊"
@@ -190,7 +202,7 @@ export default function Settings(): ReactNode {
               className="btn"
               onClick={() => {
                 resetPrefs();
-                setNotice('已恢复默认：我的图片 + 默认玻璃参数');
+                setNotice('已恢复默认：预设背景 + 默认玻璃参数');
               }}
             >
               恢复默认外观

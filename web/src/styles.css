@@ -1,4 +1,4 @@
-﻿/* MYolGame 设计系统：深色靛蓝/紫色游戏创作社区 */
+/* MYolGame 设计系统：深色靛蓝/紫色游戏创作社区 */
 
 :root {
   /* Sites 设计参数：默认值保持现有深色视觉，可由设计工作台调整 */
@@ -93,8 +93,6 @@ h1, h2, h3 { line-height: 1.3; margin: 0 0 8px; }
   position: sticky;
   top: 0;
   z-index: 50;
-  backdrop-filter: blur(14px);
-  background: rgba(7, 8, 20, 0.82);
   border-bottom: 1px solid var(--border);
 }
 
@@ -937,8 +935,9 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
   width: 108%;
   height: 108%;
   object-fit: cover;
-  /* 背景不模糊：清晰显示原图，质感交给上层的液态玻璃 */
+  /* 背景不模糊：清晰显示原图，质感交给上层的液态玻璃；保留极缓慢的推移 */
   opacity: var(--backdrop-opacity, 1);
+  animation: ken-burns calc(70s * var(--site-motion, 1)) ease-in-out infinite alternate;
   will-change: transform;
 }
 
@@ -1074,6 +1073,8 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
       rgba(10, 12, 26, var(--glass-body)) 68%,
       rgba(255, 255, 255, calc(var(--glass-sheen) * 0.6)) 100%
     );
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
   border: 1px solid rgba(255, 255, 255, var(--glass-edge-alpha));
   box-shadow: var(--glass-rim), var(--glass-shadow);
 }
@@ -1119,7 +1120,6 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 .btn.primary:hover:not(:disabled) { box-shadow: var(--glass-rim), 0 14px 36px rgba(120, 90, 240, 0.45); }
 
 /* 导航与各类卡片原本的实心底色让位给玻璃 */
-.nav { background: linear-gradient(158deg, rgba(255, 255, 255, var(--glass-sheen)) 0%, rgba(10, 12, 26, var(--glass-body)) 30%, rgba(10, 12, 26, var(--glass-body)) 100%); }
 .game-card { overflow: hidden; }
 .game-card .card-body { background: transparent; }
 .panel { border-radius: var(--radius); }
@@ -1156,6 +1156,8 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 .error-box {
   position: relative;
   background: linear-gradient(158deg, rgba(255, 255, 255, var(--glass-sheen)) 0%, rgba(10, 12, 26, var(--glass-body)) 30%, rgba(10, 12, 26, var(--glass-body)) 100%);
+  -webkit-backdrop-filter: blur(14px) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  backdrop-filter: blur(14px) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
   border: 1px solid var(--glass-edge);
   box-shadow: var(--glass-rim), 0 14px 34px rgba(3, 4, 12, 0.4);
 }
@@ -1168,6 +1170,8 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
 select,
 textarea {
   background: linear-gradient(158deg, rgba(255, 255, 255, 0.12) 0%, rgba(10, 12, 26, var(--glass-body-strong)) 32%, rgba(10, 12, 26, var(--glass-body-strong)) 100%) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
   border: 1px solid rgba(255, 255, 255, 0.3) !important;
   color: var(--text);
 }
@@ -1176,6 +1180,8 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
 
 /* 模式提示条：保留各自的强调色，但换成深色玻璃底，保证文字可读 */
 .mode-banner {
+  -webkit-backdrop-filter: blur(14px) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  backdrop-filter: blur(14px) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
   box-shadow: var(--glass-rim), 0 14px 34px rgba(3, 4, 12, 0.4);
 }
 .mode-banner.agent {
@@ -1309,33 +1315,6 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
 @media (max-width: 700px) {
   .nav-pill { display: none; }
 }
-/* ---------- 常驻玻璃底板 ----------
-   逐元素 backdrop-filter 在新路由挂载的首帧采不到背景（表现为整块“透明”），
-   改为在 .main 里放一块常驻的玻璃底板：它不随路由卸载，模糊始终在线，
-   上面的卡片/面板只叠自己的底色与亮边。 */
-
-.main { position: relative; }
-
-.glass-sheet {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  border-radius: 26px;
-  background: linear-gradient(
-    158deg,
-    rgba(255, 255, 255, 0.14) 0%,
-    rgba(10, 12, 26, 0.46) 26%,
-    rgba(10, 12, 26, 0.56) 70%,
-    rgba(255, 255, 255, 0.08) 100%
-  );
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
-  border: 1px solid rgba(255, 255, 255, var(--glass-edge-alpha));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 24px 60px rgba(3, 4, 12, 0.45);
-  pointer-events: none;
-}
-
-.main > *:not(.glass-sheet) { position: relative; z-index: 1; }
 
 /* ---------- 液态玻璃的形变 ----------
    1) 顶部胶囊拖动时按速度拉长/压扁（逻辑在 App.tsx）
@@ -1374,3 +1353,97 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
 /* 按钮按下时整块压扁一点，松手回弹 */
 .btn { transform-origin: 50% 50%; }
 .btn:active:not(:disabled) { transform: scale(0.96); }
+
+/* ---------- 关闭液态玻璃：回到项目初版的纯色界面 ---------- */
+
+.no-glass .backdrop-image { filter: none; animation: none; }
+
+.no-glass .nav {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: rgba(7, 8, 20, 0.92);
+  border-bottom: 1px solid var(--border);
+  box-shadow: none;
+}
+
+.no-glass .nav-user,
+.no-glass .nav-backdrop,
+.no-glass .panel,
+.no-glass .game-card,
+.no-glass .creation-template-card,
+.no-glass .segmented,
+.no-glass .search-input,
+.no-glass .chip,
+.no-glass .btn,
+.no-glass .page-head,
+.no-glass .footer-inner,
+.no-glass .empty-state,
+.no-glass .badge,
+.no-glass .notice,
+.no-glass .error-box,
+.no-glass .mode-banner,
+.no-glass input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.no-glass select,
+.no-glass textarea {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.no-glass .panel,
+.no-glass .game-card,
+.no-glass .creation-template-card,
+.no-glass .nav-user,
+.no-glass .nav-backdrop,
+.no-glass .segmented,
+.no-glass .search-input {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+
+.no-glass .hero-text {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.no-glass .page-head,
+.no-glass .footer-inner,
+.no-glass .empty-state,
+.no-glass .badge,
+.no-glass .notice,
+.no-glass .error-box {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.no-glass .nav::after,
+.no-glass .hero-text::after,
+.no-glass .game-card::after,
+.no-glass .panel::after,
+.no-glass .creation-template-card::after,
+.no-glass .btn::after { display: none; }
+
+.no-glass .btn { background: var(--panel-2); border: 1px solid var(--border-strong); }
+.no-glass .btn.primary { background: var(--grad); border: none; }
+.no-glass .chip.active,
+.no-glass .segmented button.active { background: var(--grad); border-color: transparent; color: #fff; }
+
+.no-glass input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.no-glass select,
+.no-glass textarea {
+  background: var(--bg-soft) !important;
+  border: 1px solid var(--border) !important;
+}
+
+/* 设置页的开关 */
+.setting-switch input[type="checkbox"] {
+  width: 44px;
+  height: 24px;
+  accent-color: var(--violet);
+  cursor: pointer;
+  margin: 6px 0 0;
+}

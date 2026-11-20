@@ -17,6 +17,8 @@ export interface GlassSettings {
 }
 
 export interface Prefs {
+  /** 液态玻璃开关；关闭后回到项目初版的纯色界面 */
+  glassEnabled: boolean;
   /** 背景图地址；null 表示关闭背景层 */
   backdrop: string | null;
   /** 背景图不透明度 0.05–1 */
@@ -38,6 +40,7 @@ const STORAGE_KEY = 'myol.prefs.v3';
 const LEGACY_KEYS = ['myol.prefs.v2', 'myol.prefs'];
 
 const DEFAULTS: Prefs = {
+  glassEnabled: true,
   backdrop: DEFAULT_BACKDROP,
   backdropOpacity: 1,
   glass: DEFAULT_GLASS,
@@ -68,6 +71,7 @@ function normalize(raw: unknown, fallback: Prefs = DEFAULTS): Prefs {
         ? null
         : fallback.backdrop;
   return {
+    glassEnabled: input.glassEnabled === false ? false : true,
     backdrop,
     backdropOpacity: clamp(Number(input.backdropOpacity), 0.05, 1, fallback.backdropOpacity),
     glass: normalizeGlass(input.glass, fallback.glass ?? DEFAULT_GLASS),
@@ -108,6 +112,7 @@ export function applyPrefs(prefs: Prefs): void {
   const root = document.documentElement;
   const glass = prefs.glass;
   root.style.setProperty('--backdrop-opacity', String(prefs.backdropOpacity));
+  root.classList.toggle('no-glass', !prefs.glassEnabled);
   root.style.setProperty('--glass-blur', glass.blur + 'px');
   root.style.setProperty('--glass-saturate', glass.saturate + '%');
   root.style.setProperty('--glass-brightness', String(glass.brightness));
