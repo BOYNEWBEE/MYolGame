@@ -43,7 +43,7 @@ export default function App(): ReactNode {
   const [welcomeActive, setWelcomeActive] = useState(false);
   return (
     <div className={'app' + (welcomeActive ? ' is-welcoming' : '')}>
-      <Backdrop sharp={welcomeActive} />
+      <Backdrop />
       <Welcome onActiveChange={setWelcomeActive} />
       <header className="nav">
         <div className="nav-inner">
