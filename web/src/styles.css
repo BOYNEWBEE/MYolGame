@@ -1189,9 +1189,9 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
    真机的光线折射（位移扭曲）要靠 SVG feDisplacementMap 或 WebGL，这里用 CSS 叠层近似。 */
 
 :root {
-  --glass-blur: 18px;
+  --glass-blur: 7px;
   --glass-saturate: 175%;
-  --glass-brightness: 0.9;
+  --glass-brightness: 1;
   --glass-body: 0.74;
   --glass-body-strong: 0.9;
   --glass-sheen: 0.16;
@@ -1309,16 +1309,17 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 .error-box {
   position: relative;
   background: linear-gradient(158deg, rgba(255, 255, 255, var(--glass-sheen)) 0%, rgba(10, 12, 26, var(--glass-body)) 30%, rgba(10, 12, 26, var(--glass-body)) 100%);
-  -webkit-backdrop-filter: blur(16px) saturate(170%) brightness(0.92);
-  backdrop-filter: blur(16px) saturate(170%) brightness(0.92);
+  -webkit-backdrop-filter: blur(14px) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  backdrop-filter: blur(14px) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
   border: 1px solid var(--glass-edge);
   box-shadow: var(--glass-rim), 0 14px 34px rgba(3, 4, 12, 0.4);
 }
 .page-head { padding: 18px 20px; border-radius: 18px; }
 .footer-inner { padding: 16px 18px; border-radius: 16px; }
+.empty-state { padding: 44px 26px; border-radius: 20px; }
 .hero-notice { border-style: solid; }
 
-input:not([type="checkbox"]):not([type="radio"]),
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
 select,
 textarea {
   background: linear-gradient(158deg, rgba(255, 255, 255, 0.12) 0%, rgba(10, 12, 26, var(--glass-body-strong)) 32%, rgba(10, 12, 26, var(--glass-body-strong)) 100%) !important;
@@ -1332,8 +1333,8 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
 
 /* 模式提示条：保留各自的强调色，但换成深色玻璃底，保证文字可读 */
 .mode-banner {
-  -webkit-backdrop-filter: blur(16px) saturate(160%) brightness(0.94);
-  backdrop-filter: blur(16px) saturate(160%) brightness(0.94);
+  -webkit-backdrop-filter: blur(14px) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  backdrop-filter: blur(14px) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
   box-shadow: var(--glass-rim), 0 14px 34px rgba(3, 4, 12, 0.4);
 }
 .mode-banner.agent {
@@ -1367,13 +1368,44 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
 }
 .setting-row .row-head b { color: var(--violet); font-variant-numeric: tabular-nums; }
 .setting-row input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
   width: 100%;
-  height: 22px;
-  accent-color: var(--violet);
-  cursor: pointer;
-  background: transparent;
-  border: none;
+  height: 18px;
+  margin: 2px 0 0;
   padding: 0;
+  background: transparent;
+  border: none !important;
+  box-shadow: none;
+  cursor: pointer;
+}
+.setting-row input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.8), rgba(232, 121, 249, 0.55));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+.setting-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid rgba(139, 92, 246, 0.9);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+.setting-row input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.8), rgba(232, 121, 249, 0.55));
+}
+.setting-row input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid rgba(139, 92, 246, 0.9);
 }
 
 .setting-hint { display: block; font-size: 12.5px; color: rgba(232, 234, 255, 0.78); margin: 6px 0 0; }

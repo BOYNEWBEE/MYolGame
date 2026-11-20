@@ -1,4 +1,4 @@
-// 本地外观偏好：只影响当前浏览器的观感，不进入服务端，也不影响生成出来的游戏产物。
+﻿// 本地外观偏好：只影响当前浏览器的观感，不进入服务端，也不影响生成出来的游戏产物。
 // 存 localStorage（几行文本）；背景图目前支持内置预设 / 远程 URL / 本地上传（dataURL，≤1.5 MB）。
 
 import { useEffect, useState } from 'react';
@@ -8,7 +8,7 @@ export interface GlassSettings {
   blur: number;
   /** 饱和度 100–250% */
   saturate: number;
-  /** 明暗 0.7–1.2（越小越暗，文字越好读） */
+  /** 明暗 0.4–1.8（1 = 不压暗；越小越暗，文字越好读） */
   brightness: number;
   /** 玻璃主体不透明度 0.3–0.95（越大越实，越不透背景） */
   body: number;
@@ -29,9 +29,9 @@ export interface Prefs {
 export const DEFAULT_BACKDROP = '/backdrops/anime-sisters.jpg';
 
 export const DEFAULT_GLASS: GlassSettings = {
-  blur: 18,
+  blur: 7,
   saturate: 175,
-  brightness: 0.9,
+  brightness: 1,
   body: 0.74,
   edge: 0.34,
 };
@@ -56,7 +56,7 @@ function normalizeGlass(raw: unknown, fallback: GlassSettings): GlassSettings {
   return {
     blur: clamp(Number(input.blur), 0, 40, fallback.blur),
     saturate: clamp(Number(input.saturate), 100, 250, fallback.saturate),
-    brightness: clamp(Number(input.brightness), 0.7, 1.2, fallback.brightness),
+    brightness: clamp(Number(input.brightness), 0.4, 1.8, fallback.brightness),
     body: clamp(Number(input.body), 0.3, 0.95, fallback.body),
     edge: clamp(Number(input.edge), 0.05, 0.8, fallback.edge),
   };

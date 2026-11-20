@@ -1,4 +1,4 @@
-// 设置页：背景图片与液态玻璃参数全部本地生效（localStorage），不进服务端、不影响游戏产物。
+﻿// 设置页：背景图片与液态玻璃参数全部本地生效（localStorage），不进服务端、不影响游戏产物。
 
 import { useRef, useState, type ReactNode } from 'react';
 import {
@@ -95,8 +95,8 @@ export default function Settings(): ReactNode {
           <p className="setting-hint">当前：{prefs.backdrop ? (prefs.backdrop.startsWith('data:') ? '本地图片' : prefs.backdrop) : '已关闭'}</p>
 
           <div className="setting-actions">
-            <button type="button" className="chip" onClick={() => { setPrefs({ backdrop: DEFAULT_BACKDROP }); setNotice('已恢复默认背景'); }}>默认背景</button>
-            <button type="button" className="chip" onClick={() => { setPrefs({ backdrop: null }); setNotice('背景已关闭'); }}>关闭背景</button>
+            <button type="button" className="chip" onClick={() => { setPrefs({ backdrop: DEFAULT_BACKDROP }); setNotice('已切换到「我的图片」背景'); }}>我的图片</button>
+            <button type="button" className="chip" onClick={() => { setPrefs({ backdrop: null }); setNotice('已切换到初版背景（无图片）'); }}>初版（无图）</button>
             <button type="button" className="chip" onClick={() => fileRef.current?.click()}>上传本地图片</button>
             <input
               ref={fileRef}
@@ -153,10 +153,10 @@ export default function Settings(): ReactNode {
           />
           <Slider
             label="明暗"
-            hint="调低会让玻璃更暗，白色文字更好读"
+            hint="1.00 = 不压暗（原始亮度）；越低玻璃越暗、白字越好读"
             value={glass.brightness}
-            min={0.7}
-            max={1.2}
+            min={0.4}
+            max={1.8}
             step={0.01}
             format={(value) => value.toFixed(2)}
             onChange={glassSetter('brightness')}
@@ -204,7 +204,7 @@ export default function Settings(): ReactNode {
               className="btn"
               onClick={() => {
                 resetPrefs();
-                setNotice('已恢复默认：' + DEFAULT_BACKDROP + ' + 默认玻璃参数');
+                setNotice('已恢复默认：我的图片 + 默认玻璃参数');
               }}
             >
               恢复默认外观
