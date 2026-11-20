@@ -1,4 +1,4 @@
-// 首次进入的欢迎页：只在当前浏览器第一次打开时出现，点「进入」后淡出并让主页面上浮登场。
+// 首次进入的整页欢迎屏：背景图保持清晰，点「进入」后欢迎内容淡出、背景逐渐模糊、主页面浮现。
 // 自动化测试（navigator.webdriver）直接跳过，避免遮挡端到端用例。
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -16,10 +16,20 @@ function initialState(): Phase {
   }
 }
 
-export default function Welcome(): ReactNode {
+export interface WelcomeProps {
+  /** 欢迎页是否还占着整页；App 用它同步背景模糊与主页面显隐 */
+  onActiveChange?: (active: boolean) => void;
+}
+
+export default function Welcome({ onActiveChange }: WelcomeProps): ReactNode {
   const [phase, setPhase] = useState<Phase>(initialState);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const timers = useRef<number[]>([]);
+
+  useEffect(() => {
+    // 只有「还在展示欢迎屏」时才算占着整页；一按进入（leaving）就该让背景开始模糊
+    onActiveChange?.(phase === 'show');
+  }, [phase, onActiveChange]);
 
   function enter(): void {
     if (phase !== 'show') return;
@@ -29,7 +39,7 @@ export default function Welcome(): ReactNode {
       // 隐私模式写不进去也不影响本次进入
     }
     setPhase('leaving');
-    timers.current.push(window.setTimeout(() => setPhase('done'), 680));
+    timers.current.push(window.setTimeout(() => setPhase('done'), 900));
   }
 
   useEffect(() => {
@@ -50,9 +60,9 @@ export default function Welcome(): ReactNode {
 
   return (
     <div className={'welcome' + (phase === 'leaving' ? ' is-leaving' : '')} role="dialog" aria-modal="true" aria-label="欢迎">
-      <div className="welcome-card">
+      <div className="welcome-inner">
         <div className="welcome-mark" aria-hidden="true">
-          <svg width="44" height="44" viewBox="0 0 32 32">
+          <svg width="64" height="64" viewBox="0 0 32 32">
             <defs>
               <linearGradient id="welcome-g" x1="0" y1="0" x2="1" y2="1">
                 <stop offset="0%" stopColor="#818cf8" />
@@ -66,7 +76,7 @@ export default function Welcome(): ReactNode {
           </svg>
         </div>
         <h1>欢迎来到 <em>MYolGame</em></h1>
-        <p>用一句话描述想玩的游戏，它会生成一个能在浏览器里直接玩的 2D 小游戏；不满意就继续说，版本随时可以回退。</p>
+        <p className="welcome-lead">用一句话描述想玩的游戏，它会生成一个能在浏览器里直接玩的 2D 小游戏；不满意就继续说，版本随时可以回退。</p>
         <ul className="welcome-points">
           <li>五种内置模板，开箱即玩</li>
           <li>接入模型后可写完整源码</li>
@@ -75,7 +85,7 @@ export default function Welcome(): ReactNode {
         <button ref={buttonRef} type="button" className="btn primary large welcome-enter" onClick={enter}>
           进入
         </button>
-        <p className="welcome-hint">仅首次进入显示；外观（背景、动效）可随时调整。</p>
+        <p className="welcome-hint">仅首次进入显示 · 按 Enter 也可进入</p>
       </div>
     </div>
   );

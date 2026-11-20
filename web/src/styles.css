@@ -940,7 +940,7 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
   object-fit: cover;
   /* 纯图片 + 轻微高斯模糊：不压暗、不叠渐变、不加其他滤镜 */
   opacity: var(--backdrop-opacity, 1);
-  filter: blur(var(--backdrop-blur, 6px));
+  filter: blur(var(--backdrop-blur, 14px));
   animation: ken-burns calc(42s * var(--site-motion, 1)) ease-in-out infinite alternate;
   will-change: transform;
 }
@@ -1038,7 +1038,7 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 
 .panel { transition: border-color calc(200ms * var(--site-motion, 1)) ease; }
 
-/* ---------- 首次进入欢迎页 ---------- */
+/* ---------- 首次进入欢迎屏（整页） ---------- */
 
 .welcome {
   position: fixed;
@@ -1046,70 +1046,91 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
   z-index: 100;
   display: grid;
   place-items: center;
-  padding: 24px;
-  background: radial-gradient(85% 65% at 50% 25%, rgba(99, 102, 241, 0.22), rgba(7, 8, 20, 0.66) 72%);
+  padding: 40px 24px;
+  /* 整页铺满，不盖卡片、不加整屏遮罩：背景保持清晰，只给文字区一层局部柔光 */
+  background: transparent;
   animation: welcome-in calc(420ms * var(--site-motion, 1)) ease both;
 }
 
 .welcome.is-leaving {
-  animation: welcome-out calc(680ms * var(--site-motion, 1)) cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: welcome-out calc(820ms * var(--site-motion, 1)) cubic-bezier(0.4, 0, 0.2, 1) forwards;
   pointer-events: none;
 }
 
-.welcome-card {
-  width: min(100%, 520px);
-  padding: 36px 30px 26px;
-  border-radius: 22px;
-  border: 1px solid var(--border-strong);
-  background: rgba(10, 12, 26, 0.66);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(139, 92, 246, 0.08) inset;
+.welcome-inner {
+  position: relative;
+  width: min(100%, 720px);
+  padding: 38px 34px 30px;
+  border-radius: 26px;
+  border: 1px solid rgba(139, 92, 246, 0.28);
+  /* 文字底板：只覆盖文字区，背景图本身不模糊、不整体压暗 */
+  background: rgba(7, 8, 20, 0.52);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
   text-align: center;
   animation: welcome-card-in calc(560ms * var(--site-motion, 1)) cubic-bezier(0.22, 0.61, 0.36, 1) 60ms both;
 }
 
-.welcome-mark { display: flex; justify-content: center; margin-bottom: 14px; }
-.welcome-card h1 { font-size: calc(24px * var(--site-type, 1)); margin: 0 0 10px; }
-.welcome-card h1 em {
-  font-style: normal;
-  background: var(--grad);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+.welcome.is-leaving .welcome-inner {
+  animation: welcome-inner-out calc(760ms * var(--site-motion, 1)) cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
-.welcome-card > p { margin: 0 0 14px; color: var(--muted); font-size: 14px; line-height: 1.7; }
+
+/* 文字背后的柔光：让底板边缘与图片过渡更自然，不覆盖整张背景 */
+.welcome-inner::before {
+  content: "";
+  position: absolute;
+  inset: -22% -16%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(7, 8, 20, 0.42), transparent 100%);
+}
+
+.welcome-mark { display: flex; justify-content: center; margin-bottom: 16px; }
+
+.welcome-inner h1 { font-size: calc(40px * var(--site-type, 1)); margin: 0 0 12px; letter-spacing: 0.5px; }
+.welcome-inner h1 em {
+  font-style: normal;
+  /* 底板是深色，用亮一点的实色比渐变文字更清楚 */
+  color: #c9b8ff;
+}
+
+.welcome-lead { margin: 0 auto 22px; max-width: 560px; font-size: 15px; line-height: 1.8; color: var(--text); opacity: 0.94; }
 
 .welcome-points {
   list-style: none;
-  margin: 0 0 22px;
+  margin: 0 auto 26px;
   padding: 0;
-  display: grid;
-  gap: 8px;
-  text-align: left;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
 }
 .welcome-points li {
-  position: relative;
-  padding: 8px 12px 8px 30px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: rgba(129, 140, 248, 0.07);
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: rgba(10, 12, 26, 0.55);
   font-size: 13px;
   color: var(--text);
 }
-.welcome-points li::before {
-  content: "";
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  margin-top: -4px;
-  border-radius: 50%;
-  background: var(--grad);
-}
 
-.welcome-enter { width: 100%; }
-.welcome-hint { margin: 12px 0 0 !important; font-size: 12px !important; color: var(--muted) !important; }
+.welcome-enter { min-width: 200px; }
+.welcome-hint { margin: 14px 0 0; font-size: 12px; color: var(--muted); }
+
+/* 文字加紧贴字形的投影，保证在清晰的亮底图上仍可读 */
+.welcome-inner h1,
+.welcome-lead,
+.welcome-points li,
+.welcome-hint { text-shadow: 0 1px 3px rgba(7, 8, 20, 0.9); }
+
+/* 欢迎页期间先隐藏导航与页面内容，进入时随背景模糊一起浮现 */
+.nav, .main, .footer { transition: opacity calc(680ms * var(--site-motion, 1)) ease; }
+.app.is-welcoming .nav,
+.app.is-welcoming .main,
+.app.is-welcoming .footer { opacity: 0; pointer-events: none; }
+
+/* 背景：欢迎页清晰（.is-sharp）→ 主页面模糊，中间平滑过渡 */
+.backdrop-image { transition: filter calc(820ms * var(--site-motion, 1)) cubic-bezier(0.4, 0, 0.2, 1); }
+.backdrop.is-sharp .backdrop-image { filter: blur(0); }
 
 /* 背景图轻微模糊后仍是亮底，给首屏文字加一层很紧的投影提升可读性
    （用紧贴字形的小半径而不是大范围光晕，否则白字看起来会像糊掉） */
@@ -1123,14 +1144,19 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 }
 
 @keyframes welcome-card-in {
-  from { opacity: 0; transform: translateY(18px) scale(0.97); }
+  from { opacity: 0; transform: translateY(18px) scale(0.98); }
   to { opacity: 1; transform: none; }
 }
 
-/* 退场：整层虚化并上浮淡出，露出已经就位的主页面 */
+@keyframes welcome-inner-out {
+  from { opacity: 1; transform: none; filter: blur(0); }
+  to { opacity: 0; transform: translateY(-14px) scale(1.03); filter: blur(8px); }
+}
+
+/* 整层只做淡出：背景图的模糊由 .backdrop-image 的 filter 过渡接管 */
 @keyframes welcome-out {
-  from { opacity: 1; transform: scale(1); filter: blur(0); }
-  to { opacity: 0; transform: scale(1.04); filter: blur(12px); }
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 /* 无障碍与省电：关闭全部位移/缩放/背景漂移 */
@@ -1138,7 +1164,8 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
   .backdrop-image,
   .welcome,
   .welcome.is-leaving,
-  .welcome-card,
+  .welcome-inner,
+  .welcome.is-leaving .welcome-inner,
   .page,
   .hero-text h1,
   .hero-text > p,
@@ -1150,7 +1177,11 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
   .cover,
   .nav-backdrop,
   .panel,
-  .btn { transition: none !important; }
+  .btn,
+  .backdrop-image,
+  .nav,
+  .main,
+  .footer { transition: none !important; }
   .game-card:hover,
   .cover-link:hover .cover { transform: none !important; }
 }

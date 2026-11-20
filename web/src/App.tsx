@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { NavLink, Link, Route, Routes } from 'react-router-dom';
 import { useSession } from './session.tsx';
 import Backdrop from './components/Backdrop.tsx';
@@ -40,10 +40,11 @@ function Logo(): ReactNode {
 export default function App(): ReactNode {
   const session = useSession();
   const prefs = usePrefs();
+  const [welcomeActive, setWelcomeActive] = useState(false);
   return (
-    <div className="app">
-      <Backdrop />
-      <Welcome />
+    <div className={'app' + (welcomeActive ? ' is-welcoming' : '')}>
+      <Backdrop sharp={welcomeActive} />
+      <Welcome onActiveChange={setWelcomeActive} />
       <header className="nav">
         <div className="nav-inner">
           <Logo />
