@@ -938,8 +938,9 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
   width: 108%;
   height: 108%;
   object-fit: cover;
-  /* 纯图片：不压暗、不叠渐变、不加滤镜；opacity 仅作为可选的整体透明度 */
+  /* 纯图片 + 轻微高斯模糊：不压暗、不叠渐变、不加其他滤镜 */
   opacity: var(--backdrop-opacity, 1);
+  filter: blur(var(--backdrop-blur, 6px));
   animation: ken-burns calc(42s * var(--site-motion, 1)) ease-in-out infinite alternate;
   will-change: transform;
 }
@@ -1037,9 +1038,107 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 
 .panel { transition: border-color calc(200ms * var(--site-motion, 1)) ease; }
 
+/* ---------- 首次进入欢迎页 ---------- */
+
+.welcome {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(85% 65% at 50% 25%, rgba(99, 102, 241, 0.22), rgba(7, 8, 20, 0.66) 72%);
+  animation: welcome-in calc(420ms * var(--site-motion, 1)) ease both;
+}
+
+.welcome.is-leaving {
+  animation: welcome-out calc(680ms * var(--site-motion, 1)) cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none;
+}
+
+.welcome-card {
+  width: min(100%, 520px);
+  padding: 36px 30px 26px;
+  border-radius: 22px;
+  border: 1px solid var(--border-strong);
+  background: rgba(10, 12, 26, 0.66);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(139, 92, 246, 0.08) inset;
+  text-align: center;
+  animation: welcome-card-in calc(560ms * var(--site-motion, 1)) cubic-bezier(0.22, 0.61, 0.36, 1) 60ms both;
+}
+
+.welcome-mark { display: flex; justify-content: center; margin-bottom: 14px; }
+.welcome-card h1 { font-size: calc(24px * var(--site-type, 1)); margin: 0 0 10px; }
+.welcome-card h1 em {
+  font-style: normal;
+  background: var(--grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.welcome-card > p { margin: 0 0 14px; color: var(--muted); font-size: 14px; line-height: 1.7; }
+
+.welcome-points {
+  list-style: none;
+  margin: 0 0 22px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  text-align: left;
+}
+.welcome-points li {
+  position: relative;
+  padding: 8px 12px 8px 30px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(129, 140, 248, 0.07);
+  font-size: 13px;
+  color: var(--text);
+}
+.welcome-points li::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--grad);
+}
+
+.welcome-enter { width: 100%; }
+.welcome-hint { margin: 12px 0 0 !important; font-size: 12px !important; color: var(--muted) !important; }
+
+/* 背景图轻微模糊后仍是亮底，给首屏文字加一层很紧的投影提升可读性
+   （用紧贴字形的小半径而不是大范围光晕，否则白字看起来会像糊掉） */
+.hero-text h1 { text-shadow: 0 1px 3px rgba(7, 8, 20, 0.75); }
+.hero-text > p { text-shadow: 0 1px 2px rgba(7, 8, 20, 0.9); }
+.hero-notice { text-shadow: 0 1px 2px rgba(7, 8, 20, 0.9); }
+
+@keyframes welcome-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes welcome-card-in {
+  from { opacity: 0; transform: translateY(18px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 退场：整层虚化并上浮淡出，露出已经就位的主页面 */
+@keyframes welcome-out {
+  from { opacity: 1; transform: scale(1); filter: blur(0); }
+  to { opacity: 0; transform: scale(1.04); filter: blur(12px); }
+}
+
 /* 无障碍与省电：关闭全部位移/缩放/背景漂移 */
 @media (prefers-reduced-motion: reduce) {
   .backdrop-image,
+  .welcome,
+  .welcome.is-leaving,
+  .welcome-card,
   .page,
   .hero-text h1,
   .hero-text > p,

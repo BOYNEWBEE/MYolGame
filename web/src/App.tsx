@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { NavLink, Link, Route, Routes } from 'react-router-dom';
 import { useSession } from './session.tsx';
 import Backdrop from './components/Backdrop.tsx';
+import Welcome from './components/Welcome.tsx';
 import { DEFAULT_BACKDROP, setPrefs, usePrefs } from './prefs.ts';
 import QcaExperiment from './pages/QcaExperiment.tsx';
 import M0 from './pages/M0.tsx';
@@ -42,6 +43,7 @@ export default function App(): ReactNode {
   return (
     <div className="app">
       <Backdrop />
+      <Welcome />
       <header className="nav">
         <div className="nav-inner">
           <Logo />
