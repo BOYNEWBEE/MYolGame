@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 export interface Prefs {
   /** 背景图地址；null 表示关闭背景层 */
   backdrop: string | null;
-  /** 背景图不透明度 0.05–0.6 */
+  /** 背景图不透明度 0.05–1（1 = 纯图片，不加任何遮盖） */
   backdropOpacity: number;
   /** 全局动效倍率 0–1.5，写进 --site-motion */
   motion: number;
@@ -14,11 +14,11 @@ export interface Prefs {
 
 export const DEFAULT_BACKDROP = '/backdrops/anime-sisters.jpg';
 
-const STORAGE_KEY = 'myol.prefs';
+const STORAGE_KEY = 'myol.prefs.v2';
 
 const DEFAULTS: Prefs = {
   backdrop: DEFAULT_BACKDROP,
-  backdropOpacity: 0.28,
+  backdropOpacity: 1,
   motion: 1,
 };
 
@@ -32,7 +32,7 @@ function normalize(raw: unknown): Prefs {
   const backdrop = typeof input.backdrop === 'string' && input.backdrop.trim() ? input.backdrop : input.backdrop === null ? null : DEFAULTS.backdrop;
   return {
     backdrop,
-    backdropOpacity: clamp(Number(input.backdropOpacity), 0.05, 0.6, DEFAULTS.backdropOpacity),
+    backdropOpacity: clamp(Number(input.backdropOpacity), 0.05, 1, DEFAULTS.backdropOpacity),
     motion: clamp(Number(input.motion), 0, 1.5, DEFAULTS.motion),
   };
 }

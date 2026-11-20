@@ -1,4 +1,4 @@
-// 页面背景层：固定在最底层，只做装饰，不接收指针事件、不进无障碍树。
+// 页面背景层：只显示图片本身，不叠遮罩、不叠渐变、不加滤镜。
 // 图片走 public/backdrops 下的静态资源（与产物无关）；将来接本地图片时换成 objectURL 即可。
 
 import type { ReactNode } from 'react';
@@ -10,8 +10,6 @@ export default function Backdrop(): ReactNode {
   return (
     <div className="backdrop" aria-hidden="true">
       <img className="backdrop-image" src={prefs.backdrop} alt="" decoding="async" />
-      <div className="backdrop-aurora" />
-      <div className="backdrop-scrim" />
     </div>
   );
 }

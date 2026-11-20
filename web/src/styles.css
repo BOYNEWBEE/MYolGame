@@ -938,39 +938,15 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
   width: 108%;
   height: 108%;
   object-fit: cover;
-  opacity: var(--backdrop-opacity, 0.28);
+  /* 纯图片：不压暗、不叠渐变、不加滤镜；opacity 仅作为可选的整体透明度 */
+  opacity: var(--backdrop-opacity, 1);
   animation: ken-burns calc(42s * var(--site-motion, 1)) ease-in-out infinite alternate;
   will-change: transform;
-}
-
-.backdrop-aurora {
-  position: absolute;
-  inset: -25%;
-  background:
-    radial-gradient(38% 32% at 22% 28%, rgba(168, 85, 247, 0.26), transparent 70%),
-    radial-gradient(34% 30% at 78% 40%, rgba(56, 189, 248, 0.20), transparent 72%),
-    radial-gradient(30% 28% at 55% 82%, rgba(232, 121, 249, 0.18), transparent 70%);
-  animation: aurora-drift calc(26s * var(--site-motion, 1)) ease-in-out infinite alternate;
-  will-change: transform, opacity;
-}
-
-/* 压暗层：保证导航、标题、卡片在图片上仍然可读 */
-.backdrop-scrim {
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(180deg, rgba(7, 8, 20, 0.88) 0%, rgba(7, 8, 20, 0.6) 32%, rgba(7, 8, 20, 0.82) 100%),
-    radial-gradient(120% 80% at 50% 0%, rgba(99, 102, 241, 0.16), transparent 62%);
 }
 
 @keyframes ken-burns {
   from { transform: scale(1.03) translate3d(-1%, -1%, 0); }
   to { transform: scale(1.12) translate3d(1.6%, 1.2%, 0); }
-}
-
-@keyframes aurora-drift {
-  from { transform: translate3d(-2%, -1%, 0) scale(1); opacity: 0.7; }
-  to { transform: translate3d(2%, 2%, 0) scale(1.08); opacity: 1; }
 }
 
 /* 导航里的背景开关 */
@@ -1064,7 +1040,6 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 /* 无障碍与省电：关闭全部位移/缩放/背景漂移 */
 @media (prefers-reduced-motion: reduce) {
   .backdrop-image,
-  .backdrop-aurora,
   .page,
   .hero-text h1,
   .hero-text > p,
