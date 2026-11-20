@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { NavLink, Link, Route, Routes } from 'react-router-dom';
 import { useSession } from './session.tsx';
+import Backdrop from './components/Backdrop.tsx';
+import { DEFAULT_BACKDROP, setPrefs, usePrefs } from './prefs.ts';
 import QcaExperiment from './pages/QcaExperiment.tsx';
 import M0 from './pages/M0.tsx';
 import Account from './pages/Account.tsx';
@@ -36,8 +38,10 @@ function Logo(): ReactNode {
 
 export default function App(): ReactNode {
   const session = useSession();
+  const prefs = usePrefs();
   return (
     <div className="app">
+      <Backdrop />
       <header className="nav">
         <div className="nav-inner">
           <Logo />
@@ -50,6 +54,15 @@ export default function App(): ReactNode {
             <NavLink to="/favorites">我的收藏</NavLink>
             {session.qcaExperiment && <NavLink to="/experiments/qca">新路线实验</NavLink>}
           </nav>
+          <button
+            type="button"
+            className={'nav-backdrop' + (prefs.backdrop ? ' is-on' : '')}
+            aria-pressed={Boolean(prefs.backdrop)}
+            title={prefs.backdrop ? '关闭背景图' : '开启背景图'}
+            onClick={() => setPrefs({ backdrop: prefs.backdrop ? null : DEFAULT_BACKDROP })}
+          >
+            背景
+          </button>
           <div className="nav-user">
             <span className="dot" aria-hidden="true" />
             {session.ready ? session.nickname : '连接中…'}
