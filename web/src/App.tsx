@@ -3,7 +3,6 @@ import { NavLink, Link, Route, Routes } from 'react-router-dom';
 import { useSession } from './session.tsx';
 import Backdrop from './components/Backdrop.tsx';
 import Welcome from './components/Welcome.tsx';
-import { DEFAULT_BACKDROP, setPrefs, usePrefs } from './prefs.ts';
 import QcaExperiment from './pages/QcaExperiment.tsx';
 import M0 from './pages/M0.tsx';
 import Account from './pages/Account.tsx';
@@ -15,6 +14,7 @@ import Workbench from './pages/Workbench.tsx';
 import Favorites from './pages/Favorites.tsx';
 import Templates from './pages/Templates.tsx';
 import TemplateDetail from './pages/TemplateDetail.tsx';
+import Settings from './pages/Settings.tsx';
 
 function Logo(): ReactNode {
   return (
@@ -39,7 +39,6 @@ function Logo(): ReactNode {
 
 export default function App(): ReactNode {
   const session = useSession();
-  const prefs = usePrefs();
   const [welcomeActive, setWelcomeActive] = useState(false);
   return (
     <div className={'app' + (welcomeActive ? ' is-welcoming' : '')}>
@@ -55,17 +54,9 @@ export default function App(): ReactNode {
             {session.cloudM0 && <NavLink to="/m0">云端任务</NavLink>}
             <NavLink to="/projects">我的项目</NavLink>
             <NavLink to="/favorites">我的收藏</NavLink>
+            <NavLink to="/settings">设置</NavLink>
             {session.qcaExperiment && <NavLink to="/experiments/qca">新路线实验</NavLink>}
           </nav>
-          <button
-            type="button"
-            className={'nav-backdrop' + (prefs.backdrop ? ' is-on' : '')}
-            aria-pressed={Boolean(prefs.backdrop)}
-            title={prefs.backdrop ? '关闭背景图' : '开启背景图'}
-            onClick={() => setPrefs({ backdrop: prefs.backdrop ? null : DEFAULT_BACKDROP })}
-          >
-            背景
-          </button>
           <div className="nav-user">
             <span className="dot" aria-hidden="true" />
             {session.ready ? session.nickname : '连接中…'}
@@ -84,6 +75,7 @@ export default function App(): ReactNode {
           <Route path="/games/:id" element={<GameDetail />} />
           <Route path="/templates" element={<Templates />} />
           <Route path="/templates/:id" element={<TemplateDetail />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="/create" element={session.cloudM0 ? <M0 /> : <Create />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/projects/:id" element={<Workbench />} />

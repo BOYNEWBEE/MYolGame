@@ -1,25 +1,49 @@
 // 本地外观偏好：只影响当前浏览器的观感，不进入服务端，也不影响生成出来的游戏产物。
-// 存 localStorage（几行文本），图片/视频将来走 IndexedDB，不塞这里。
+// 存 localStorage（几行文本）；背景图目前支持内置预设 / 远程 URL / 本地上传（dataURL，≤1.5 MB）。
 
 import { useEffect, useState } from 'react';
+
+export interface GlassSettings {
+  /** 背景模糊半径 0–40px */
+  blur: number;
+  /** 饱和度 100–250% */
+  saturate: number;
+  /** 明暗 0.7–1.2（越小越暗，文字越好读） */
+  brightness: number;
+  /** 玻璃主体不透明度 0.3–0.95（越大越实，越不透背景） */
+  body: number;
+  /** 亮边强度 0.05–0.8 */
+  edge: number;
+}
 
 export interface Prefs {
   /** 背景图地址；null 表示关闭背景层 */
   backdrop: string | null;
-  /** 背景图不透明度 0.05–1（1 = 纯图片，不加任何遮盖） */
+  /** 背景图不透明度 0.05–1 */
   backdropOpacity: number;
   /** 全局动效倍率 0–1.5，写进 --site-motion */
   motion: number;
+  glass: GlassSettings;
 }
 
 export const DEFAULT_BACKDROP = '/backdrops/anime-sisters.jpg';
 
-const STORAGE_KEY = 'myol.prefs.v2';
+export const DEFAULT_GLASS: GlassSettings = {
+  blur: 18,
+  saturate: 175,
+  brightness: 0.9,
+  body: 0.74,
+  edge: 0.34,
+};
+
+const STORAGE_KEY = 'myol.prefs.v3';
+const LEGACY_KEYS = ['myol.prefs.v2', 'myol.prefs'];
 
 const DEFAULTS: Prefs = {
   backdrop: DEFAULT_BACKDROP,
   backdropOpacity: 1,
   motion: 1,
+  glass: DEFAULT_GLASS,
 };
 
 function clamp(value: number, min: number, max: number, fallback: number): number {
@@ -27,14 +51,43 @@ function clamp(value: number, min: number, max: number, fallback: number): numbe
   return Math.min(max, Math.max(min, value));
 }
 
-function normalize(raw: unknown): Prefs {
+function normalizeGlass(raw: unknown, fallback: GlassSettings): GlassSettings {
   const input = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
-  const backdrop = typeof input.backdrop === 'string' && input.backdrop.trim() ? input.backdrop : input.backdrop === null ? null : DEFAULTS.backdrop;
+  return {
+    blur: clamp(Number(input.blur), 0, 40, fallback.blur),
+    saturate: clamp(Number(input.saturate), 100, 250, fallback.saturate),
+    brightness: clamp(Number(input.brightness), 0.7, 1.2, fallback.brightness),
+    body: clamp(Number(input.body), 0.3, 0.95, fallback.body),
+    edge: clamp(Number(input.edge), 0.05, 0.8, fallback.edge),
+  };
+}
+
+function normalize(raw: unknown, fallback: Prefs = DEFAULTS): Prefs {
+  const input = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+  const backdrop =
+    typeof input.backdrop === 'string' && input.backdrop.trim()
+      ? input.backdrop
+      : input.backdrop === null
+        ? null
+        : fallback.backdrop;
   return {
     backdrop,
-    backdropOpacity: clamp(Number(input.backdropOpacity), 0.05, 1, DEFAULTS.backdropOpacity),
-    motion: clamp(Number(input.motion), 0, 1.5, DEFAULTS.motion),
+    backdropOpacity: clamp(Number(input.backdropOpacity), 0.05, 1, fallback.backdropOpacity),
+    motion: clamp(Number(input.motion), 0, 1.5, fallback.motion),
+    glass: normalizeGlass(input.glass, fallback.glass ?? DEFAULT_GLASS),
   };
+}
+
+function readLegacy(): Prefs | null {
+  for (const key of LEGACY_KEYS) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) return normalize(JSON.parse(raw));
+    } catch {
+      // 忽略损坏数据，继续尝试下一个
+    }
+  }
+  return null;
 }
 
 let current: Prefs = loadPrefs();
@@ -42,29 +95,56 @@ const listeners = new Set<(prefs: Prefs) => void>();
 
 export function loadPrefs(): Prefs {
   try {
-    return normalize(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null'));
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return normalize(JSON.parse(raw));
   } catch {
-    return { ...DEFAULTS };
+    // 落到下面的迁移逻辑
   }
+  return readLegacy() ?? { ...DEFAULTS };
 }
 
 export function getPrefs(): Prefs {
   return current;
 }
 
-/** 把偏好写进 CSS 变量；styles.css 里的动效都用 var(--site-motion) 乘时长。 */
+/** 把偏好写进 CSS 变量；styles.css 的玻璃与动效都读这些变量。 */
 export function applyPrefs(prefs: Prefs): void {
   const root = document.documentElement;
+  const glass = prefs.glass;
   root.style.setProperty('--backdrop-opacity', String(prefs.backdropOpacity));
   root.style.setProperty('--site-motion', String(prefs.motion));
+  root.style.setProperty('--glass-blur', glass.blur + 'px');
+  root.style.setProperty('--glass-saturate', glass.saturate + '%');
+  root.style.setProperty('--glass-brightness', String(glass.brightness));
+  root.style.setProperty('--glass-body', String(glass.body));
+  root.style.setProperty('--glass-body-strong', String(Math.min(0.97, glass.body + 0.14)));
+  root.style.setProperty('--glass-sheen', String(Math.min(0.5, glass.edge * 0.47)));
+  root.style.setProperty('--glass-edge-alpha', String(glass.edge));
 }
 
 export function setPrefs(patch: Partial<Prefs>): Prefs {
-  current = normalize({ ...current, ...patch });
+  current = normalize({ ...current, ...patch }, current);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
   } catch {
     // 隐私模式或配额满：偏好只在本页有效，不阻断使用
+  }
+  applyPrefs(current);
+  for (const listener of listeners) listener(current);
+  return current;
+}
+
+/** 只改玻璃参数，避免调用方每次拼整个 glass 对象。 */
+export function setGlass(patch: Partial<GlassSettings>): Prefs {
+  return setPrefs({ glass: { ...current.glass, ...patch } });
+}
+
+export function resetPrefs(): Prefs {
+  current = { ...DEFAULTS, glass: { ...DEFAULT_GLASS } };
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+  } catch {
+    // 同上
   }
   applyPrefs(current);
   for (const listener of listeners) listener(current);
