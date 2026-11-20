@@ -1,5 +1,4 @@
 ﻿import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { usePrefs } from './prefs.ts';
 import { NavLink, Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useSession } from './session.tsx';
 import Backdrop from './components/Backdrop.tsx';
@@ -39,7 +38,6 @@ function Logo(): ReactNode {
 
 export default function App(): ReactNode {
   const session = useSession();
-  const prefs = usePrefs();
   const location = useLocation();
   const navigate = useNavigate();
   // 路由切换时先淡出旧内容、再淡入新内容，让玻璃的模糊有足够时间就位
@@ -186,10 +184,6 @@ export default function App(): ReactNode {
               onPointerCancel={pillUp}
               onDragStart={(event) => event.preventDefault()}
             >
-              <span className="nav-pill-lens" aria-hidden="true">
-                {prefs.backdrop && <img className="nav-pill-lens-img" src={prefs.backdrop} alt="" draggable={false} />}
-              </span>
-              <span className="nav-pill-tint" aria-hidden="true" />
             </span>
             <NavLink to="/" end>社区首页</NavLink>
             <NavLink to="/templates">社区模板</NavLink>
