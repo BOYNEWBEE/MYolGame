@@ -1013,132 +1013,9 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 
 .panel { transition: border-color calc(200ms * var(--site-motion, 1)) ease; }
 
-/* ---------- 首次进入欢迎屏（整页） ---------- */
-
-.welcome {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: grid;
-  place-items: center;
-  padding: 40px 24px;
-  /* 整页铺满，不盖卡片、不加整屏遮罩：背景保持清晰，只给文字区一层局部柔光 */
-  background: transparent;
-  animation: welcome-in calc(420ms * var(--site-motion, 1)) ease both;
-}
-
-.welcome.is-leaving {
-  animation: welcome-out calc(820ms * var(--site-motion, 1)) cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  pointer-events: none;
-}
-
-.welcome-inner {
-  position: relative;
-  width: min(100%, 720px);
-  padding: 38px 34px 30px;
-  border-radius: 26px;
-  border: 1px solid rgba(139, 92, 246, 0.28);
-  /* 文字底板：只覆盖文字区，背景图本身不模糊、不整体压暗 */
-  background: rgba(7, 8, 20, 0.52);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
-  text-align: center;
-}
-
-.welcome.is-leaving .welcome-inner {
-  animation: welcome-inner-out calc(760ms * var(--site-motion, 1)) cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-/* 文字背后的柔光：让底板边缘与图片过渡更自然，不覆盖整张背景 */
-.welcome-inner::before {
-  content: "";
-  position: absolute;
-  inset: -22% -16%;
-  z-index: -1;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(7, 8, 20, 0.42), transparent 100%);
-}
-
-.welcome-mark { display: flex; justify-content: center; margin-bottom: 16px; }
-
-.welcome-inner h1 { font-size: calc(40px * var(--site-type, 1)); margin: 0 0 12px; letter-spacing: 0.5px; }
-.welcome-inner h1 em {
-  font-style: normal;
-  /* 底板是深色，用亮一点的实色比渐变文字更清楚 */
-  color: #c9b8ff;
-}
-
-.welcome-lead { margin: 0 auto 22px; max-width: 560px; font-size: 15px; line-height: 1.8; color: var(--text); opacity: 0.94; }
-
-.welcome-points {
-  list-style: none;
-  margin: 0 auto 26px;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
-}
-.welcome-points li {
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  background: rgba(10, 12, 26, 0.55);
-  font-size: 13px;
-  color: var(--text);
-}
-
-.welcome-enter { min-width: 200px; }
-.welcome-hint { margin: 14px 0 0; font-size: 12px; color: var(--muted); }
-
-/* 文字加紧贴字形的投影，保证在清晰的亮底图上仍可读 */
-.welcome-inner h1,
-.welcome-lead,
-.welcome-points li,
-.welcome-hint { text-shadow: 0 1px 3px rgba(7, 8, 20, 0.9); }
-
-/* 欢迎页期间先隐藏导航与页面内容，进入时随背景模糊一起浮现 */
-.nav, .main, .footer { transition: opacity calc(680ms * var(--site-motion, 1)) ease; }
-.app.is-welcoming .nav,
-.app.is-welcoming .main,
-.app.is-welcoming .footer { opacity: 0; pointer-events: none; }
-
-/* 背景：清晰原图，不再做模糊过渡 */
-.backdrop-image { transition: opacity calc(420ms * var(--site-motion, 1)) ease; }
-
-/* 背景图轻微模糊后仍是亮底，给首屏文字加一层很紧的投影提升可读性
-   （用紧贴字形的小半径而不是大范围光晕，否则白字看起来会像糊掉） */
-.hero-text h1 { text-shadow: 0 1px 3px rgba(7, 8, 20, 0.75); }
-.hero-text > p { text-shadow: 0 1px 2px rgba(7, 8, 20, 0.9); }
-.hero-notice { text-shadow: 0 1px 2px rgba(7, 8, 20, 0.9); }
-
-@keyframes welcome-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes welcome-card-in {
-  from { opacity: 0; transform: translateY(18px) scale(0.98); }
-  to { opacity: 1; transform: none; }
-}
-
-@keyframes welcome-inner-out {
-  from { opacity: 1; transform: none; filter: blur(0); }
-  to { opacity: 0; transform: translateY(-14px) scale(1.03); filter: blur(8px); }
-}
-
-/* 整层只做淡出：背景图的模糊由 .backdrop-image 的 filter 过渡接管 */
-@keyframes welcome-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
-
 /* 无障碍与省电：关闭全部位移/缩放/背景漂移 */
 @media (prefers-reduced-motion: reduce) {
   .backdrop-image,
-  .welcome,
-  .welcome.is-leaving,
-  .welcome-inner,
-  .welcome.is-leaving .welcome-inner,
   .page,
   .hero-text h1,
   .hero-text > p,
@@ -1187,8 +1064,7 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 .hero-text,
 .game-card,
 .panel,
-.creation-template-card,
-.welcome-inner {
+.creation-template-card {
   position: relative;
   background:
     linear-gradient(
@@ -1198,8 +1074,6 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
       rgba(10, 12, 26, var(--glass-body)) 68%,
       rgba(255, 255, 255, calc(var(--glass-sheen) * 0.6)) 100%
     );
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
   border: 1px solid rgba(255, 255, 255, var(--glass-edge-alpha));
   box-shadow: var(--glass-rim), var(--glass-shadow);
 }
@@ -1210,7 +1084,6 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 .game-card::after,
 .panel::after,
 .creation-template-card::after,
-.welcome-inner::after,
 .btn::after {
   content: "";
   position: absolute;
@@ -1230,7 +1103,6 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 
 /* 文字块给玻璃留出内边距，否则亮边会贴着字 */
 .hero-text { padding: 26px 28px; border-radius: 24px; }
-.welcome-inner { border-radius: 26px; }
 
 /* 玻璃底足够暗，去掉之前的文字投影补丁 */
 .hero-text h1,
@@ -1284,8 +1156,6 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 .error-box {
   position: relative;
   background: linear-gradient(158deg, rgba(255, 255, 255, var(--glass-sheen)) 0%, rgba(10, 12, 26, var(--glass-body)) 30%, rgba(10, 12, 26, var(--glass-body)) 100%);
-  -webkit-backdrop-filter: blur(14px) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
-  backdrop-filter: blur(14px) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
   border: 1px solid var(--glass-edge);
   box-shadow: var(--glass-rim), 0 14px 34px rgba(3, 4, 12, 0.4);
 }
@@ -1298,8 +1168,6 @@ input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
 select,
 textarea {
   background: linear-gradient(158deg, rgba(255, 255, 255, 0.12) 0%, rgba(10, 12, 26, var(--glass-body-strong)) 32%, rgba(10, 12, 26, var(--glass-body-strong)) 100%) !important;
-  -webkit-backdrop-filter: blur(14px) saturate(160%);
-  backdrop-filter: blur(14px) saturate(160%);
   border: 1px solid rgba(255, 255, 255, 0.3) !important;
   color: var(--text);
 }
@@ -1308,8 +1176,6 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
 
 /* 模式提示条：保留各自的强调色，但换成深色玻璃底，保证文字可读 */
 .mode-banner {
-  -webkit-backdrop-filter: blur(14px) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
-  backdrop-filter: blur(14px) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
   box-shadow: var(--glass-rim), 0 14px 34px rgba(3, 4, 12, 0.4);
 }
 .mode-banner.agent {
@@ -1443,3 +1309,68 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
 @media (max-width: 700px) {
   .nav-pill { display: none; }
 }
+/* ---------- 常驻玻璃底板 ----------
+   逐元素 backdrop-filter 在新路由挂载的首帧采不到背景（表现为整块“透明”），
+   改为在 .main 里放一块常驻的玻璃底板：它不随路由卸载，模糊始终在线，
+   上面的卡片/面板只叠自己的底色与亮边。 */
+
+.main { position: relative; }
+
+.glass-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 26px;
+  background: linear-gradient(
+    158deg,
+    rgba(255, 255, 255, 0.14) 0%,
+    rgba(10, 12, 26, 0.46) 26%,
+    rgba(10, 12, 26, 0.56) 70%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  border: 1px solid rgba(255, 255, 255, var(--glass-edge-alpha));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 24px 60px rgba(3, 4, 12, 0.45);
+  pointer-events: none;
+}
+
+.main > *:not(.glass-sheet) { position: relative; z-index: 1; }
+
+/* ---------- 液态玻璃的形变 ----------
+   1) 顶部胶囊拖动时按速度拉长/压扁（逻辑在 App.tsx）
+   2) 卡片与按钮在 hover / 按下时轻微缩放，表面高光跟着位移
+   3) 都只用 transform，不动布局 */
+
+.nav-pill {
+  transform-origin: 50% 50%;
+  will-change: transform, width;
+}
+
+.game-card,
+.panel,
+.creation-template-card {
+  transition:
+    transform 240ms cubic-bezier(0.2, 0.8, 0.3, 1.2),
+    border-color 200ms ease,
+    box-shadow 240ms ease;
+}
+
+.game-card:hover { transform: translateY(-4px) scale(1.008); }
+.game-card:active { transform: translateY(-1px) scale(0.995); }
+.creation-template-card:hover { transform: translateY(-2px) scale(1.004); }
+.panel:active { transform: scale(0.998); }
+
+/* 表面高光随 hover 移动，制造“玻璃被推了一下”的错觉 */
+.game-card::after,
+.creation-template-card::after {
+  transition: background-position 420ms ease, opacity 240ms ease;
+  background-size: 220% 220%;
+  background-position: 0% 0%;
+}
+.game-card:hover::after,
+.creation-template-card:hover::after { background-position: 60% 30%; opacity: 0.7; }
+
+/* 按钮按下时整块压扁一点，松手回弹 */
+.btn { transform-origin: 50% 50%; }
+.btn:active:not(:disabled) { transform: scale(0.96); }

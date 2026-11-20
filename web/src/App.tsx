@@ -1,8 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { NavLink, Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useSession } from './session.tsx';
 import Backdrop from './components/Backdrop.tsx';
-import Welcome from './components/Welcome.tsx';
 import QcaExperiment from './pages/QcaExperiment.tsx';
 import M0 from './pages/M0.tsx';
 import Account from './pages/Account.tsx';
@@ -39,12 +38,11 @@ function Logo(): ReactNode {
 
 export default function App(): ReactNode {
   const session = useSession();
-  const [welcomeActive, setWelcomeActive] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const navRef = useRef<HTMLElement | null>(null);
   const pillRef = useRef<HTMLSpanElement | null>(null);
-  const dragRef = useRef<{ startX: number; startLeft: number; moved: boolean } | null>(null);
+  const dragRef = useRef<{ startX: number; startLeft: number; moved: boolean; lastX: number; lastT: number } | null>(null);
 
   // 让顶部胶囊玻璃跟随当前路由的位置
   useLayoutEffect(() => {
@@ -72,7 +70,13 @@ export default function App(): ReactNode {
     if (!nav || !pill) return;
     const navBox = nav.getBoundingClientRect();
     const pillBox = pill.getBoundingClientRect();
-    dragRef.current = { startX: event.clientX, startLeft: pillBox.left - navBox.left, moved: false };
+    dragRef.current = {
+      startX: event.clientX,
+      startLeft: pillBox.left - navBox.left,
+      moved: false,
+      lastX: event.clientX,
+      lastT: performance.now(),
+    };
     pill.classList.add('is-dragging');
     pill.setPointerCapture(event.pointerId);
   }
@@ -87,7 +91,17 @@ export default function App(): ReactNode {
     const width = pill.getBoundingClientRect().width;
     const maxLeft = Math.max(0, nav.clientWidth - width);
     const left = Math.min(Math.max(0, drag.startLeft + dx), maxLeft);
-    pill.style.transform = 'translate(' + left + 'px, -50%)';
+
+    // 按拖动速度做液态形变：越快越拉长，同时略微压扁
+    const now = performance.now();
+    const dt = Math.max(16, now - drag.lastT);
+    const speed = Math.min(2.4, Math.abs(event.clientX - drag.lastX) / dt);
+    const stretch = Math.min(0.26, speed * 0.45);
+    drag.lastX = event.clientX;
+    drag.lastT = now;
+
+    pill.style.transform =
+      'translate(' + left + 'px, -50%) scaleX(' + (1 + stretch).toFixed(3) + ') scaleY(' + (1 - stretch * 0.45).toFixed(3) + ')';
   }
 
   function pillUp(): void {
@@ -107,13 +121,22 @@ export default function App(): ReactNode {
       const dist = Math.abs(box.left + box.width / 2 - center);
       if (dist < bestDist) { bestDist = dist; best = link; }
     }
+    // 松手：吸附到最近项并弹回原形
+    if (best) {
+      const owner = best.parentElement ?? nav;
+      const ownerBox = owner.getBoundingClientRect();
+      const navBox = nav.getBoundingClientRect();
+      const box = best.getBoundingClientRect();
+      pill.style.width = box.width + 'px';
+      pill.style.transform =
+        'translate(' + (box.left - navBox.left) + 'px, -50%) scaleX(1) scaleY(1)';
+    }
     const href = best?.getAttribute('href');
     if (href) navigate(href);
   }
   return (
-    <div className={'app' + (welcomeActive ? ' is-welcoming' : '')}>
+    <div className="app">
       <Backdrop />
-      <Welcome onActiveChange={setWelcomeActive} />
       <header className="nav">
         <div className="nav-inner">
           <Logo />
@@ -145,6 +168,7 @@ export default function App(): ReactNode {
       </header>
 
       <main className="main">
+        <div className="glass-sheet" aria-hidden="true" />
         {session.cloudM0 && <div className="page" role="status">{session.qcaExperiment ? '当前部署提供新路线实验；M0 任务仍为模拟，实验执行方式以实验页标记为准。' : '当前为云端 M0：任务仅模拟基础设施执行，不调用 AI、不生成游戏。'}<Link to="/m0">进入云端任务</Link></div>}
         <Routes>
           <Route path="/experiments/qca" element={<QcaExperiment />} />
