@@ -162,11 +162,15 @@ export default function App(): ReactNode {
     <div className="app">
       <svg className="svg-defs" aria-hidden="true" focusable="false">
         <filter id="liquid-warp" x="-25%" y="-25%" width="150%" height="150%" colorInterpolationFilters="sRGB">
-          <feTurbulence type="fractalNoise" baseFrequency="0.012 0.02" numOctaves="2" seed="7" result="noise">
-            <animate attributeName="baseFrequency" dur="7s" values="0.012 0.02;0.018 0.012;0.012 0.02" repeatCount="indefinite" />
-          </feTurbulence>
-          <feDisplacementMap in="SourceGraphic" in2="noise" scale="16" xChannelSelector="R" yChannelSelector="G" />
-          <feGaussianBlur stdDeviation="0.5" />
+          <feTurbulence type="fractalNoise" baseFrequency="0.006 0.011" numOctaves="2" seed="9" result="noise" />
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="14" xChannelSelector="R" yChannelSelector="G" result="bent" />
+          <feColorMatrix in="bent" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="chR" />
+          <feColorMatrix in="bent" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="chG" />
+          <feColorMatrix in="bent" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="chB" />
+          <feOffset in="chR" dx="3.6" dy="0" result="rShift" />
+          <feOffset in="chB" dx="-3.6" dy="0" result="bShift" />
+          <feBlend in="rShift" in2="chG" mode="screen" result="rg" />
+          <feBlend in="rg" in2="bShift" mode="screen" result="dispersion" />
         </filter>
       </svg>
       <Backdrop />

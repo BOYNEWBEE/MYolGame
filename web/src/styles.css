@@ -1279,9 +1279,8 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
   transform: translate(0, -50%);
   border-radius: 999px;
   /* 不再做位移折射，改成一圈棱镜色散的边 */
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.03) 100%);
-  -webkit-backdrop-filter: saturate(1.15);
-  backdrop-filter: saturate(1.15);
+  /* 本体保持通透，折射分光交给下面那圈环 */
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.32);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
@@ -1474,50 +1473,21 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
 }
 
 
-/* 棱镜色散：贴边一圈连续光谱，外侧再晕一层，模拟光在玻璃边缘被拆成不同颜色 */
+
+
+/* 棱镜边：只取边缘 3px 的一条环，让背后的内容在这条环里被折射并按 RGB 分开，
+   所以彩色来自背景本身（不是画上去的光） */
 .nav-pill::before {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  padding: 1.6px;
-  background: conic-gradient(
-    from 200deg,
-    #ff2e63,
-    #ff9f1c,
-    #ffe066,
-    #6bff8f,
-    #22d3ee,
-    #6366f1,
-    #c084fc,
-    #ff2e63
-  );
+  padding: 4px;
+  -webkit-backdrop-filter: url(#liquid-warp) saturate(1.5) brightness(1.06);
+  backdrop-filter: url(#liquid-warp) saturate(1.5) brightness(1.06);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
-  opacity: 0.95;
-  pointer-events: none;
-}
-
-.nav-pill::after {
-  content: "";
-  position: absolute;
-  inset: -2px;
-  border-radius: inherit;
-  background: conic-gradient(
-    from 200deg,
-    #ff2e63,
-    #ff9f1c,
-    #ffe066,
-    #6bff8f,
-    #22d3ee,
-    #6366f1,
-    #c084fc,
-    #ff2e63
-  );
-  filter: blur(7px);
-  opacity: 0.45;
-  z-index: -1;
   pointer-events: none;
 }
