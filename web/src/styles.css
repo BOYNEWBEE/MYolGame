@@ -1885,9 +1885,6 @@ html { scrollbar-gutter: stable; }
   to { background-color: rgba(10, 12, 26, var(--glass-body)); }
 }
 
-html.glass-warming .nav,
-html.glass-warming .nav-user,
-html.glass-warming .nav-backdrop,
 html.glass-warming .btn,
 html.glass-warming .chip,
 html.glass-warming .segmented,
@@ -1915,4 +1912,15 @@ html.glass-warming .glass-block {
 
 html.glass-warming .empty-state {
   animation: glass-body-in-soft 520ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+
+/* 顶部导航栏不参与“材质化”：模糊与底色始终保持设定值 */
+html.glass-warming .nav,
+html.glass-warming .nav-user,
+html.glass-warming .nav-backdrop {
+  -webkit-backdrop-filter: blur(var(--glass-blur-target, 7px)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  backdrop-filter: blur(var(--glass-blur-target, 7px)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  background-color: rgba(10, 12, 26, var(--glass-body));
+  animation: none;
 }
