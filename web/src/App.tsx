@@ -1,5 +1,6 @@
 ﻿import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { NavLink, Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { createPillSpring } from './pill-spring.ts';
 import { useSession } from './session.tsx';
 import Backdrop from './components/Backdrop.tsx';
 import QcaExperiment from './pages/QcaExperiment.tsx';
@@ -52,7 +53,21 @@ export default function App(): ReactNode {
   }, [location.pathname]);
   const navRef = useRef<HTMLElement | null>(null);
   const pillRef = useRef<HTMLSpanElement | null>(null);
+  const springRef = useRef<ReturnType<typeof createPillSpring> | null>(null);
   const dragRef = useRef<{ startX: number; startLeft: number; moved: boolean; lastX: number; lastT: number } | null>(null);
+
+  useEffect(() => {
+    springRef.current = createPillSpring((left, width) => {
+      const pill = pillRef.current;
+      if (!pill) return;
+      pill.style.width = width + 'px';
+      pill.style.transform = 'translate(' + left + 'px, -50%)';
+    });
+    return () => {
+      springRef.current?.cancel();
+      springRef.current = null;
+    };
+  }, []);
 
   // 让顶部胶囊玻璃跟随当前路由的位置
   useLayoutEffect(() => {
@@ -65,10 +80,14 @@ export default function App(): ReactNode {
       const navBox = nav.getBoundingClientRect();
       const box = active.getBoundingClientRect();
       pill.style.opacity = '1';
-      pill.style.width = box.width + 'px';
-      pill.style.transform = 'translate(' + (box.left - navBox.left) + 'px, -50%)';
-      pill.style.setProperty('--lens-x', (-box.left) + 'px');
-      pill.style.setProperty('--lens-y', (-box.top) + 'px');
+      const spring = springRef.current;
+      if (!spring) {
+        pill.style.width = box.width + 'px';
+        pill.style.transform = 'translate(' + (box.left - navBox.left) + 'px, -50%)';
+        return;
+      }
+      spring.setBounds(nav.clientWidth - box.width);
+      spring.animateTo({ left: box.left - navBox.left, width: box.width });
     };
     place();
     const timer = window.setTimeout(place, 80);
@@ -83,6 +102,7 @@ export default function App(): ReactNode {
     if (!nav || !pill) return;
     const navBox = nav.getBoundingClientRect();
     const pillBox = pill.getBoundingClientRect();
+    springRef.current?.jumpTo(pillBox.left - navBox.left, pillBox.width);
     dragRef.current = {
       startX: event.clientX,
       startLeft: pillBox.left - navBox.left,
@@ -139,13 +159,12 @@ export default function App(): ReactNode {
     }
     // 松手：吸附到最近项并弹回原形
     if (best) {
-      const owner = best.parentElement ?? nav;
-      const ownerBox = owner.getBoundingClientRect();
       const navBox = nav.getBoundingClientRect();
       const box = best.getBoundingClientRect();
-      pill.style.width = box.width + 'px';
-      pill.style.transform =
-        'translate(' + (box.left - navBox.left) + 'px, -50%) scaleX(1) scaleY(1)';
+      const current = pill.getBoundingClientRect();
+      springRef.current?.jumpTo(current.left - navBox.left, current.width);
+      springRef.current?.setBounds(nav.clientWidth - box.width);
+      springRef.current?.animateTo({ left: box.left - navBox.left, width: box.width });
     }
     const href = best?.getAttribute('href');
     if (href) navigate(href);
