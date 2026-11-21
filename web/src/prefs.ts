@@ -120,6 +120,10 @@ export function applyPrefs(prefs: Prefs): void {
   root.style.setProperty('--glass-body-strong', String(Math.min(0.97, glass.body + 0.14)));
   root.style.setProperty('--glass-sheen', String(Math.min(0.5, glass.edge * 0.47)));
   root.style.setProperty('--glass-edge-alpha', String(glass.edge));
+  // 目标值：路由切换时用动画从 0/透明 过渡到这些值
+  root.style.setProperty('--glass-blur-target', glass.blur + 'px');
+  root.style.setProperty('--glass-body-target', String(glass.body));
+  root.style.setProperty('--glass-sheen-target', String(Math.min(0.5, glass.edge * 0.47)));
 }
 
 export function setPrefs(patch: Partial<Prefs>): Prefs {

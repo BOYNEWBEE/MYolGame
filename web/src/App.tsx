@@ -40,24 +40,16 @@ export default function App(): ReactNode {
   const session = useSession();
   const location = useLocation();
   const navigate = useNavigate();
-  // 路由切换时先淡出旧内容、再淡入新内容，让玻璃的模糊有足够时间就位
-  const [shownLocation, setShownLocation] = useState(location);
-  const [fading, setFading] = useState(false);
-  const fadeTimers = useRef<number[]>([]);
+  // 路由切换：不做整页淡入淡出，改为让玻璃"材质化"——
+  // 模糊从 0 长到设定值、压暗从透明长到设定值（动画作用在 --glass-* 变量上）。
   useEffect(() => {
-    if (location.key === shownLocation.key) return;
-    setFading(true);
-    // 淡出 90ms → 换页 → 静置 40ms → 淡入 120ms（更利落，也少暴露玻璃未就位的时间）
-    const first = window.setTimeout(() => {
-      setShownLocation(location);
-      const second = window.setTimeout(() => setFading(false), 40);
-      fadeTimers.current.push(second);
-    }, 90);
-    fadeTimers.current.push(first);
-  }, [location, shownLocation]);
-  useEffect(() => () => {
-    for (const id of fadeTimers.current) window.clearTimeout(id);
-  }, []);
+    const root = document.documentElement;
+    root.classList.remove('glass-warming');
+    void root.offsetWidth;
+    root.classList.add('glass-warming');
+    const timer = window.setTimeout(() => root.classList.remove('glass-warming'), 460);
+    return () => window.clearTimeout(timer);
+  }, [location.pathname]);
   const navRef = useRef<HTMLElement | null>(null);
   const pillRef = useRef<HTMLSpanElement | null>(null);
   const dragRef = useRef<{ startX: number; startLeft: number; moved: boolean; lastX: number; lastT: number } | null>(null);
@@ -206,9 +198,9 @@ export default function App(): ReactNode {
         </div>
       </header>
 
-      <main className={"main" + (fading ? " is-fading" : "")}>
+      <main className="main">
         {session.cloudM0 && <div className="page" role="status">{session.qcaExperiment ? '当前部署提供新路线实验；M0 任务仍为模拟，实验执行方式以实验页标记为准。' : '当前为云端 M0：任务仅模拟基础设施执行，不调用 AI、不生成游戏。'}<Link to="/m0">进入云端任务</Link></div>}
-        <Routes location={shownLocation}>
+        <Routes>
           <Route path="/experiments/qca" element={<QcaExperiment />} />
           <Route path="/m0" element={<M0 />} />
           <Route path="/account" element={<Account />} />
