@@ -44,43 +44,83 @@ function ensureDefs(): SVGDefsElement {
   return d;
 }
 
-function buildFilter(id: string, width: number, height: number, scale: number, mapUrl: string): void {
+function buildFilter(id: string, width: number, height: number, scale: number, mapUrl: string, offsetX: number, offsetY: number): void {
   const root = ensureDefs();
   const filter = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
   filter.setAttribute('id', id);
   filter.setAttribute('filterUnits', 'userSpaceOnUse');
   filter.setAttribute('colorInterpolationFilters', 'sRGB');
-  filter.setAttribute('x', '0');
-  filter.setAttribute('y', '0');
+  filter.setAttribute('x', String(offsetX));
+  filter.setAttribute('y', String(offsetY));
   filter.setAttribute('width', String(width));
   filter.setAttribute('height', String(height));
 
   const image = document.createElementNS('http://www.w3.org/2000/svg', 'feImage');
   image.setAttribute('href', mapUrl);
-  image.setAttribute('x', '0');
-  image.setAttribute('y', '0');
+  image.setAttribute('x', String(offsetX));
+  image.setAttribute('y', String(offsetY));
   image.setAttribute('width', String(width));
   image.setAttribute('height', String(height));
   image.setAttribute('preserveAspectRatio', 'none');
 
-  const displacement = document.createElementNS('http://www.w3.org/2000/svg', 'feDisplacementMap');
-  displacement.setAttribute('in', 'SourceGraphic');
-  displacement.setAttribute('in2', id + '-map');
-  displacement.setAttribute('xChannelSelector', 'R');
-  displacement.setAttribute('yChannelSelector', 'G');
-  displacement.setAttribute('scale', String(scale));
-
   image.setAttribute('result', id + '-map');
+
+  // 三个通道用略微不同的位移量 → 边缘出现色散（红/蓝分开）
+  const makeDisplace = (suffix: string, inValue: string, scaleValue: number, result: string): SVGFEDisplacementMapElement => {
+    const d = document.createElementNS('http://www.w3.org/2000/svg', 'feDisplacementMap');
+    d.setAttribute('in', inValue);
+    d.setAttribute('in2', id + '-map');
+    d.setAttribute('xChannelSelector', 'R');
+    d.setAttribute('yChannelSelector', 'G');
+    d.setAttribute('scale', scaleValue.toFixed(3));
+    d.setAttribute('result', result);
+    d.setAttribute('data-channel', suffix);
+    return d;
+  };
+
+  const base = makeDisplace('base', 'SourceGraphic', scale, id + '-base');
+  const red = makeDisplace('r', 'SourceGraphic', scale * 1.22, id + '-red');
+  const blue = makeDisplace('b', 'SourceGraphic', scale * 0.78, id + '-blue');
+
+  const redOnly = document.createElementNS('http://www.w3.org/2000/svg', 'feColorMatrix');
+  redOnly.setAttribute('in', id + '-red');
+  redOnly.setAttribute('type', 'matrix');
+  redOnly.setAttribute('values', '1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0');
+  redOnly.setAttribute('result', id + '-redCh');
+
+  const blueOnly = document.createElementNS('http://www.w3.org/2000/svg', 'feColorMatrix');
+  blueOnly.setAttribute('in', id + '-blue');
+  blueOnly.setAttribute('type', 'matrix');
+  blueOnly.setAttribute('values', '0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0');
+  blueOnly.setAttribute('result', id + '-blueCh');
+
+  const blend1 = document.createElementNS('http://www.w3.org/2000/svg', 'feBlend');
+  blend1.setAttribute('in', id + '-base');
+  blend1.setAttribute('in2', id + '-redCh');
+  blend1.setAttribute('mode', 'screen');
+  blend1.setAttribute('result', id + '-blend1');
+
+  const blend2 = document.createElementNS('http://www.w3.org/2000/svg', 'feBlend');
+  blend2.setAttribute('in', id + '-blend1');
+  blend2.setAttribute('in2', id + '-blueCh');
+  blend2.setAttribute('mode', 'screen');
+
   filter.appendChild(image);
-  filter.appendChild(displacement);
+  filter.appendChild(base);
+  filter.appendChild(red);
+  filter.appendChild(blue);
+  filter.appendChild(redOnly);
+  filter.appendChild(blueOnly);
+  filter.appendChild(blend1);
+  filter.appendChild(blend2);
   root.appendChild(filter);
 }
 
 /** 生成（或复用）指定尺寸的折射滤镜，返回可用作 backdrop-filter 的 url(#id) */
-export function getRefractFilter(width: number, height: number, strength = 1): string {
+export function getRefractFilter(width: number, height: number, strength = 1, offsetX = 0, offsetY = 0): string {
   const w = Math.max(8, Math.round(width));
   const h = Math.max(8, Math.round(height));
-  const key = `${w}x${h}x${strength.toFixed(2)}`;
+  const key = `${w}x${h}x${strength.toFixed(2)}@${Math.round(offsetX)},${Math.round(offsetY)}`;
   const cached = cache.get(key);
   if (cached) return `url(#${cached.url})`;
 
@@ -141,7 +181,7 @@ export function getRefractFilter(width: number, height: number, strength = 1): s
   }
 
   const url = 'glass-refract-' + ++seq;
-  buildFilter(url, w, h, maxScale, canvas.toDataURL('image/png'));
+  buildFilter(url, w, h, maxScale, canvas.toDataURL('image/png'), offsetX, offsetY);
   cache.set(key, { url, scale: maxScale });
   return `url(#${url})`;
 }

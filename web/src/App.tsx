@@ -92,14 +92,19 @@ export default function App(): ReactNode {
       const navBox = nav.getBoundingClientRect();
       const box = active.getBoundingClientRect();
       pill.style.opacity = '1';
-      // 苹果式折射：按胶囊目标尺寸生成 SDF 位移贴图
-      const pillHeight = pill.getBoundingClientRect().height || 34;
-      const refract = getRefractFilter(box.width, pillHeight, 1.45);
-      const chain = refract
-        ? refract + ' blur(0.25px) contrast(1.2) brightness(1.05) saturate(1.15)'
-        : 'blur(6px) saturate(1.4)';
-      pill.style.backdropFilter = chain;
-      pill.style.setProperty('-webkit-backdrop-filter', chain);
+      // 苹果式折射：动画期间先用普通模糊，落位后再按胶囊实际位置生成 SDF 位移贴图
+      // （独立 <svg> 的 userSpaceOnUse 以视口为原点，必须把元素位置一起传进去）
+      const applyRefract = (): void => {
+        const rect = pill.getBoundingClientRect();
+        const refract = getRefractFilter(rect.width, rect.height, 1.45, rect.left, rect.top);
+        const chain = refract
+          ? refract + ' blur(0.25px) contrast(1.2) brightness(1.05) saturate(1.15)'
+          : 'blur(6px) saturate(1.4)';
+        pill.style.backdropFilter = chain;
+        pill.style.setProperty('-webkit-backdrop-filter', chain);
+      };
+      applyRefract();
+      window.setTimeout(applyRefract, 620);
 
       const spring = springRef.current;
       if (!spring) {
