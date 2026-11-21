@@ -40,23 +40,29 @@ export default function App(): ReactNode {
   const session = useSession();
   const location = useLocation();
   const navigate = useNavigate();
-  // 路由切换时先淡出旧内容、再淡入新内容，让玻璃的模糊有足够时间就位
+  // 路由切换：先用一层幕布盖住，换页后两帧再淡出。
+  // 不直接给内容做 opacity 动画——祖先 opacity 会让玻璃的 backdrop-filter 失效，
+  // 表现就是“先透明、再突然变黑”。
   const [shownLocation, setShownLocation] = useState(location);
-  const [fading, setFading] = useState(false);
-  const fadeTimers = useRef<number[]>([]);
+  // 'off' 无幕布 / 'on' 盖住 / 'leaving' 正在淡出
+  const [curtain, setCurtain] = useState<'off' | 'on' | 'leaving'>('off');
+  const frameRef = useRef<number[]>([]);
+  const timerRef = useRef<number[]>([]);
   useEffect(() => {
     if (location.key === shownLocation.key) return;
-    setFading(true);
-    // 淡出 170ms → 换页 → 静置 60ms（让玻璃背板先绘出来）→ 再淡入
-    const first = window.setTimeout(() => {
-      setShownLocation(location);
-      const second = window.setTimeout(() => setFading(false), 60);
-      fadeTimers.current.push(second);
-    }, 170);
-    fadeTimers.current.push(first);
+    setCurtain('on');
+    setShownLocation(location);
+    // 换页后先让幕布保持完全不透明 ~120ms，等新页面的玻璃底色绘出来，再淡出
+    const startFade = window.setTimeout(() => {
+      setCurtain('leaving');
+      const done = window.setTimeout(() => setCurtain('off'), 260);
+      timerRef.current.push(done);
+    }, 120);
+    timerRef.current.push(startFade);
   }, [location, shownLocation]);
   useEffect(() => () => {
-    for (const id of fadeTimers.current) window.clearTimeout(id);
+    for (const id of frameRef.current) window.cancelAnimationFrame(id);
+    for (const id of timerRef.current) window.clearTimeout(id);
   }, []);
   const navRef = useRef<HTMLElement | null>(null);
   const pillRef = useRef<HTMLSpanElement | null>(null);
@@ -206,8 +212,9 @@ export default function App(): ReactNode {
         </div>
       </header>
 
-      <main className={"main" + (fading ? " is-fading" : "")}>
+      <main className="main">
         {session.cloudM0 && <div className="page" role="status">{session.qcaExperiment ? '当前部署提供新路线实验；M0 任务仍为模拟，实验执行方式以实验页标记为准。' : '当前为云端 M0：任务仅模拟基础设施执行，不调用 AI、不生成游戏。'}<Link to="/m0">进入云端任务</Link></div>}
+        <div className={"curtain" + (curtain === "on" ? " is-on" : curtain === "leaving" ? " is-leaving" : "")} aria-hidden="true" />
         <Routes location={shownLocation}>
           <Route path="/experiments/qca" element={<QcaExperiment />} />
           <Route path="/m0" element={<M0 />} />
