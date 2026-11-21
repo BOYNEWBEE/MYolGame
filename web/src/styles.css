@@ -1585,3 +1585,25 @@ h1, h2, h3,
 
 /* 强调/警示文案维持原色 */
 .warn, .hero-notice { color: var(--warn); }
+
+
+/* ---------- 顶部导航文字配色（自动/浅色/深色/自定义） ---------- */
+:root { --nav-fg: #e8eaff; }
+
+.nav-links a { color: color-mix(in srgb, var(--nav-fg) 84%, transparent); }
+.nav-links a:hover,
+.nav-links a.active { color: var(--nav-fg); }
+.nav-user { color: color-mix(in srgb, var(--nav-fg) 80%, transparent); }
+.nav-user a { color: var(--nav-fg); }
+.nav-backdrop { color: var(--nav-fg); }
+
+/* 设置页的取色器 */
+.setting-row input[type="color"] {
+  width: 56px;
+  height: 32px;
+  padding: 2px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+}

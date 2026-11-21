@@ -195,6 +195,30 @@ export default function Settings(): ReactNode {
         </section>
 
         <section className="panel">
+          <h2>顶部文字</h2>
+          <p className="setting-hint">
+            自动：按导航背后的背景亮度决定用浅色还是深色（当前模式：{prefs.navText === 'auto' ? '自动' : prefs.navText === 'light' ? '浅色' : prefs.navText === 'dark' ? '深色' : '自定义'}）
+          </p>
+          <div className="setting-actions">
+            <button type="button" className={'chip' + (prefs.navText === 'auto' ? ' active' : '')} onClick={() => setPrefs({ navText: 'auto' })}>自动</button>
+            <button type="button" className={'chip' + (prefs.navText === 'light' ? ' active' : '')} onClick={() => setPrefs({ navText: 'light' })}>浅色</button>
+            <button type="button" className={'chip' + (prefs.navText === 'dark' ? ' active' : '')} onClick={() => setPrefs({ navText: 'dark' })}>深色</button>
+          </div>
+          <label className="setting-row">
+            <span className="row-head">
+              <span>自定义颜色</span>
+              <b>{prefs.navTextColor}</b>
+            </span>
+            <input
+              type="color"
+              value={prefs.navTextColor}
+              onChange={(event) => setPrefs({ navText: 'custom', navTextColor: event.target.value })}
+            />
+          </label>
+          <p className="setting-hint">浅色/深色会同时作用于导航链接、用户名胶囊与背景开关；Logo 的渐变保持不变。</p>
+        </section>
+
+        <section className="panel">
           <h2>重置</h2>
           <div className="setting-actions">
             <button

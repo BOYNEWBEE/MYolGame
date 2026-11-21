@@ -1,7 +1,8 @@
-﻿// 本地外观偏好：只影响当前浏览器的观感，不进入服务端，也不影响生成出来的游戏产物。
+// 本地外观偏好：只影响当前浏览器的观感，不进入服务端，也不影响生成出来的游戏产物。
 // 存 localStorage（几行文本）；背景图目前支持内置预设 / 远程 URL / 本地上传（dataURL，≤1.5 MB）。
 
 import { useEffect, useState } from 'react';
+import { computeNavTone } from './nav-tone.ts';
 
 export interface GlassSettings {
   /** 背景模糊半径 0–40px */
@@ -17,6 +18,9 @@ export interface GlassSettings {
 }
 
 export interface Prefs {
+  /** 顶部导航文字配色：auto=按背景亮度自动；light/dark=固定；custom=用 navTextColor */
+  navText: 'auto' | 'light' | 'dark' | 'custom';
+  navTextColor: string;
   /** 液态玻璃开关；关闭后回到项目初版的纯色界面 */
   glassEnabled: boolean;
   /** 背景图地址；null 表示关闭背景层 */
@@ -40,6 +44,8 @@ const STORAGE_KEY = 'myol.prefs.v3';
 const LEGACY_KEYS = ['myol.prefs.v2', 'myol.prefs'];
 
 const DEFAULTS: Prefs = {
+  navText: 'auto',
+  navTextColor: '#e8eaff',
   glassEnabled: true,
   backdrop: DEFAULT_BACKDROP,
   backdropOpacity: 1,
@@ -70,7 +76,14 @@ function normalize(raw: unknown, fallback: Prefs = DEFAULTS): Prefs {
       : input.backdrop === null
         ? null
         : fallback.backdrop;
+  const navTextInput = input.navText;
+  const navText = navTextInput === 'light' || navTextInput === 'dark' || navTextInput === 'custom' ? navTextInput : 'auto';
+  const navTextColor = typeof input.navTextColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(input.navTextColor)
+    ? input.navTextColor
+    : DEFAULTS.navTextColor;
   return {
+    navText,
+    navTextColor,
     glassEnabled: input.glassEnabled === false ? false : true,
     backdrop,
     backdropOpacity: clamp(Number(input.backdropOpacity), 0.05, 1, fallback.backdropOpacity),
@@ -113,6 +126,19 @@ export function applyPrefs(prefs: Prefs): void {
   const glass = prefs.glass;
   root.style.setProperty('--backdrop-opacity', String(prefs.backdropOpacity));
   root.classList.toggle('no-glass', !prefs.glassEnabled);
+
+  // 顶部导航文字：auto 时按背景亮度算，其余直接写死
+  if (prefs.navText === 'auto') {
+    void computeNavTone(prefs.backdrop, prefs.glass.body).then((tone) => {
+      root.style.setProperty('--nav-fg', tone === 'dark' ? '#14161f' : '#e8eaff');
+    });
+  } else if (prefs.navText === 'light') {
+    root.style.setProperty('--nav-fg', '#e8eaff');
+  } else if (prefs.navText === 'dark') {
+    root.style.setProperty('--nav-fg', '#14161f');
+  } else {
+    root.style.setProperty('--nav-fg', prefs.navTextColor);
+  }
   root.style.setProperty('--glass-blur', glass.blur + 'px');
   root.style.setProperty('--glass-saturate', glass.saturate + '%');
   root.style.setProperty('--glass-brightness', String(glass.brightness));
