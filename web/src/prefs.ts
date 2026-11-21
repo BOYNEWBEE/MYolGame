@@ -45,9 +45,10 @@ export const DEFAULT_GLASS: GlassSettings = {
 };
 
 const STORAGE_KEY = 'myol.prefs.v3';
+const DEFAULTS_KEY = 'myol.prefs.v3.defaults';
 const LEGACY_KEYS = ['myol.prefs.v2', 'myol.prefs'];
 
-const DEFAULTS: Prefs = {
+const HARD_DEFAULTS: Prefs = {
   navText: 'auto',
   navTextColor: '#e8eaff',
   titleColor: '#f2f5ff',
@@ -58,6 +59,34 @@ const DEFAULTS: Prefs = {
   backdropOpacity: 1,
   glass: DEFAULT_GLASS,
 };
+
+// 用户可以把当前设置存成“本机默认”，重置与首次加载都用它
+function loadStoredDefaults(): Prefs | null {
+  try {
+    const raw = localStorage.getItem(DEFAULTS_KEY);
+    return raw ? normalize(JSON.parse(raw), HARD_DEFAULTS) : null;
+  } catch {
+    return null;
+  }
+}
+
+let DEFAULTS: Prefs = loadStoredDefaults() ?? HARD_DEFAULTS;
+
+/** 把当前设置保存为“本机默认”（刷新后生效） */
+export function saveDefaults(): Prefs {
+  DEFAULTS = { ...current, glass: { ...current.glass } };
+  try {
+    localStorage.setItem(DEFAULTS_KEY, JSON.stringify(DEFAULTS));
+  } catch {
+    // 配额/隐私模式失败时，仅本次会话有效
+  }
+  return DEFAULTS;
+}
+
+/** 当前“默认”值，用于设置页展示 */
+export function getDefaults(): Prefs {
+  return DEFAULTS;
+}
 
 function clamp(value: number, min: number, max: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;

@@ -5,6 +5,7 @@ import {
   DEFAULT_BACKDROP,
   DEFAULT_GLASS,
   resetPrefs,
+  saveDefaults,
   setGlass,
   setPrefs,
   usePrefs,
@@ -268,10 +269,20 @@ export default function Settings(): ReactNode {
           <div className="setting-actions">
             <button
               type="button"
+              className="btn primary"
+              onClick={() => {
+                saveDefaults();
+                setNotice('已把当前设置保存为本机默认，刷新页面后生效');
+              }}
+            >
+              把当前设置设为默认
+            </button>
+            <button
+              type="button"
               className="btn"
               onClick={() => {
                 resetPrefs();
-                setNotice('已恢复默认：预设背景 + 默认玻璃参数');
+                setNotice('已恢复默认（本机保存的默认值）');
               }}
             >
               恢复默认外观
