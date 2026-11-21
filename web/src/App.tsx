@@ -47,7 +47,7 @@ export default function App(): ReactNode {
     root.classList.remove('glass-warming');
     void root.offsetWidth;
     root.classList.add('glass-warming');
-    const timer = window.setTimeout(() => root.classList.remove('glass-warming'), 460);
+    const timer = window.setTimeout(() => root.classList.remove('glass-warming'), 560);
     return () => window.clearTimeout(timer);
   }, [location.pathname]);
   const navRef = useRef<HTMLElement | null>(null);

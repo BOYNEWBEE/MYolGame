@@ -1484,9 +1484,9 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
 
 @keyframes glass-materialize {
   from {
-    --glass-blur: 1px;
-    --glass-body: 0.28;
-    --glass-sheen: 0.06;
+    --glass-blur: 0px;
+    --glass-body: 0.18;
+    --glass-sheen: 0.04;
   }
   to {
     --glass-blur: var(--glass-blur-target, 7px);
@@ -1495,10 +1495,11 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
   }
 }
 
-html.glass-warming { animation: glass-materialize 420ms cubic-bezier(0.33, 0.05, 0.35, 1) both; }
+html.glass-warming { animation: glass-materialize 520ms cubic-bezier(0.4, 0, 0.2, 1) both; }
 
 @media (prefers-reduced-motion: reduce) {
-  html.glass-warming { animation: none; }
+  /* 材质化只改模糊与明暗，不属于位移动画；保留但缩短，避免用户什么都没看到 */
+  html.glass-warming { animation-duration: 240ms; }
 }
 
 
