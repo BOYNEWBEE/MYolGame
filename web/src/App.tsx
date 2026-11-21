@@ -57,12 +57,17 @@ export default function App(): ReactNode {
   const dragRef = useRef<{ startX: number; startLeft: number; moved: boolean; lastX: number; lastT: number } | null>(null);
 
   useEffect(() => {
-    springRef.current = createPillSpring((left, width) => {
-      const pill = pillRef.current;
-      if (!pill) return;
-      pill.style.width = width + 'px';
-      pill.style.transform = 'translate(' + left + 'px, -50%)';
-    });
+    springRef.current = createPillSpring(
+      (left, width) => {
+        const pill = pillRef.current;
+        if (!pill) return;
+        pill.style.width = width + 'px';
+        pill.style.transform = 'translate(' + left + 'px, -50%)';
+      },
+      () => {
+        pillRef.current?.classList.remove('is-settling');
+      },
+    );
     return () => {
       springRef.current?.cancel();
       springRef.current = null;
@@ -87,6 +92,7 @@ export default function App(): ReactNode {
         return;
       }
       spring.setBounds(nav.clientWidth - box.width);
+      pill.classList.add('is-settling');
       spring.animateTo({ left: box.left - navBox.left, width: box.width });
     };
     place();
@@ -164,6 +170,7 @@ export default function App(): ReactNode {
       const current = pill.getBoundingClientRect();
       springRef.current?.jumpTo(current.left - navBox.left, current.width);
       springRef.current?.setBounds(nav.clientWidth - box.width);
+      pill.classList.add('is-settling');
       springRef.current?.animateTo({ left: box.left - navBox.left, width: box.width });
     }
     const href = best?.getAttribute('href');

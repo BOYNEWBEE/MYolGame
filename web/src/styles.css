@@ -1790,3 +1790,10 @@ html.glass-warming .glass-block::before {
 .empty-state::before {
   background: rgba(10, 12, 26, calc(var(--glass-body) * 0.55));
 }
+
+
+/* 胶囊处于弹簧动画中时不接收指针事件，避免快速点击被它吞掉 */
+.nav-pill.is-settling { pointer-events: none; }
+
+/* 始终为滚动条留位置，切换路由时整页不会左右抖一下 */
+html { scrollbar-gutter: stable; }

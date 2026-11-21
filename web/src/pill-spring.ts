@@ -18,7 +18,10 @@ const STIFFNESS = 220;
 const DAMPING = 26;
 const MASS = 1;
 
-export function createPillSpring(apply: (left: number, width: number) => void): {
+export function createPillSpring(
+  apply: (left: number, width: number) => void,
+  onSettle?: () => void,
+): {
   setBounds: (maxLeft: number) => void;
   jumpTo: (left: number, width: number) => void;
   animateTo: (target: SpringTarget) => void;
@@ -69,6 +72,7 @@ export function createPillSpring(apply: (left: number, width: number) => void): 
       state = { ...state, left: target.left, width: target.width, leftVelocity: 0, widthVelocity: 0 };
       applyState();
       last = 0;
+      onSettle?.();
       return;
     }
     frame = window.requestAnimationFrame(step);
