@@ -47,12 +47,12 @@ export default function App(): ReactNode {
   useEffect(() => {
     if (location.key === shownLocation.key) return;
     setFading(true);
-    // 淡出 170ms → 换页 → 静置 60ms（让玻璃背板先绘出来）→ 再淡入
+    // 淡出 90ms → 换页 → 静置 40ms → 淡入 120ms（更利落，也少暴露玻璃未就位的时间）
     const first = window.setTimeout(() => {
       setShownLocation(location);
-      const second = window.setTimeout(() => setFading(false), 60);
+      const second = window.setTimeout(() => setFading(false), 40);
       fadeTimers.current.push(second);
-    }, 170);
+    }, 90);
     fadeTimers.current.push(first);
   }, [location, shownLocation]);
   useEffect(() => () => {

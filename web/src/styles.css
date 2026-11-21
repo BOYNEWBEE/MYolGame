@@ -1466,8 +1466,8 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
 
 
 /* 路由切换：内容淡出 140ms → 换页 → 淡入，遮住玻璃首帧还在采样那一下 */
-.main { transition: opacity 170ms ease; }
-.main.is-fading { opacity: 0; }
+.main { transition: opacity 120ms ease; }
+.main.is-fading { opacity: 0; transition-duration: 90ms; }
 @media (prefers-reduced-motion: reduce) {
   .main, .main.is-fading { transition: none; opacity: 1; }
 }
