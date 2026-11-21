@@ -1522,9 +1522,6 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
   to { opacity: 1; }
 }
 
-html.glass-warming .nav::before,
-html.glass-warming .nav-user::before,
-html.glass-warming .nav-backdrop::before,
 html.glass-warming .btn::before,
 html.glass-warming .chip::before,
 html.glass-warming .segmented::before,
@@ -1544,6 +1541,14 @@ html.glass-warming .mode-banner::before {
 }
 
 html.glass-warming { animation: glass-materialize 520ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+
+/* 顶部栏不参与材质化：模糊与压暗都固定为设定值 */
+html.glass-warming .nav,
+html.glass-warming .nav-user,
+html.glass-warming .nav-backdrop {
+  -webkit-backdrop-filter: blur(var(--glass-blur-target, 7px)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  backdrop-filter: blur(var(--glass-blur-target, 7px)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+}
 
 @media (prefers-reduced-motion: reduce) {
   /* 材质化只改模糊与明暗，不属于位移动画；保留但缩短，避免用户什么都没看到 */
