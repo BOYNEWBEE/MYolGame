@@ -1792,8 +1792,14 @@ html.glass-warming .glass-block::before {
 }
 
 
-/* 胶囊处于弹簧动画中时不接收指针事件，避免快速点击被它吞掉 */
-.nav-pill.is-settling { pointer-events: none; }
+/* 胶囊只做视觉层，永远不接收指针；拖动由 .nav-links 容器按移动阈值判定 */
+.nav-pill { pointer-events: none; }
 
 /* 始终为滚动条留位置，切换路由时整页不会左右抖一下 */
 html { scrollbar-gutter: stable; }
+
+
+/* 鼠标点导航不要出现白色焦点框（键盘 Tab 时仍然保留） */
+.nav-links a:focus:not(:focus-visible),
+.nav-pill:focus:not(:focus-visible) { outline: none; }
+.nav-links a:focus-visible { outline: 2px solid var(--accent, #8b5cf6); outline-offset: 3px; }

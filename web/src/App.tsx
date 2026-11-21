@@ -1,4 +1,4 @@
-﻿import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { NavLink, Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { createPillSpring } from './pill-spring.ts';
 import { useSession } from './session.tsx';
@@ -54,6 +54,8 @@ export default function App(): ReactNode {
   const navRef = useRef<HTMLElement | null>(null);
   const pillRef = useRef<HTMLSpanElement | null>(null);
   const springRef = useRef<ReturnType<typeof createPillSpring> | null>(null);
+  const placeRef = useRef<() => void>(() => {});
+  const suppressClickRef = useRef(false);
   const dragRef = useRef<{ startX: number; startLeft: number; moved: boolean; lastX: number; lastT: number } | null>(null);
 
   useEffect(() => {
@@ -96,21 +98,22 @@ export default function App(): ReactNode {
       spring.animateTo({ left: box.left - navBox.left, width: box.width });
       window.setTimeout(() => pill.classList.remove('is-settling'), 900);
     };
+    placeRef.current = place;
     place();
     const timer = window.setTimeout(place, 80);
     window.addEventListener('resize', place);
     return () => { window.clearTimeout(timer); window.removeEventListener('resize', place); };
   }, [location.pathname, session.cloudM0, session.qcaExperiment]);
 
-  function pillDown(event: ReactPointerEvent<HTMLSpanElement>): void {
-    event.preventDefault();
+  // 拖动挂在导航容器上：指针移动超过 8px 才算拖，否则让链接正常响应点击。
+  // 这样胶囊永远不会吞掉导航点击，也不会出现“点了没反应 / 停在半路”。
+  function navPointerDown(event: ReactPointerEvent<HTMLElement>): void {
     const nav = navRef.current;
     const pill = pillRef.current;
-    // 动画中不接管拖动，让点击落到下面的链接上
-    if (!nav || !pill || pill.classList.contains('is-settling')) return;
+    if (!nav || !pill || event.button !== 0) return;
+    if (pill.classList.contains('is-settling')) return;
     const navBox = nav.getBoundingClientRect();
     const pillBox = pill.getBoundingClientRect();
-    springRef.current?.jumpTo(pillBox.left - navBox.left, pillBox.width);
     dragRef.current = {
       startX: event.clientX,
       startLeft: pillBox.left - navBox.left,
@@ -118,17 +121,23 @@ export default function App(): ReactNode {
       lastX: event.clientX,
       lastT: performance.now(),
     };
-    pill.classList.add('is-dragging');
-    pill.setPointerCapture(event.pointerId);
   }
 
-  function pillMove(event: ReactPointerEvent<HTMLSpanElement>): void {
+  function navPointerMove(event: ReactPointerEvent<HTMLElement>): void {
     const drag = dragRef.current;
     const nav = navRef.current;
     const pill = pillRef.current;
     if (!drag || !nav || !pill) return;
     const dx = event.clientX - drag.startX;
-    if (Math.abs(dx) > 4) drag.moved = true;
+    if (!drag.moved) {
+      if (Math.abs(dx) < 8) return;
+      drag.moved = true;
+      pill.classList.add('is-dragging');
+      springRef.current?.cancel();
+      pill.style.width = pill.getBoundingClientRect().width + 'px';
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+
     const width = pill.getBoundingClientRect().width;
     const maxLeft = Math.max(0, nav.clientWidth - width);
     const left = Math.min(Math.max(0, drag.startLeft + dx), maxLeft);
@@ -148,14 +157,21 @@ export default function App(): ReactNode {
     pill.style.setProperty('--lens-y', (-pillRect.top) + 'px');
   }
 
-  function pillUp(): void {
+  function pillCancel(): void {
+    dragRef.current = null;
+    pillRef.current?.classList.remove('is-dragging');
+    placeRef.current();
+  }
+
+  function navPointerUp(event: ReactPointerEvent<HTMLElement>): void {
     const drag = dragRef.current;
     const nav = navRef.current;
     const pill = pillRef.current;
     dragRef.current = null;
-    if (!nav || !pill) return;
+    if (!drag || !nav || !pill) return;
     pill.classList.remove('is-dragging');
-    if (!drag?.moved) return;
+    if (!drag.moved) return; // 没拖动：交给链接自己的 click 导航
+
     const pillBox = pill.getBoundingClientRect();
     const center = pillBox.left + pillBox.width / 2;
     let best: HTMLAnchorElement | undefined;
@@ -163,22 +179,28 @@ export default function App(): ReactNode {
     for (const link of nav.querySelectorAll<HTMLAnchorElement>('a')) {
       const box = link.getBoundingClientRect();
       const dist = Math.abs(box.left + box.width / 2 - center);
-      if (dist < bestDist) { bestDist = dist; best = link; }
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = link;
+      }
     }
-    // 松手：吸附到最近项并弹回原形
-    if (best) {
-      const navBox = nav.getBoundingClientRect();
-      const box = best.getBoundingClientRect();
-      const current = pill.getBoundingClientRect();
-      springRef.current?.jumpTo(current.left - navBox.left, current.width);
-      springRef.current?.setBounds(nav.clientWidth - box.width);
-      pill.classList.add('is-settling');
-      springRef.current?.animateTo({ left: box.left - navBox.left, width: box.width });
-      window.setTimeout(() => pill.classList.remove('is-settling'), 900);
+    if (!best) {
+      placeRef.current();
+      return;
     }
-    const href = best?.getAttribute('href');
+    event.preventDefault();
+    suppressClickRef.current = true; // 吞掉拖动结束后浏览器补发的那次 click
+    const navBox = nav.getBoundingClientRect();
+    const box = best.getBoundingClientRect();
+    springRef.current?.jumpTo(pillBox.left - navBox.left, pillBox.width);
+    springRef.current?.setBounds(nav.clientWidth - box.width);
+    pill.classList.add('is-settling');
+    springRef.current?.animateTo({ left: box.left - navBox.left, width: box.width });
+    window.setTimeout(() => pill.classList.remove('is-settling'), 900);
+    const href = best.getAttribute('href');
     if (href) navigate(href);
   }
+
   return (
     <div className="app">
       <svg className="svg-defs" aria-hidden="true" focusable="false">
@@ -198,15 +220,25 @@ export default function App(): ReactNode {
       <header className="nav">
         <div className="nav-inner">
           <Logo />
-          <nav className="nav-links" aria-label="主导航" ref={navRef}>
+          <nav
+            className="nav-links"
+            aria-label="主导航"
+            ref={navRef}
+            onPointerDown={navPointerDown}
+            onPointerMove={navPointerMove}
+            onPointerUp={navPointerUp}
+            onPointerCancel={pillCancel}
+            onClickCapture={(event) => {
+              if (!suppressClickRef.current) return;
+              suppressClickRef.current = false;
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+          >
             <span
               className="nav-pill"
               ref={pillRef}
               aria-hidden="true"
-              onPointerDown={pillDown}
-              onPointerMove={pillMove}
-              onPointerUp={pillUp}
-              onPointerCancel={pillUp}
               onDragStart={(event) => event.preventDefault()}
             >
             </span>
