@@ -63,8 +63,9 @@ export default function App(): ReactNode {
       (left, width) => {
         const pill = pillRef.current;
         if (!pill) return;
+        // 用 left/width 做布局动画，避免 transform 动画时合成器把胶囊画两份（残影）
+        pill.style.left = left + 'px';
         pill.style.width = width + 'px';
-        pill.style.transform = 'translate(' + left + 'px, -50%)';
       },
       () => {
         pillRef.current?.classList.remove('is-settling');
@@ -89,8 +90,8 @@ export default function App(): ReactNode {
       pill.style.opacity = '1';
       const spring = springRef.current;
       if (!spring) {
+        pill.style.left = (box.left - navBox.left) + 'px';
         pill.style.width = box.width + 'px';
-        pill.style.transform = 'translate(' + (box.left - navBox.left) + 'px, -50%)';
         return;
       }
       spring.setBounds(nav.clientWidth - box.width);
@@ -162,8 +163,8 @@ export default function App(): ReactNode {
     drag.lastX = event.clientX;
     drag.lastT = now;
 
-    pill.style.transform =
-      'translate(' + left + 'px, -50%) scaleX(' + (1 + stretch).toFixed(3) + ') scaleY(' + (1 - stretch * 0.6).toFixed(3) + ')';
+    pill.style.left = left + 'px';
+    pill.style.transform = 'translate(0, -50%) scaleX(' + (1 + stretch).toFixed(3) + ') scaleY(' + (1 - stretch * 0.6).toFixed(3) + ')';
     const pillRect = pill.getBoundingClientRect();
     pill.style.setProperty('--lens-x', (-pillRect.left) + 'px');
     pill.style.setProperty('--lens-y', (-pillRect.top) + 'px');

@@ -1,4 +1,4 @@
-﻿/* MYolGame 设计系统：深色靛蓝/紫色游戏创作社区 */
+/* MYolGame 设计系统：深色靛蓝/紫色游戏创作社区 */
 
 :root {
   /* Sites 设计参数：默认值保持现有深色视觉，可由设计工作台调整 */
@@ -75,7 +75,9 @@ h1, h2, h3 { line-height: 1.3; margin: 0 0 8px; }
   margin: 0 auto;
   padding: calc(24px * var(--site-space, 1)) 20px calc(56px * var(--site-space, 1));
 }
-.page { animation: fade-in calc(250ms * var(--site-motion, 1)) ease; }
+/* 原项目的整页淡入会在这 250ms 里让后代失去 backdrop-filter（玻璃先透明、结束才变实），
+   也是“切换时发白 / 先透明再变黑”的根源。这里彻底关掉，页面内容直接出现。 */
+.page { animation: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .page { animation: none; }
@@ -127,13 +129,15 @@ h1, h2, h3 { line-height: 1.3; margin: 0 0 8px; }
   border-radius: 999px;
   color: var(--muted);
   font-size: 14px;
-  transition: all 0.15s ease;
+  /* 只过渡颜色：过渡 all 会把 border 也带上，切换时会出现一圈“框” */
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
-.nav-links a:hover { color: var(--text); background: rgba(129, 140, 248, 0.1); }
+.nav-links a:hover:not(.active) { color: var(--text); background: rgba(129, 140, 248, 0.1); }
 .nav-links a.active {
+  /* 指示块只由 .nav-pill 画，链接本身不画底也不画边框 */
   color: #fff;
-  background: linear-gradient(120deg, rgba(99, 102, 241, 0.35), rgba(168, 85, 247, 0.35));
-  border: 1px solid var(--border-strong);
+  background: none;
+  border: 0;
 }
 
 .nav-user {
@@ -1306,6 +1310,7 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
   height: 34px;
   width: 0;
   transform: translate(0, -50%);
+  will-change: left, width;
   border-radius: 999px;
   /* 不再做位移折射，改成一圈棱镜色散的边 */
   /* 本体保持通透，折射分光交给下面那圈环 */
@@ -1512,13 +1517,13 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
 }
 
 @keyframes glass-materialize {
-  from { --glass-blur: 0px; }
+  from { --glass-blur: 5px; }
   to { --glass-blur: var(--glass-blur-target, 7px); }
 }
 
 /* 压暗：让深色底从 25% 不透明度长到 100% */
 @keyframes glass-tint-in {
-  from { opacity: 0.25; }
+  from { opacity: 0.85; }
   to { opacity: 1; }
 }
 
@@ -1540,7 +1545,8 @@ html.glass-warming .mode-banner::before {
   animation: glass-tint-in 520ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
-html.glass-warming { animation: glass-materialize 520ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+/* 关闭切换时的“材质化”动画：首帧半透明会让整页看起来发白，改为直接就位 */
+html.glass-warming { animation: none; }
 
 /* 顶部栏不参与材质化：模糊与压暗都固定为设定值 */
 html.glass-warming .nav,
@@ -1793,7 +1799,12 @@ html.glass-warming .glass-block::before {
 
 
 /* 胶囊只做视觉层，永远不接收指针；拖动由 .nav-links 容器按移动阈值判定 */
-.nav-pill { pointer-events: none; }
+.nav-pill {
+  pointer-events: none;
+  /* 把胶囊内部一切绘制限制在自己的圆角里，避免动画期间伪元素/滤镜溢出画出一个大框 */
+  contain: layout paint;
+  overflow: hidden;
+}
 
 /* 导航容器与胶囊一律不画焦点框（键盘访问靠链接自己的 :focus-visible） */
 .nav-links:focus,
@@ -1812,3 +1823,56 @@ html { scrollbar-gutter: stable; }
 .nav-pill:focus:not(:focus-visible) { outline: none; }
 /* 键盘聚焦改用底色提示，不再画任何描边，杜绝白色焦点框 */
 .nav-links a:focus-visible { outline: none; background: rgba(255, 255, 255, 0.12); }
+
+
+/* ---------- 深色底直接画在元素上 ----------
+   之前深色底放在 ::before，新页面首帧往往先画出元素、后画出伪元素，
+   于是切换瞬间整块玻璃是“透明的”，看起来发白。改成元素自己的 background-color，
+   与元素同一帧绘出，不再有这层延迟。 */
+.page-head,
+.footer-inner,
+.badge,
+.notice,
+.error-box,
+.nav,
+.nav-user,
+.nav-backdrop,
+.btn,
+.chip,
+.segmented,
+.search-input,
+.hero-text,
+.game-card,
+.panel,
+.creation-template-card,
+.browse-footnote,
+.glass-block {
+  background-color: rgba(10, 12, 26, var(--glass-body));
+}
+
+.empty-state {
+  background-color: rgba(10, 12, 26, calc(var(--glass-body) * 0.55));
+}
+
+/* 这些元素的 ::before 不再承担深色底 */
+.page-head::before,
+.footer-inner::before,
+.badge::before,
+.notice::before,
+.error-box::before,
+.nav::before,
+.nav-user::before,
+.nav-backdrop::before,
+.btn::before,
+.chip::before,
+.segmented::before,
+.search-input::before,
+.hero-text::before,
+.game-card::before,
+.panel::before,
+.creation-template-card::before,
+.browse-footnote::before,
+.glass-block::before,
+.empty-state::before {
+  background: transparent;
+}
