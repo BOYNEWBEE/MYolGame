@@ -46,7 +46,7 @@ export default function App(): ReactNode {
   useEffect(() => {
     if (location.key === shownLocation.key) return;
     document.querySelector('.page')?.classList.add('is-leaving');
-    const timer = window.setTimeout(() => setShownLocation(location), 100);
+    const timer = window.setTimeout(() => setShownLocation(location), 60);
     return () => window.clearTimeout(timer);
   }, [location, shownLocation]);
   // 路由切换：旧页面先淡出 110ms（只到 35%，不会空白），换页后新页面淡入，
