@@ -1620,3 +1620,20 @@ h1, h2, h3,
 .card-author .official-tag { color: #b9a4ff; }
 .card-footer .stat { color: #9fd6ff; }
 .card-footer .stat:nth-of-type(2) { color: #ff9ec7; }
+
+
+/* 小字号说明文字：轻微投影，避免压在模糊背景上看不清 */
+.page-head p,
+.hero-text > p,
+.panel-note,
+.setting-hint,
+.card-author,
+.card-footer .stat,
+.small,
+.muted { text-shadow: 0 1px 2px rgba(4, 6, 16, 0.55); }
+
+/* 模式提示条文字提亮（原来琥珀色压在琥珀玻璃上偏糊） */
+.mode-banner.template { color: #ffe2a1; }
+.mode-banner.agent { color: #c9fbff; }
+.mode-banner strong { color: #fff8e6; }
+.mode-banner.agent strong { color: #eaffff; }

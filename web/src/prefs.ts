@@ -52,7 +52,7 @@ const DEFAULTS: Prefs = {
   navTextColor: '#e8eaff',
   titleColor: '#f2f5ff',
   bodyColor: '#dfe3f2',
-  mutedColor: '#a8afcc',
+  mutedColor: '#c3c9dd',
   glassEnabled: true,
   backdrop: DEFAULT_BACKDROP,
   backdropOpacity: 1,

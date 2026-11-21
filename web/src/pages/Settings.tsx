@@ -195,32 +195,26 @@ export default function Settings(): ReactNode {
         </section>
 
         <section className="panel">
-          <h2>顶部文字</h2>
-          <p className="setting-hint">
-            自动：按导航背后的背景亮度决定用浅色还是深色（当前模式：{prefs.navText === 'auto' ? '自动' : prefs.navText === 'light' ? '浅色' : prefs.navText === 'dark' ? '深色' : '自定义'}）
-          </p>
-          <div className="setting-actions">
-            <button type="button" className={'chip' + (prefs.navText === 'auto' ? ' active' : '')} onClick={() => setPrefs({ navText: 'auto' })}>自动</button>
-            <button type="button" className={'chip' + (prefs.navText === 'light' ? ' active' : '')} onClick={() => setPrefs({ navText: 'light' })}>浅色</button>
-            <button type="button" className={'chip' + (prefs.navText === 'dark' ? ' active' : '')} onClick={() => setPrefs({ navText: 'dark' })}>深色</button>
-          </div>
-          <label className="setting-row">
+          <h2>文字颜色</h2>
+          <p className="setting-hint">导航、标题、正文与次要信息都在这里改；按钮与标签保持原样。</p>
+
+          <div className="setting-row">
             <span className="row-head">
-              <span>自定义颜色</span>
-              <b>{prefs.navTextColor}</b>
+              <span>导航文字</span>
+              <b>{prefs.navText === 'auto' ? '自动' : prefs.navText === 'light' ? '浅色' : prefs.navText === 'dark' ? '深色' : '自定义'}</b>
             </span>
+            <div className="setting-actions">
+              <button type="button" className={'chip' + (prefs.navText === 'auto' ? ' active' : '')} onClick={() => setPrefs({ navText: 'auto' })}>自动</button>
+              <button type="button" className={'chip' + (prefs.navText === 'light' ? ' active' : '')} onClick={() => setPrefs({ navText: 'light' })}>浅色</button>
+              <button type="button" className={'chip' + (prefs.navText === 'dark' ? ' active' : '')} onClick={() => setPrefs({ navText: 'dark' })}>深色</button>
+            </div>
             <input
               type="color"
               value={prefs.navTextColor}
               onChange={(event) => setPrefs({ navText: 'custom', navTextColor: event.target.value })}
             />
-          </label>
-          <p className="setting-hint">浅色/深色会同时作用于导航链接、用户名胶囊与背景开关；Logo 的渐变保持不变。</p>
-        </section>
-
-        <section className="panel">
-          <h2>文字颜色</h2>
-          <p className="setting-hint">标题、正文与次要信息分开设置；按钮、导航与标签不受影响。</p>
+            <span className="setting-hint">自动 = 按背景亮度决定；选颜色会切到“自定义”。</span>
+          </div>
 
           <label className="setting-row">
             <span className="row-head">
