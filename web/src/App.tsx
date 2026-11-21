@@ -1,6 +1,7 @@
 ﻿import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { NavLink, Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { createPillSpring } from './pill-spring.ts';
+import { getRefractFilter } from './glass-refract.ts';
 import { useSession } from './session.tsx';
 import Backdrop from './components/Backdrop.tsx';
 import QcaExperiment from './pages/QcaExperiment.tsx';
@@ -91,6 +92,15 @@ export default function App(): ReactNode {
       const navBox = nav.getBoundingClientRect();
       const box = active.getBoundingClientRect();
       pill.style.opacity = '1';
+      // 苹果式折射：按胶囊目标尺寸生成 SDF 位移贴图
+      const pillHeight = pill.getBoundingClientRect().height || 34;
+      const refract = getRefractFilter(box.width, pillHeight, 1.45);
+      const chain = refract
+        ? refract + ' blur(0.25px) contrast(1.2) brightness(1.05) saturate(1.15)'
+        : 'blur(6px) saturate(1.4)';
+      pill.style.backdropFilter = chain;
+      pill.style.setProperty('-webkit-backdrop-filter', chain);
+
       const spring = springRef.current;
       if (!spring) {
         pill.style.left = (box.left - navBox.left) + 'px';

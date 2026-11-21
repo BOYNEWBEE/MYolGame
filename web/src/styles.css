@@ -1316,11 +1316,11 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
   /* 不再做位移折射，改成一圈棱镜色散的边 */
   /* 本体保持通透，折射分光交给下面那圈环 */
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.42);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.18),
-    0 10px 26px rgba(40, 30, 90, 0.35);
+    inset 0 -6px 12px rgba(0, 0, 0, 0.12),
+    0 6px 14px rgba(0, 0, 0, 0.28);
   transition:
     transform 520ms cubic-bezier(0.2, 0.9, 0.25, 1.3),
     width 520ms cubic-bezier(0.2, 0.9, 0.25, 1.3),
@@ -1564,23 +1564,6 @@ html.glass-warming .nav-backdrop {
 
 
 
-
-/* 棱镜边：只取边缘 3px 的一条环，让背后的内容在这条环里被折射并按 RGB 分开，
-   所以彩色来自背景本身（不是画上去的光） */
-.nav-pill::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 4px;
-  -webkit-backdrop-filter: url(#liquid-warp) saturate(1.5) brightness(1.06);
-  backdrop-filter: url(#liquid-warp) saturate(1.5) brightness(1.06);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  pointer-events: none;
-}
 
 /* ---------- 文字层级：非按钮文字降亮，按钮保持纯白 ---------- */
 :root {
