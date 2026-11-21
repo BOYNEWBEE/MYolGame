@@ -75,8 +75,8 @@ h1, h2, h3 { line-height: 1.3; margin: 0 0 8px; }
   margin: 0 auto;
   padding: calc(24px * var(--site-space, 1)) 20px calc(56px * var(--site-space, 1));
 }
-/* 关闭整页淡入：祖先 opacity 会让 backdrop-filter 失效，改用玻璃自身的“材质化”过渡 */
-.page { animation: none; }
+/* 整页淡入：起点 35%，不会出现空白帧；随后由玻璃材质化接管模糊 */
+.page { animation: fade-in calc(250ms * var(--site-motion, 1)) ease both; }
 
 @media (prefers-reduced-motion: reduce) {
   .page { animation: none; }
@@ -1545,7 +1545,7 @@ html.glass-warming .mode-banner::before {
 }
 
 /* 切换时玻璃“材质化”：模糊从 0 长到设定值 */
-html.glass-warming { animation: glass-materialize 520ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+html.glass-warming { animation: glass-materialize 480ms cubic-bezier(0.4, 0, 0.2, 1) 300ms both; }
 
 /* 顶部栏不参与材质化：模糊与压暗都固定为设定值 */
 html.glass-warming .nav,
@@ -1900,7 +1900,7 @@ html.glass-warming .notice,
 html.glass-warming .error-box,
 html.glass-warming .browse-footnote,
 html.glass-warming .glass-block {
-  animation: glass-body-in 520ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: glass-body-in 480ms cubic-bezier(0.4, 0, 0.2, 1) 300ms both;
 }
 
 
@@ -1911,7 +1911,7 @@ html.glass-warming .glass-block {
 }
 
 html.glass-warming .empty-state {
-  animation: glass-body-in-soft 520ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation: glass-body-in-soft 480ms cubic-bezier(0.4, 0, 0.2, 1) 300ms both;
 }
 
 
@@ -1923,4 +1923,13 @@ html.glass-warming .nav-backdrop {
   backdrop-filter: blur(var(--glass-blur-target, 7px)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
   background-color: rgba(10, 12, 26, var(--glass-body));
   animation: none;
+}
+
+
+/* 切走时旧页面淡出（只到 35%，避免出现空白帧） */
+.page.is-leaving { animation: fade-out 110ms ease both; }
+
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0.35; }
 }
