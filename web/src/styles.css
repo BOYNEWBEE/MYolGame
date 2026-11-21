@@ -1671,3 +1671,41 @@ h1, h2, h3,
   .hero-text > p,
   .hero-actions { animation: none; }
 }
+
+/* ---------- 页脚重做：与内容同宽的玻璃条，不再是一条通栏深色块 ---------- */
+.footer {
+  background: transparent;
+  border-top: none;
+  padding: 0 20px 26px;
+}
+
+.footer-inner {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 16px 20px 18px;
+  border-radius: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.footer p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted);
+  text-shadow: 0 1px 2px rgba(4, 6, 16, 0.5);
+}
+
+/* 说明标签做成小胶囊，跟正文分开 */
+.footer strong {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: rgba(139, 92, 246, 0.16);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
