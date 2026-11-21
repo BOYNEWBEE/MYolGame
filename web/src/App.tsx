@@ -41,6 +41,14 @@ export default function App(): ReactNode {
   const session = useSession();
   const location = useLocation();
   const navigate = useNavigate();
+  // 路由切换：旧页面淡出 100ms（到 50%，不空白）→ 换页 → 新页面淡入 200ms
+  const [shownLocation, setShownLocation] = useState(location);
+  useEffect(() => {
+    if (location.key === shownLocation.key) return;
+    document.querySelector('.page')?.classList.add('is-leaving');
+    const timer = window.setTimeout(() => setShownLocation(location), 100);
+    return () => window.clearTimeout(timer);
+  }, [location, shownLocation]);
   // 路由切换：旧页面先淡出 110ms（只到 35%，不会空白），换页后新页面淡入，
   // 随后玻璃材质化接管（模糊 0 → 设定值）。
 
@@ -283,7 +291,7 @@ export default function App(): ReactNode {
 
       <main className="main">
         {session.cloudM0 && <div className="page" role="status">{session.qcaExperiment ? '当前部署提供新路线实验；M0 任务仍为模拟，实验执行方式以实验页标记为准。' : '当前为云端 M0：任务仅模拟基础设施执行，不调用 AI、不生成游戏。'}<Link to="/m0">进入云端任务</Link></div>}
-        <Routes>
+        <Routes location={shownLocation}>
           <Route path="/experiments/qca" element={<QcaExperiment />} />
           <Route path="/m0" element={<M0 />} />
           <Route path="/account" element={<Account />} />

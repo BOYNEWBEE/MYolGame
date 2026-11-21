@@ -86,7 +86,7 @@ h1, h2, h3 { line-height: 1.3; margin: 0 0 8px; }
 }
 
 @keyframes fade-in {
-  from { opacity: 0.4; transform: translateY(3px); }
+  from { opacity: 0.5; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
 }
 
@@ -1911,7 +1911,7 @@ html.glass-warming .nav-backdrop {
 
 
 /* 切走时旧页面淡出（只到 35%，避免出现空白帧） */
-.page.is-leaving { animation: none; }
+.page.is-leaving { animation: fade-out 100ms ease both; }
 
 @keyframes fade-out {
   from { opacity: 1; }
@@ -1933,8 +1933,13 @@ html.no-glass :is(
   animation: none !important;
 }
 
-/* 关玻璃后这些“看起来像玻璃块”的容器回到普通底色，不要留半透明 */
-html.no-glass :is(.browse-footnote, .glass-block, .glass-bar, .nav-pill) {
+/* 关玻璃后这些框仍然保留，只是变成不透明的普通卡片 */
+html.no-glass :is(.browse-footnote, .glass-block, .glass-bar) {
+  background: rgba(12, 14, 30, 0.92) !important;
+  border: 1px solid var(--border-strong) !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28) !important;
+}
+html.no-glass .nav-pill {
   background: transparent !important;
   border-color: var(--border) !important;
   box-shadow: none !important;
@@ -1954,4 +1959,27 @@ html.no-glass :is(.nav, .nav-user, .nav-backdrop, .nav-pill, .btn, .chip, .segme
 html.no-glass :is(input, select, textarea) {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
+}
+
+
+/* ---------- 页面切换动画（放最后，确保不被前面的重复规则覆盖） ---------- */
+.page {
+  animation: fade-in 200ms ease both;
+}
+.page.is-leaving {
+  animation: fade-out 100ms ease both;
+}
+
+@keyframes fade-in {
+  from { opacity: 0.5; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0.5; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page, .page.is-leaving { animation: none; }
 }
