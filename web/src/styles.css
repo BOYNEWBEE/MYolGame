@@ -1786,3 +1786,7 @@ html.glass-warming .glass-block::before {
   box-shadow: none;
 }
 .no-glass .glass-block::before { display: none; }
+/* 空状态（我的项目 / 我的收藏）不要和页头一样重：用一半浓度的深色底 */
+.empty-state::before {
+  background: rgba(10, 12, 26, calc(var(--glass-body) * 0.55));
+}
