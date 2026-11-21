@@ -41,26 +41,6 @@ export default function App(): ReactNode {
   const session = useSession();
   const location = useLocation();
   const navigate = useNavigate();
-  // 路由切换：页面文字内容淡出 → 换页 → 淡入。
-  // 只动文字/图片节点，不动玻璃容器（动玻璃的祖先会让 backdrop-filter 失效）。
-  const [shownLocation, setShownLocation] = useState(location);
-  const [fading, setFading] = useState(false);
-  const fadeTimers = useRef<number[]>([]);
-  useEffect(() => {
-    if (location.key === shownLocation.key) return;
-    setFading(true);
-    const out = window.setTimeout(() => {
-      // 先换页（此时仍是淡出状态），下一帧再淡入，新内容才有 0 → 1 的过渡
-      setShownLocation(location);
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => setFading(false));
-      });
-    }, 120);
-    fadeTimers.current.push(out);
-  }, [location, shownLocation]);
-  useEffect(() => () => {
-    for (const id of fadeTimers.current) window.clearTimeout(id);
-  }, []);
   // 路由切换：不做整页淡入淡出，改为让玻璃"材质化"——
   // 模糊从 0 长到设定值、压暗从透明长到设定值（动画作用在 --glass-* 变量上）。
   useEffect(() => {
@@ -297,9 +277,9 @@ export default function App(): ReactNode {
         </div>
       </header>
 
-      <main className={"main" + (fading ? " is-fading" : "")}>
+      <main className="main">
         {session.cloudM0 && <div className="page" role="status">{session.qcaExperiment ? '当前部署提供新路线实验；M0 任务仍为模拟，实验执行方式以实验页标记为准。' : '当前为云端 M0：任务仅模拟基础设施执行，不调用 AI、不生成游戏。'}<Link to="/m0">进入云端任务</Link></div>}
-        <Routes location={shownLocation}>
+        <Routes>
           <Route path="/experiments/qca" element={<QcaExperiment />} />
           <Route path="/m0" element={<M0 />} />
           <Route path="/account" element={<Account />} />
