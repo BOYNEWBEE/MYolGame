@@ -94,6 +94,7 @@ export default function App(): ReactNode {
       spring.setBounds(nav.clientWidth - box.width);
       pill.classList.add('is-settling');
       spring.animateTo({ left: box.left - navBox.left, width: box.width });
+      window.setTimeout(() => pill.classList.remove('is-settling'), 900);
     };
     place();
     const timer = window.setTimeout(place, 80);
@@ -105,7 +106,8 @@ export default function App(): ReactNode {
     event.preventDefault();
     const nav = navRef.current;
     const pill = pillRef.current;
-    if (!nav || !pill) return;
+    // 动画中不接管拖动，让点击落到下面的链接上
+    if (!nav || !pill || pill.classList.contains('is-settling')) return;
     const navBox = nav.getBoundingClientRect();
     const pillBox = pill.getBoundingClientRect();
     springRef.current?.jumpTo(pillBox.left - navBox.left, pillBox.width);
@@ -172,6 +174,7 @@ export default function App(): ReactNode {
       springRef.current?.setBounds(nav.clientWidth - box.width);
       pill.classList.add('is-settling');
       springRef.current?.animateTo({ left: box.left - navBox.left, width: box.width });
+      window.setTimeout(() => pill.classList.remove('is-settling'), 900);
     }
     const href = best?.getAttribute('href');
     if (href) navigate(href);

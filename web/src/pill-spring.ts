@@ -31,6 +31,7 @@ export function createPillSpring(
   let target: SpringTarget = { left: 0, width: 0 };
   let frame = 0;
   let last = 0;
+  let frames = 0;
 
   const applyState = (): void => {
     apply(state.left, state.width);
@@ -38,6 +39,7 @@ export function createPillSpring(
 
   const step = (time: number): void => {
     frame = 0;
+    frames += 1;
     if (!last) last = time;
     const dt = Math.min(0.05, Math.max(0.008, (time - last) / 1000));
     last = time;
@@ -68,7 +70,8 @@ export function createPillSpring(
       Math.abs(state.width - target.width) < 0.35 &&
       Math.abs(state.widthVelocity) < 0.35;
 
-    if (settled) {
+    // 兜底：超过 ~2.5 秒仍未收敛，直接落到目标，避免胶囊永久卡在中间
+    if (settled || frames > 150) {
       state = { ...state, left: target.left, width: target.width, leftVelocity: 0, widthVelocity: 0 };
       applyState();
       last = 0;
@@ -92,15 +95,22 @@ export function createPillSpring(
       this.cancel();
       state = { left, width, leftVelocity: 0, widthVelocity: 0, maxLeft: state.maxLeft };
       applyState();
+      onSettle?.();
     },
     animateTo(next: SpringTarget): void {
-      target = next;
+      target = {
+        left: Math.max(0, Math.min(state.maxLeft, next.left)),
+        width: Math.max(0, next.width),
+      };
+      frames = 0;
       run();
     },
     cancel(): void {
       if (frame) window.cancelAnimationFrame(frame);
       frame = 0;
       last = 0;
+      frames = 0;
+      onSettle?.();
     },
   };
 }
