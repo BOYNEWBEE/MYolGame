@@ -1983,3 +1983,44 @@ html.no-glass :is(input, select, textarea) {
 @media (prefers-reduced-motion: reduce) {
   .page, .page.is-leaving { animation: none; }
 }
+
+
+/* ---------- 关闭液态玻璃时：把我后加玻璃的元素恢复成普通卡片（原项目把它们设成了 transparent） ---------- */
+html.no-glass :is(.page-head, .footer-inner, .empty-state, .badge, .notice, .error-box) {
+  background: rgba(12, 14, 30, 0.92) !important;
+  border: 1px solid var(--border-strong) !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28) !important;
+}
+
+html.no-glass .page-head {
+  padding: 18px 20px !important;
+  border-radius: 18px !important;
+  margin-bottom: 22px !important;
+}
+
+html.no-glass .footer-inner {
+  padding: 16px 20px 18px !important;
+  border-radius: 18px !important;
+}
+
+html.no-glass .empty-state {
+  padding: 44px 26px !important;
+  border-radius: 20px !important;
+}
+
+/* 首屏文案块在关玻璃时也保留一个卡片，而不是变回裸文字 */
+html.no-glass .hero-text {
+  background: rgba(12, 14, 30, 0.92) !important;
+  border: 1px solid var(--border-strong) !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28) !important;
+  padding: 26px 28px !important;
+}
+
+/* 关玻璃时顶栏不要被材质化的固定规则改浅，始终纯色 */
+html.no-glass.glass-warming .nav,
+html.no-glass.glass-warming .nav-user,
+html.no-glass.glass-warming .nav-backdrop {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background-color: rgba(7, 8, 20, 0.92) !important;
+}
