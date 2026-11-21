@@ -1066,6 +1066,8 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 .creation-template-card {
   position: relative;
   isolation: isolate;
+  /* 必须清掉底色：基础样式里 .panel/.game-card 等有实心 background，会挡住玻璃与模糊 */
+  background-color: transparent;
   background-image: linear-gradient(
     158deg,
     rgba(255, 255, 255, var(--glass-sheen)) 0%,
