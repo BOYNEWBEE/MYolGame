@@ -1,4 +1,4 @@
-// 根据导航背后的实际亮度，自动选择顶部文字用浅色还是深色。
+﻿// 根据导航背后的实际亮度，自动选择顶部文字用浅色还是深色。
 // 采样的是背景图顶部那一条（导航所在区域），再按玻璃的压暗程度折算成“真正看到的亮度”。
 
 export type NavTone = 'light' | 'dark';
@@ -50,5 +50,5 @@ export async function computeNavTone(src: string | null, bodyAlpha: number): Pro
   const tintLum = 14; // 深色底 rgb(10,12,26) 的亮度
   const effective = imageLum * (1 - bodyAlpha) + tintLum * bodyAlpha;
 
-  return effective > 140 ? 'dark' : 'light';
+  return effective > 135 ? 'dark' : 'light';
 }

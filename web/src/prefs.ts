@@ -139,6 +139,19 @@ export function applyPrefs(prefs: Prefs): void {
   } else {
     root.style.setProperty('--nav-fg', prefs.navTextColor);
   }
+
+  // 正文等非按钮文字也跟着背景亮度走（按钮内部文字不受影响）
+  void computeNavTone(prefs.backdrop, prefs.glass.body).then((tone) => {
+    if (tone === 'dark') {
+      root.style.setProperty('--body-fg', '#2b2f45');
+      root.style.setProperty('--body-fg-strong', '#14161f');
+      root.style.setProperty('--muted', '#4c526b');
+    } else {
+      root.style.setProperty('--body-fg', '#c2c8dd');
+      root.style.setProperty('--body-fg-strong', '#d9ddf0');
+      root.style.setProperty('--muted', '#9298c4');
+    }
+  });
   root.style.setProperty('--glass-blur', glass.blur + 'px');
   root.style.setProperty('--glass-saturate', glass.saturate + '%');
   root.style.setProperty('--glass-brightness', String(glass.brightness));
