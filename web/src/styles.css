@@ -1,4 +1,4 @@
-/* MYolGame 设计系统：深色靛蓝/紫色游戏创作社区 */
+﻿/* MYolGame 设计系统：深色靛蓝/紫色游戏创作社区 */
 
 :root {
   /* Sites 设计参数：默认值保持现有深色视觉，可由设计工作台调整 */
@@ -1092,7 +1092,13 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 .hero-text::before,
 .game-card::before,
 .panel::before,
-.creation-template-card::before {
+.creation-template-card::before,
+.page-head::before,
+.footer-inner::before,
+.empty-state::before,
+.badge::before,
+.notice::before,
+.error-box::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -1581,7 +1587,7 @@ h1, h2, h3,
 .hero-text h1,
 .page-head h1,
 .card-title-row h3,
-.card-title-row a { color: var(--body-fg-strong, #d9ddf0); }
+.card-title-row a { color: var(--title-fg, #f2f5ff); }
 
 /* 强调/警示文案维持原色 */
 .warn, .hero-notice { color: var(--warn); }
@@ -1607,3 +1613,10 @@ h1, h2, h3,
   background: transparent;
   cursor: pointer;
 }
+
+
+/* 作者名与统计：给一点颜色，避免和正文混在一起 */
+.card-author { color: #e8c06a; }
+.card-author .official-tag { color: #b9a4ff; }
+.card-footer .stat { color: #9fd6ff; }
+.card-footer .stat:nth-of-type(2) { color: #ff9ec7; }

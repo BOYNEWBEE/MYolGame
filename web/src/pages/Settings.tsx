@@ -219,6 +219,57 @@ export default function Settings(): ReactNode {
         </section>
 
         <section className="panel">
+          <h2>文字颜色</h2>
+          <p className="setting-hint">标题、正文与次要信息分开设置；按钮、导航与标签不受影响。</p>
+
+          <label className="setting-row">
+            <span className="row-head">
+              <span>标题</span>
+              <b>{prefs.titleColor}</b>
+            </span>
+            <input
+              type="color"
+              value={prefs.titleColor}
+              onChange={(event) => setPrefs({ titleColor: event.target.value })}
+            />
+          </label>
+
+          <label className="setting-row">
+            <span className="row-head">
+              <span>正文</span>
+              <b>{prefs.bodyColor}</b>
+            </span>
+            <input
+              type="color"
+              value={prefs.bodyColor}
+              onChange={(event) => setPrefs({ bodyColor: event.target.value })}
+            />
+          </label>
+
+          <label className="setting-row">
+            <span className="row-head">
+              <span>次要信息（更新时间、说明）</span>
+              <b>{prefs.mutedColor}</b>
+            </span>
+            <input
+              type="color"
+              value={prefs.mutedColor}
+              onChange={(event) => setPrefs({ mutedColor: event.target.value })}
+            />
+          </label>
+
+          <div className="setting-actions">
+            <button
+              type="button"
+              className="btn small"
+              onClick={() => setPrefs({ titleColor: '#f2f5ff', bodyColor: '#dfe3f2', mutedColor: '#a8afcc' })}
+            >
+              恢复默认文字颜色
+            </button>
+          </div>
+        </section>
+
+        <section className="panel">
           <h2>重置</h2>
           <div className="setting-actions">
             <button

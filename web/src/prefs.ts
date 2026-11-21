@@ -21,6 +21,10 @@ export interface Prefs {
   /** 顶部导航文字配色：auto=按背景亮度自动；light/dark=固定；custom=用 navTextColor */
   navText: 'auto' | 'light' | 'dark' | 'custom';
   navTextColor: string;
+  /** 标题 / 正文 / 次要信息的文字颜色 */
+  titleColor: string;
+  bodyColor: string;
+  mutedColor: string;
   /** 液态玻璃开关；关闭后回到项目初版的纯色界面 */
   glassEnabled: boolean;
   /** 背景图地址；null 表示关闭背景层 */
@@ -46,6 +50,9 @@ const LEGACY_KEYS = ['myol.prefs.v2', 'myol.prefs'];
 const DEFAULTS: Prefs = {
   navText: 'auto',
   navTextColor: '#e8eaff',
+  titleColor: '#f2f5ff',
+  bodyColor: '#dfe3f2',
+  mutedColor: '#a8afcc',
   glassEnabled: true,
   backdrop: DEFAULT_BACKDROP,
   backdropOpacity: 1,
@@ -81,9 +88,14 @@ function normalize(raw: unknown, fallback: Prefs = DEFAULTS): Prefs {
   const navTextColor = typeof input.navTextColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(input.navTextColor)
     ? input.navTextColor
     : DEFAULTS.navTextColor;
+  const hex = (value: unknown, fallback: string): string =>
+    typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
   return {
     navText,
     navTextColor,
+    titleColor: hex(input.titleColor, DEFAULTS.titleColor),
+    bodyColor: hex(input.bodyColor, DEFAULTS.bodyColor),
+    mutedColor: hex(input.mutedColor, DEFAULTS.mutedColor),
     glassEnabled: input.glassEnabled === false ? false : true,
     backdrop,
     backdropOpacity: clamp(Number(input.backdropOpacity), 0.05, 1, fallback.backdropOpacity),
@@ -140,18 +152,10 @@ export function applyPrefs(prefs: Prefs): void {
     root.style.setProperty('--nav-fg', prefs.navTextColor);
   }
 
-  // 正文等非按钮文字也跟着背景亮度走（按钮内部文字不受影响）
-  void computeNavTone(prefs.backdrop, prefs.glass.body).then((tone) => {
-    if (tone === 'dark') {
-      root.style.setProperty('--body-fg', '#2b2f45');
-      root.style.setProperty('--body-fg-strong', '#14161f');
-      root.style.setProperty('--muted', '#4c526b');
-    } else {
-      root.style.setProperty('--body-fg', '#c2c8dd');
-      root.style.setProperty('--body-fg-strong', '#d9ddf0');
-      root.style.setProperty('--muted', '#9298c4');
-    }
-  });
+  // 标题 / 正文 / 次要信息：直接用设置里的颜色
+  root.style.setProperty('--title-fg', prefs.titleColor);
+  root.style.setProperty('--body-fg', prefs.bodyColor);
+  root.style.setProperty('--muted', prefs.mutedColor);
   root.style.setProperty('--glass-blur', glass.blur + 'px');
   root.style.setProperty('--glass-saturate', glass.saturate + '%');
   root.style.setProperty('--glass-brightness', String(glass.brightness));
