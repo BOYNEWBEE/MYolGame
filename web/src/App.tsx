@@ -94,15 +94,28 @@ export default function App(): ReactNode {
         return;
       }
       spring.setBounds(nav.clientWidth - box.width);
-      pill.classList.add('is-settling');
       spring.animateTo({ left: box.left - navBox.left, width: box.width });
-      window.setTimeout(() => pill.classList.remove('is-settling'), 900);
     };
     placeRef.current = place;
     place();
     const timer = window.setTimeout(place, 80);
     window.addEventListener('resize', place);
-    return () => { window.clearTimeout(timer); window.removeEventListener('resize', place); };
+    // 自愈：如果胶囊和当前项没对齐（动画被打断、布局变化等），每 600ms 校正一次
+    const heal = window.setInterval(() => {
+      if (dragRef.current) return;
+      const pill = pillRef.current;
+      if (!pill) return;
+      const active = navRef.current?.querySelector<HTMLAnchorElement>('a.active');
+      if (!active) return;
+      const box = active.getBoundingClientRect();
+      const rect = pill.getBoundingClientRect();
+      if (Math.abs(rect.left - box.left) > 2 || Math.abs(rect.width - box.width) > 2) place();
+    }, 600);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearInterval(heal);
+      window.removeEventListener('resize', place);
+    };
   }, [location.pathname, session.cloudM0, session.qcaExperiment]);
 
   // 拖动挂在导航容器上：指针移动超过 8px 才算拖，否则让链接正常响应点击。
@@ -111,7 +124,6 @@ export default function App(): ReactNode {
     const nav = navRef.current;
     const pill = pillRef.current;
     if (!nav || !pill || event.button !== 0) return;
-    if (pill.classList.contains('is-settling')) return;
     const navBox = nav.getBoundingClientRect();
     const pillBox = pill.getBoundingClientRect();
     dragRef.current = {
@@ -157,13 +169,20 @@ export default function App(): ReactNode {
     pill.style.setProperty('--lens-y', (-pillRect.top) + 'px');
   }
 
-  function pillCancel(): void {
+  function releaseCapture(target: EventTarget | null, pointerId: number): void {
+    const el = target as (HTMLElement & { hasPointerCapture?: (id: number) => boolean }) | null;
+    if (el?.hasPointerCapture?.(pointerId)) el.releasePointerCapture(pointerId);
+  }
+
+  function pillCancel(event?: ReactPointerEvent<HTMLElement>): void {
+    if (event) releaseCapture(event.currentTarget, event.pointerId);
     dragRef.current = null;
     pillRef.current?.classList.remove('is-dragging');
     placeRef.current();
   }
 
   function navPointerUp(event: ReactPointerEvent<HTMLElement>): void {
+    releaseCapture(event.currentTarget, event.pointerId);
     const drag = dragRef.current;
     const nav = navRef.current;
     const pill = pillRef.current;
@@ -194,9 +213,7 @@ export default function App(): ReactNode {
     const box = best.getBoundingClientRect();
     springRef.current?.jumpTo(pillBox.left - navBox.left, pillBox.width);
     springRef.current?.setBounds(nav.clientWidth - box.width);
-    pill.classList.add('is-settling');
     springRef.current?.animateTo({ left: box.left - navBox.left, width: box.width });
-    window.setTimeout(() => pill.classList.remove('is-settling'), 900);
     const href = best.getAttribute('href');
     if (href) navigate(href);
   }

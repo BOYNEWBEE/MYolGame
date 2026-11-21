@@ -1795,6 +1795,14 @@ html.glass-warming .glass-block::before {
 /* 胶囊只做视觉层，永远不接收指针；拖动由 .nav-links 容器按移动阈值判定 */
 .nav-pill { pointer-events: none; }
 
+/* 导航容器与胶囊一律不画焦点框（键盘访问靠链接自己的 :focus-visible） */
+.nav-links:focus,
+.nav-links:focus-visible,
+.nav-inner:focus,
+.nav-inner:focus-visible,
+.nav-pill:focus,
+.nav-pill:focus-visible { outline: none !important; }
+
 /* 始终为滚动条留位置，切换路由时整页不会左右抖一下 */
 html { scrollbar-gutter: stable; }
 
@@ -1802,4 +1810,5 @@ html { scrollbar-gutter: stable; }
 /* 鼠标点导航不要出现白色焦点框（键盘 Tab 时仍然保留） */
 .nav-links a:focus:not(:focus-visible),
 .nav-pill:focus:not(:focus-visible) { outline: none; }
-.nav-links a:focus-visible { outline: 2px solid var(--accent, #8b5cf6); outline-offset: 3px; }
+/* 键盘聚焦改用底色提示，不再画任何描边，杜绝白色焦点框 */
+.nav-links a:focus-visible { outline: none; background: rgba(255, 255, 255, 0.12); }
