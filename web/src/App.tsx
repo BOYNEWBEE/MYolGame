@@ -47,7 +47,7 @@ export default function App(): ReactNode {
   useEffect(() => {
     if (location.key === shownLocation.key) return;
     document.querySelector('.page')?.classList.add('is-leaving');
-    const timer = window.setTimeout(() => setShownLocation(location), 110);
+    const timer = window.setTimeout(() => setShownLocation(location), 90);
     return () => window.clearTimeout(timer);
   }, [location, shownLocation]);
   // 路由切换：不做整页淡入淡出，改为让玻璃"材质化"——
@@ -57,7 +57,7 @@ export default function App(): ReactNode {
     root.classList.remove('glass-warming');
     void root.offsetWidth;
     root.classList.add('glass-warming');
-    const timer = window.setTimeout(() => root.classList.remove('glass-warming'), 560);
+    const timer = window.setTimeout(() => root.classList.remove('glass-warming'), 480);
     return () => window.clearTimeout(timer);
   }, [location.pathname]);
   const navRef = useRef<HTMLElement | null>(null);
