@@ -73,7 +73,7 @@ export default function GameDetail(): ReactNode {
 
   return (
     <div className="page game-detail">
-      <div className="detail-head">
+      <div className="detail-head glass-bar">
         <div>
           <div className="detail-title-row">
             <h1>{game.title}</h1>

@@ -1314,10 +1314,8 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
   /* 位置与宽度由 pill-spring.ts 每帧写 left/width，这里不能再用 transform/width 过渡 */
   will-change: left, width;
   border-radius: 999px;
-  /* 深色玻璃底 + 白色薄高光：胶囊至少保持 0.45 的浓度，保证白字在任何背景下都能读 */
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.03) 100%),
-    rgba(10, 12, 26, max(0.45, var(--glass-body)));
+  /* 纯透明：只靠亮边与内高光表现玻璃，不压暗背景 */
+  background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.55);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.7),
@@ -1742,7 +1740,8 @@ html.glass-warming .browse-footnote::before {
 .no-glass .browse-footnote::before { display: none; }
 
 /* ---------- 通用玻璃小块（包一段标题 + 说明） ---------- */
-.glass-block {
+.glass-block,
+.glass-bar {
   position: relative;
   isolation: isolate;
   padding: 14px 18px;
@@ -1754,7 +1753,8 @@ html.glass-warming .browse-footnote::before {
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
   margin-bottom: 14px;
 }
-.glass-block::before {
+.glass-block::before,
+.glass-bar::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -1764,9 +1764,12 @@ html.glass-warming .browse-footnote::before {
   background: rgba(10, 12, 26, var(--glass-body));
 }
 .glass-block h2 { margin: 0 0 6px; font-size: 16px; }
+.glass-bar { margin-bottom: 18px; }
+.glass-bar h1 { margin: 0; font-size: 26px; }
 .glass-block .panel-note { margin: 0; }
 
-html.glass-warming .glass-block::before {
+html.glass-warming .glass-block::before,
+html.glass-warming .glass-bar::before {
   animation: glass-tint-in 520ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
@@ -1913,4 +1916,42 @@ html.glass-warming .nav-backdrop {
 @keyframes fade-out {
   from { opacity: 1; }
   to { opacity: 0.35; }
+}
+
+
+/* ---------- 关闭液态玻璃时的降级：把后加的所有玻璃也一起关掉 ---------- */
+html.no-glass :is(
+  .nav, .nav-user, .nav-backdrop, .nav-pill,
+  .btn, .chip, .segmented, .search-input,
+  .hero-text, .game-card, .panel, .creation-template-card,
+  .page-head, .footer-inner, .empty-state, .badge, .notice, .error-box,
+  .browse-footnote, .glass-block, .glass-bar, .mode-banner,
+  .detail-head
+) {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  animation: none !important;
+}
+
+/* 关玻璃后这些“看起来像玻璃块”的容器回到普通底色，不要留半透明 */
+html.no-glass :is(.browse-footnote, .glass-block, .glass-bar, .nav-pill) {
+  background: transparent !important;
+  border-color: var(--border) !important;
+  box-shadow: none !important;
+}
+
+/* 关玻璃后也不要再跑“切换材质化” */
+html.no-glass.glass-warming { animation: none !important; }
+html.no-glass :is(.nav, .nav-user, .nav-backdrop, .nav-pill, .btn, .chip, .segmented, .search-input,
+  .hero-text, .game-card, .panel, .creation-template-card, .page-head, .footer-inner,
+  .empty-state, .badge, .notice, .error-box, .browse-footnote, .glass-block, .glass-bar,
+  .mode-banner)::before {
+  animation: none !important;
+}
+
+
+/* 关闭玻璃后表单控件也不要模糊 */
+html.no-glass :is(input, select, textarea) {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
