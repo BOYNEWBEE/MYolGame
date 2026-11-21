@@ -96,7 +96,7 @@ export default function App(): ReactNode {
       // （独立 <svg> 的 userSpaceOnUse 以视口为原点，必须把元素位置一起传进去）
       const applyRefract = (): void => {
         const rect = pill.getBoundingClientRect();
-        const refract = getRefractFilter(rect.width, rect.height, 1.45, rect.left, rect.top);
+        const refract = getRefractFilter(rect.width, rect.height, 1.45);
         const chain = refract
           ? refract + ' blur(0.25px) contrast(1.2) brightness(1.05) saturate(1.15)'
           : 'blur(6px) saturate(1.4)';

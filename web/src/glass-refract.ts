@@ -50,15 +50,17 @@ function buildFilter(id: string, width: number, height: number, scale: number, m
   filter.setAttribute('id', id);
   filter.setAttribute('filterUnits', 'userSpaceOnUse');
   filter.setAttribute('colorInterpolationFilters', 'sRGB');
-  filter.setAttribute('x', String(offsetX));
-  filter.setAttribute('y', String(offsetY));
+  // 注意：backdrop-filter 的滤镜区域用的是元素自身坐标（0,0 在元素左上角），
+  // 写成视口坐标会让区域落到元素之外，滤镜直接不生效（实测与“无滤镜”像素完全相同）。
+  filter.setAttribute('x', '0');
+  filter.setAttribute('y', '0');
   filter.setAttribute('width', String(width));
   filter.setAttribute('height', String(height));
 
   const image = document.createElementNS('http://www.w3.org/2000/svg', 'feImage');
   image.setAttribute('href', mapUrl);
-  image.setAttribute('x', String(offsetX));
-  image.setAttribute('y', String(offsetY));
+  image.setAttribute('x', '0');
+  image.setAttribute('y', '0');
   image.setAttribute('width', String(width));
   image.setAttribute('height', String(height));
   image.setAttribute('preserveAspectRatio', 'none');
@@ -117,10 +119,10 @@ function buildFilter(id: string, width: number, height: number, scale: number, m
 }
 
 /** 生成（或复用）指定尺寸的折射滤镜，返回可用作 backdrop-filter 的 url(#id) */
-export function getRefractFilter(width: number, height: number, strength = 1, offsetX = 0, offsetY = 0): string {
+export function getRefractFilter(width: number, height: number, strength = 1): string {
   const w = Math.max(8, Math.round(width));
   const h = Math.max(8, Math.round(height));
-  const key = `${w}x${h}x${strength.toFixed(2)}@${Math.round(offsetX)},${Math.round(offsetY)}`;
+  const key = `${w}x${h}x${strength.toFixed(2)}`;
   const cached = cache.get(key);
   if (cached) return `url(#${cached.url})`;
 
@@ -181,7 +183,7 @@ export function getRefractFilter(width: number, height: number, strength = 1, of
   }
 
   const url = 'glass-refract-' + ++seq;
-  buildFilter(url, w, h, maxScale, canvas.toDataURL('image/png'), offsetX, offsetY);
+  buildFilter(url, w, h, maxScale, canvas.toDataURL('image/png'), 0, 0);
   cache.set(key, { url, scale: maxScale });
   return `url(#${url})`;
 }
