@@ -1,4 +1,4 @@
-﻿/* MYolGame 设计系统：深色靛蓝/紫色游戏创作社区 */
+/* MYolGame 设计系统：深色靛蓝/紫色游戏创作社区 */
 
 :root {
   /* Sites 设计参数：默认值保持现有深色视觉，可由设计工作台调整 */
@@ -1556,3 +1556,32 @@ html.glass-warming { animation: glass-materialize 520ms cubic-bezier(0.4, 0, 0.2
   mask-composite: exclude;
   pointer-events: none;
 }
+
+/* ---------- 文字层级：非按钮文字降亮，按钮保持纯白 ---------- */
+:root {
+  --text-dim: #c2c8dd;
+}
+
+body { color: var(--text-dim); }
+
+/* 按钮、导航、标签这类可点击元素保持原来的亮白 */
+.btn,
+.btn.primary,
+.chip,
+.segmented button,
+.nav-links a,
+.nav-user,
+.nav-backdrop,
+.badge { color: var(--text); }
+
+.btn.primary { color: #fff; }
+
+/* 标题比正文亮一点，保留层次；仍比原来的纯白柔和 */
+h1, h2, h3,
+.hero-text h1,
+.page-head h1,
+.card-title-row h3,
+.card-title-row a { color: #d9ddf0; }
+
+/* 强调/警示文案维持原色 */
+.warn, .hero-notice { color: var(--warn); }
