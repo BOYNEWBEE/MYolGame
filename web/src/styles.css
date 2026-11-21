@@ -1065,18 +1065,39 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 .panel,
 .creation-template-card {
   position: relative;
-  background:
-    linear-gradient(
-      158deg,
-      rgba(255, 255, 255, var(--glass-sheen)) 0%,
-      rgba(10, 12, 26, var(--glass-body)) 24%,
-      rgba(10, 12, 26, var(--glass-body)) 68%,
-      rgba(255, 255, 255, calc(var(--glass-sheen) * 0.6)) 100%
-    );
+  isolation: isolate;
+  background-image: linear-gradient(
+    158deg,
+    rgba(255, 255, 255, var(--glass-sheen)) 0%,
+    rgba(255, 255, 255, calc(var(--glass-sheen) * 0.25)) 30%,
+    rgba(255, 255, 255, calc(var(--glass-sheen) * 0.2)) 70%,
+    rgba(255, 255, 255, calc(var(--glass-sheen) * 0.6)) 100%
+  );
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
   border: 1px solid rgba(255, 255, 255, var(--glass-edge-alpha));
   box-shadow: var(--glass-rim), var(--glass-shadow);
+}
+
+/* 深色玻璃底：单独一层，用 opacity 做“渐压暗”（渐变里的 alpha 动画浏览器不逐帧重绘） */
+.nav::before,
+.nav-user::before,
+.nav-backdrop::before,
+.btn::before,
+.chip::before,
+.segmented::before,
+.search-input::before,
+.hero-text::before,
+.game-card::before,
+.panel::before,
+.creation-template-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: rgba(10, 12, 26, var(--glass-body));
 }
 
 /* 斜向反射：玻璃表面那道光 */
@@ -1483,16 +1504,28 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
 }
 
 @keyframes glass-materialize {
-  from {
-    --glass-blur: 0px;
-    --glass-body: 0.18;
-    --glass-sheen: 0.04;
-  }
-  to {
-    --glass-blur: var(--glass-blur-target, 7px);
-    --glass-body: var(--glass-body-target, 0.74);
-    --glass-sheen: var(--glass-sheen-target, 0.16);
-  }
+  from { --glass-blur: 0px; }
+  to { --glass-blur: var(--glass-blur-target, 7px); }
+}
+
+/* 压暗：让深色底从 25% 不透明度长到 100% */
+@keyframes glass-tint-in {
+  from { opacity: 0.25; }
+  to { opacity: 1; }
+}
+
+html.glass-warming .nav::before,
+html.glass-warming .nav-user::before,
+html.glass-warming .nav-backdrop::before,
+html.glass-warming .btn::before,
+html.glass-warming .chip::before,
+html.glass-warming .segmented::before,
+html.glass-warming .search-input::before,
+html.glass-warming .hero-text::before,
+html.glass-warming .game-card::before,
+html.glass-warming .panel::before,
+html.glass-warming .creation-template-card::before {
+  animation: glass-tint-in 520ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 html.glass-warming { animation: glass-materialize 520ms cubic-bezier(0.4, 0, 0.2, 1) both; }
