@@ -2025,3 +2025,15 @@ html.no-glass.glass-warming .nav-backdrop {
   backdrop-filter: none !important;
   background-color: rgba(7, 8, 20, 0.92) !important;
 }
+
+
+/* ---------- 修正 glass-block / glass-bar / browse-footnote 的双层叠加 ----------
+   之前元素自身 background-color 与 ::before 深色底同时存在：
+   动画期间两层叠起来会先压得过暗（0.63→0.93），动画结束元素底色回到初始值又突然变浅。
+   现在只保留元素自身的 background-color，::before 不再承担深色底。 */
+:is(.glass-block, .glass-bar, .browse-footnote) {
+  background-color: rgba(10, 12, 26, var(--glass-body));
+}
+:is(.glass-block, .glass-bar, .browse-footnote)::before {
+  background: transparent !important;
+}
