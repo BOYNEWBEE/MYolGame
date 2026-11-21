@@ -1709,3 +1709,43 @@ h1, h2, h3,
   font-weight: 600;
   letter-spacing: 0.2px;
 }
+
+/* ---------- 首页底部说明：包一层液态玻璃 ---------- */
+.browse-footnote {
+  position: relative;
+  isolation: isolate;
+  margin: 22px 0 0;
+  padding: 14px 18px;
+  border-radius: 16px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted);
+  text-shadow: 0 1px 2px rgba(4, 6, 16, 0.5);
+  background: none;
+  border: 1px solid rgba(255, 255, 255, var(--glass-edge-alpha));
+  box-shadow: var(--glass-rim), var(--glass-shadow);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+}
+
+.browse-footnote::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: rgba(10, 12, 26, var(--glass-body));
+}
+
+html.glass-warming .browse-footnote::before {
+  animation: glass-tint-in 520ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.no-glass .browse-footnote {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+.no-glass .browse-footnote::before { display: none; }
