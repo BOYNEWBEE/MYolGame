@@ -1876,3 +1876,21 @@ html { scrollbar-gutter: stable; }
 .empty-state::before {
   background: transparent;
 }
+
+
+/* ---------- 页面内容淡入淡出 ----------
+   只对“文字/图片”这类内容节点做 opacity，玻璃容器（卡片、面板、按钮、胶囊）不参与，
+   这样过渡时玻璃始终是实心的，不会出现“先透明再变黑”。 */
+.main :is(h1, h2, h3, p, li, label, span, strong, em, small, img, svg, details, summary):not(.btn):not(.chip):not(.badge):not(.glass-block):not(.nav-pill),
+.main :is(input, select, textarea) {
+  transition: opacity 160ms ease;
+}
+
+.main.is-fading :is(h1, h2, h3, p, li, label, span, strong, em, small, img, svg, details, summary):not(.btn):not(.chip):not(.badge):not(.glass-block):not(.nav-pill),
+.main.is-fading :is(input, select, textarea) {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main.is-fading :is(h1, h2, h3, p, li, label, span, strong, em, small, img, svg, details, summary) { opacity: 1; transition: none; }
+}
