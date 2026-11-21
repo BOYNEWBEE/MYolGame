@@ -144,6 +144,22 @@ export default function Settings(): ReactNode {
             <span className="setting-hint">关闭后回到项目初版的纯色界面（无模糊、无玻璃底）</span>
           </label>
 
+          <div className="setting-actions">
+            <button
+              type="button"
+              className="btn"
+              onClick={() =>
+                setPrefs({
+                  glassEnabled: true,
+                  glass: { blur: 10, saturate: 180, brightness: 1, body: 0.72, edge: 0.38 },
+                })
+              }
+            >
+              推荐值（玻璃感更明显）
+            </button>
+            <span className="setting-hint">模糊 10px / 饱和 180% / 明暗 100% / 厚度 72% / 亮边 38%</span>
+          </div>
+
           <Slider
             label="背景模糊"
             hint="0 = 玻璃完全透明锐利；越大越糊"
