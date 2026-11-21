@@ -1491,26 +1491,3 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
   mask-composite: exclude;
   pointer-events: none;
 }
-
-/* ---------- 路由切换幕布 ----------
-   换页瞬间先盖满一层底色，两帧后淡出。玻璃自身不参与任何透明度动画，
-   避免祖先 opacity 让 backdrop-filter 失效造成的“先透明再变黑”。 */
-.curtain {
-  position: fixed;
-  inset: 0;
-  z-index: 90;
-  background: var(--bg);
-  opacity: 0;
-  pointer-events: none;
-}
-.curtain.is-on { opacity: 1; }
-.curtain.is-leaving { animation: curtain-out 220ms ease forwards; }
-
-@keyframes curtain-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .curtain.is-on, .curtain.is-leaving { animation: none; opacity: 0; }
-}
