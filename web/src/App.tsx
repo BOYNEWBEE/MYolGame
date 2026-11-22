@@ -72,7 +72,9 @@ export default function App(): ReactNode {
   const pillRef = useRef<HTMLSpanElement | null>(null);
   const springRef = useRef<ReturnType<typeof createPillSpring> | null>(null);
   const placeRef = useRef<() => void>(() => {});
-  const suppressClickRef = useRef(false);
+  // 拖动结束后抑制浏览器补发 click 的时间戳（比布尔标记可靠：
+  // 布尔标记在 click 未冒泡到本容器时会残留，反过来吞掉下一次正常点击）
+  const suppressClickUntilRef = useRef(0);
   const dragRef = useRef<{ startX: number; startLeft: number; moved: boolean; lastX: number; lastT: number } | null>(null);
 
   useEffect(() => {
@@ -213,7 +215,21 @@ export default function App(): ReactNode {
     pill.classList.remove('is-dragging');
     // 清掉拖动形变，让胶囊回到正常胶囊形（否则会卡在拉伸/压扁状态）
     pill.style.transform = '';
-    if (!drag.moved) return; // 没拖动：交给链接自己的 click 导航
+
+    // 只要发生过拖动，就抑制随后补发的 click：
+    // 用时间戳而不是布尔标记——布尔标记在 click 未冒泡到本容器时会残留，
+    // 反过来吞掉下一次正常点击。窗口只取 60ms：浏览器补发的 click 紧跟 pointerup
+    //（同一帧内），而用户的"下一次点击"通常远超这个间隔。
+    if (drag.moved) {
+      suppressClickUntilRef.current = performance.now() + 60;
+      event.preventDefault();
+    }
+
+    // 未达到拖动阈值：当作点击，交给链接自己处理，胶囊回位
+    if (!drag.moved) {
+      placeRef.current();
+      return;
+    }
 
     const pillBox = pill.getBoundingClientRect();
     const center = pillBox.left + pillBox.width / 2;
@@ -232,9 +248,9 @@ export default function App(): ReactNode {
       return;
     }
     event.preventDefault();
-    suppressClickRef.current = true; // 吞掉拖动结束后浏览器补发的那次 click
     const navBox = nav.getBoundingClientRect();
     const box = best.getBoundingClientRect();
+    // 先跳到当前拖动位置，再收敛到目标项（视觉上像被吸附过去）
     springRef.current?.jumpTo(pillBox.left - navBox.left, pillBox.width);
     springRef.current?.setBounds(nav.clientWidth - box.width);
     springRef.current?.animateTo({ left: box.left - navBox.left, width: box.width });
@@ -270,8 +286,8 @@ export default function App(): ReactNode {
             onPointerUp={navPointerUp}
             onPointerCancel={pillCancel}
             onClickCapture={(event) => {
-              if (!suppressClickRef.current) return;
-              suppressClickRef.current = false;
+              // 只抑制「拖动刚结束后」那一小段时间内的 click
+              if (performance.now() > suppressClickUntilRef.current) return;
               event.preventDefault();
               event.stopPropagation();
             }}
