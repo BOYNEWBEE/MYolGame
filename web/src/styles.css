@@ -1977,10 +1977,19 @@ html { scrollbar-gutter: stable; }
 
 
 
-/* 切换时玻璃底色从 35% 浓度长到设定浓度 */
+/* 切换时玻璃底色从 35% 浓度长到设定浓度，并淡入。
+   注意：**只动 background-color 与 opacity**，绝不碰 filter / transform——
+   这两个属性会让后代 backdrop-filter 全部失效（液态玻璃的模糊消失），
+   而本项目的玻璃板块本身就有 backdrop-filter。 */
 @keyframes glass-body-in {
-  from { background-color: rgba(10, 12, 26, calc(var(--glass-body) * 0.35)); }
-  to { background-color: rgba(10, 12, 26, var(--glass-body)); }
+  from {
+    background-color: rgba(10, 12, 26, calc(var(--glass-body) * 0.35));
+    opacity: 0;
+  }
+  to {
+    background-color: rgba(10, 12, 26, var(--glass-body));
+    opacity: 1;
+  }
 }
 
 html.glass-warming .btn,
@@ -2002,11 +2011,38 @@ html.glass-warming .glass-bar {
   animation: glass-body-in 200ms cubic-bezier(0.4, 0, 0.2, 1) 60ms both;
 }
 
+/* ---------- 逐级出现：只改 animation-delay，不新增动画 ----------
+   原理：glass-body-in 本来就在切页时给每个玻璃板块播放（底色 + 现在加上的 opacity），
+   这里按「元素在父容器里的位置」错开延迟，就得到「由上往下依次出现」的效果。
+   **只覆盖 animation-delay**，不重写 animation 简写——否则会和上面的规则抢属性。
+   页头/标题永远最先（60ms 基准，与其他板块同一批但位置靠前自然先出现）。 */
+html.glass-warming .page > *:nth-child(2) { animation-delay: 150ms; }
+html.glass-warming .page > *:nth-child(3) { animation-delay: 240ms; }
+html.glass-warming .page > *:nth-child(4) { animation-delay: 330ms; }
+html.glass-warming .page > *:nth-child(5) { animation-delay: 410ms; }
+html.glass-warming .page > *:nth-child(6) { animation-delay: 480ms; }
+html.glass-warming .page > *:nth-child(n+7) { animation-delay: 540ms; }
 
-/* 空状态的底色浓度更低，单独一组关键帧 */
+/* 嵌在网格/布局容器里的板块（设置页各面板、详情页侧栏等）：同样按位置错开，
+   比外层再晚一档，保证「页头 → 外层块 → 内层块」的由外到内顺序。 */
+html.glass-warming .settings-grid > *:nth-child(2) { animation-delay: 240ms; }
+html.glass-warming .settings-grid > *:nth-child(3) { animation-delay: 330ms; }
+html.glass-warming .settings-grid > *:nth-child(4) { animation-delay: 410ms; }
+html.glass-warming .settings-grid > *:nth-child(n+5) { animation-delay: 480ms; }
+html.glass-warming .detail-layout > *:nth-child(2) { animation-delay: 240ms; }
+html.glass-warming .game-grid > *:nth-child(n+2) { animation-delay: 240ms; }
+
+
+/* 空状态的底色浓度更低，单独一组关键帧（同样只动底色 + opacity） */
 @keyframes glass-body-in-soft {
-  from { background-color: rgba(10, 12, 26, calc(var(--glass-body) * 0.55 * 0.35)); }
-  to { background-color: rgba(10, 12, 26, calc(var(--glass-body) * 0.55)); }
+  from {
+    background-color: rgba(10, 12, 26, calc(var(--glass-body) * 0.55 * 0.35));
+    opacity: 0;
+  }
+  to {
+    background-color: rgba(10, 12, 26, calc(var(--glass-body) * 0.55));
+    opacity: 1;
+  }
 }
 
 html.glass-warming .empty-state {
@@ -2078,16 +2114,17 @@ html.no-glass :is(input, select, textarea) {
 
 
 /* ---------- 页面切换动画（放最后，确保不被前面的重复规则覆盖） ---------- */
+/* 关键：.page 自身**不做**任何 opacity / transform 动画。
+   1) 祖先的 opacity/transform 会让后代 backdrop-filter 全部失效（玻璃变实心）；
+   2) .page 的 opacity 与板块的 opacity 会相乘，产生「先亮→暗→再亮」的闪烁。
+   页面入场完全由板块的 glass-body-in（底色 + opacity，带阶梯延迟）承担。 */
 .page {
-  animation: fade-in 120ms ease;
+  animation: none;
 }
+/* 旧页面淡出：只到 0.5（不空白），100ms；配合 App.tsx 的 100ms 延迟换页，
+   新页面接上时画面是连续的。 */
 .page.is-leaving {
-  animation: fade-out 60ms ease both;
-}
-
-@keyframes fade-in {
-  from { opacity: 0.5; transform: translateY(4px); }
-  to { opacity: 1; transform: none; }
+  animation: fade-out 100ms ease both;
 }
 
 @keyframes fade-out {
@@ -2096,7 +2133,11 @@ html.no-glass :is(input, select, textarea) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .page, .page.is-leaving { animation: none; }
+  .page.is-leaving { animation: none; }
+  html.glass-warming .panel,
+  html.glass-warming .page-head,
+  html.glass-warming .glass-block,
+  html.glass-warming .empty-state { animation: none; }
 }
 
 

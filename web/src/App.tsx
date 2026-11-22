@@ -52,7 +52,9 @@ export default function App(): ReactNode {
       // 换页后必须移除 is-leaving：它的 fade-out 用了 fill-mode:both，
       // 不移除会把页面永久按在淡出末帧上（每切一次更淡一层，最终卡死）
       page?.classList.remove('is-leaving');
-    }, 60);
+      // 100ms 与 .page.is-leaving 的 fade-out 时长对齐：旧页面淡到 0.5 才卸载，
+      // 新页面板块接着从 0 淡入，画面连续、无黑闪白闪。
+    }, 100);
     return () => window.clearTimeout(timer);
   }, [location, shownLocation]);
   // 路由切换：旧页面先淡出 110ms（只到 35%，不会空白），换页后新页面淡入，
@@ -65,7 +67,7 @@ export default function App(): ReactNode {
     root.classList.remove('glass-warming');
     void root.offsetWidth;
     root.classList.add('glass-warming');
-    const timer = window.setTimeout(() => root.classList.remove('glass-warming'), 480);
+    const timer = window.setTimeout(() => root.classList.remove('glass-warming'), 900);
     return () => window.clearTimeout(timer);
   }, [location.pathname]);
   const navRef = useRef<HTMLElement | null>(null);
