@@ -1,4 +1,4 @@
-﻿import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { NavLink, Link, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { createPillSpring } from './pill-spring.ts';
 import { useSession } from './session.tsx';
@@ -45,8 +45,14 @@ export default function App(): ReactNode {
   const [shownLocation, setShownLocation] = useState(location);
   useEffect(() => {
     if (location.key === shownLocation.key) return;
-    document.querySelector('.page')?.classList.add('is-leaving');
-    const timer = window.setTimeout(() => setShownLocation(location), 60);
+    const page = document.querySelector('.page');
+    page?.classList.add('is-leaving');
+    const timer = window.setTimeout(() => {
+      setShownLocation(location);
+      // 换页后必须移除 is-leaving：它的 fade-out 用了 fill-mode:both，
+      // 不移除会把页面永久按在淡出末帧上（每切一次更淡一层，最终卡死）
+      page?.classList.remove('is-leaving');
+    }, 60);
     return () => window.clearTimeout(timer);
   }, [location, shownLocation]);
   // 路由切换：旧页面先淡出 110ms（只到 35%，不会空白），换页后新页面淡入，
@@ -190,7 +196,10 @@ export default function App(): ReactNode {
   function pillCancel(event?: ReactPointerEvent<HTMLElement>): void {
     if (event) releaseCapture(event.currentTarget, event.pointerId);
     dragRef.current = null;
-    pillRef.current?.classList.remove('is-dragging');
+    const pill = pillRef.current;
+    pill?.classList.remove('is-dragging');
+    // 清掉拖动时写入的形变，否则胶囊会永久保持最后一次的拉伸状态
+    if (pill) pill.style.transform = '';
     placeRef.current();
   }
 
@@ -202,6 +211,8 @@ export default function App(): ReactNode {
     dragRef.current = null;
     if (!drag || !nav || !pill) return;
     pill.classList.remove('is-dragging');
+    // 清掉拖动形变，让胶囊回到正常胶囊形（否则会卡在拉伸/压扁状态）
+    pill.style.transform = '';
     if (!drag.moved) return; // 没拖动：交给链接自己的 click 导航
 
     const pillBox = pill.getBoundingClientRect();
