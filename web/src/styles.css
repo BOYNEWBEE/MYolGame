@@ -670,12 +670,20 @@ h1, h2, h3 { line-height: 1.3; margin: 0 0 8px; }
    注意 .glass-block 自带 padding 14/18 与 margin-bottom 14，所以这里
    不再写 padding/margin，只调整字号与行高。 */
 .play-tip {
+  margin: 0;
+}
+.play-tip-text {
   font-size: 12.5px;
   line-height: 1.75;
   color: var(--muted);
   margin: 0;
 }
-.play-tip .linklike { margin-left: 4px; }
+/* 「重新加载画面」做成真正的按钮，与说明文字分行、右对齐 */
+.play-tip-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
 .detail-side { display: grid; gap: 16px; }
 .description { font-size: 14px; color: var(--text); margin: 0 0 12px; }
 .stat-row { display: flex; gap: 18px; font-size: 13px; color: var(--muted); }
