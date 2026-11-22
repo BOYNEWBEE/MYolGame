@@ -110,7 +110,7 @@ export default function GameDetail(): ReactNode {
             title={game.title}
             reloadKey={reloadKey}
           />
-          <p className="play-tip">
+          <p className="play-tip glass-block">
             操作：{template?.controls ?? '见游戏内说明'}。游戏在沙箱 iframe 中运行（独立源、禁止网络），
             如需重开一局可点「重新开始」。
             <button type="button" className="linklike" onClick={() => setReloadKey((k) => k + 1)}>
