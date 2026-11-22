@@ -2051,6 +2051,10 @@ html.glass-warming .browse-footnote > *,
 html.glass-warming .empty-state > *,
 html.glass-warming .creation-template-card > *,
 html.glass-warming .game-card > *,
+/* 模式提示条（创作页的「模板模式 / AI 源码开发模式」）：
+   它自身有 glass-body-in，但内部的 strong/span 之前没有模糊淡入，
+   表现为「玻璃条按顺序出现了，文字却是直接显示」——用户实测反馈。 */
+html.glass-warming .mode-banner > *,
 /* 按钮 / 搜索框 / 标签 / 分段控件：它们常嵌在 .setting-actions、.browse-bar
    这类容器里（不是玻璃板块的直接子元素），所以要单独列出，
    否则这些控件是「整块一起出现」、没有模糊淡入（用户实测反馈）。
