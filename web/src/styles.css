@@ -1330,7 +1330,12 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
   gap: 10px;
   font-size: 13px;
 }
-.setting-row .row-head b { color: var(--violet); font-variant-numeric: tabular-nums; }
+/* 滑杆右侧的数值：用白色（原来紫色 --violet），与标签文字区分开但更醒目 */
+.setting-row .row-head b {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
 .setting-row input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
