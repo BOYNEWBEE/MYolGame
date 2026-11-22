@@ -254,8 +254,16 @@ export default function App(): ReactNode {
     springRef.current?.jumpTo(pillBox.left - navBox.left, pillBox.width);
     springRef.current?.setBounds(nav.clientWidth - box.width);
     springRef.current?.animateTo({ left: box.left - navBox.left, width: box.width });
+
+    // 吸附目标就是当前页面时，什么都不做：
+    // 不再 navigate（同一路径也会产生新的 location.key，触发换页动画/重渲染，
+    // 用户看到的就是「拖回原处却刷新了」）。胶囊已经通过上面的弹簧回位。
     const href = best.getAttribute('href');
-    if (href) navigate(href);
+    if (!href) return;
+    if (best.classList.contains('active')) return;
+    const sameTarget = href === '/' ? location.pathname === '/' : location.pathname === href || location.pathname.startsWith(href + '/');
+    if (sameTarget) return;
+    navigate(href);
   }
 
   return (
