@@ -1984,8 +1984,12 @@ html { scrollbar-gutter: stable; }
    就是用户反馈的「先一瞬间出现玻璃，然后消失再淡入」。 */
 @keyframes glass-body-in {
   from {
-    background-color: rgba(10, 12, 26, 0);
-    opacity: 0;
+    /* 起点 opacity 0.7、底色直接用最终值（不从 0 起步）：
+       若从完全透明起步，背后的背景图（顶部深发色、中部浅色，实测亮度 97~198）
+       会整片裸露，而旧页面的暗色玻璃刚消失 —— 亮度突跳就是切页时看到的闪烁。
+       0.7 时玻璃底色已压住大半，背景图只隐约透出，过渡自然、无突变。 */
+    background-color: rgba(10, 12, 26, var(--glass-body));
+    opacity: 0.7;
   }
   to {
     background-color: rgba(10, 12, 26, var(--glass-body));
@@ -2039,10 +2043,22 @@ html.glass-warming .glass-bar > *,
 html.glass-warming .browse-footnote > *,
 html.glass-warming .empty-state > *,
 html.glass-warming .creation-template-card > *,
-html.glass-warming .game-card > * {
+html.glass-warming .game-card > *,
+/* 按钮 / 搜索框 / 标签 / 分段控件：它们常嵌在 .setting-actions、.browse-bar
+   这类容器里（不是玻璃板块的直接子元素），所以要单独列出，
+   否则这些控件是「整块一起出现」、没有模糊淡入（用户实测反馈）。
+   这些控件自身没有 backdrop-filter，加 filter/transform 是安全的。 */
+html.glass-warming .page .btn,
+html.glass-warming .page .chip,
+html.glass-warming .page .segmented,
+html.glass-warming .page .search-input,
+html.glass-warming .page .linklike,
+html.glass-warming .page input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html.glass-warming .page select,
+html.glass-warming .page textarea {
   /* 用 backwards 不用 both：both 会让动画结束后永久保留 filter: blur(0px)，
      残留在元素上会创建层叠上下文、影响后续合成。backwards 只在延迟期间生效。 */
-  animation: content-blur-in 420ms cubic-bezier(0.2, 0.7, 0.2, 1) 120ms backwards;
+  animation: content-blur-in 420ms cubic-bezier(0.2, 0.7, 0.2, 1) 200ms backwards;
 }
 
 /* 内容内部再错开一点，形成「标题 → 正文 → 控件」的顺序 */
