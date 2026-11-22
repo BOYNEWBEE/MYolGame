@@ -1750,16 +1750,19 @@ h1, h2, h3,
   animation: blur-in 520ms cubic-bezier(0.2, 0.7, 0.2, 1) 110ms both;
 }
 /* 面板/卡片标题：略短、无延迟，避免和页面标题抢节奏 */
+/* 面板/卡片标题：这些标题嵌在玻璃板块里，其模糊淡入已由下方
+   html.glass-warming .panel > * 的 content-blur-in 统一负责。
+   这里**不再挂 blur-in**——两套动画会抢 animation 属性，导致闪烁或 filter 残留。 */
 .panel > h2,
 .panel > h3,
 .creation-template-card > h3,
 .game-detail-title {
-  animation: blur-in 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation: none;
 }
-/* 兜底：所有其它标题（空状态、区块标题、列表标题等）也走模糊显现，
-   用 :where() 保证零优先级，不会盖掉上面更具体的规则。 */
-:where(h1, h2, h3):not(.hero-text h1):not(.page-head h1):not(.page-head h2):not(.panel > h2):not(.panel > h3) {
-  animation: blur-in 460ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+/* 兜底：不在玻璃板块内的独立标题才需要自己的模糊显现。
+   用 backwards 避免 filter 残留（both 会永久保留 filter: blur(0px)）。 */
+:where(h1, h2, h3):not(.hero-text h1):not(.page-head h1):not(.page-head h2):not(.panel h2):not(.panel h3):not(.creation-template-card h3):not(.game-detail-title) {
+  animation: blur-in 460ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2010,6 +2013,44 @@ html.glass-warming .glass-block,
 html.glass-warming .glass-bar {
   animation: glass-body-in 200ms cubic-bezier(0.4, 0, 0.2, 1) 60ms both;
 }
+
+/* ---------- 内容模糊淡入（玻璃板块的「内部内容」专用） ----------
+   为什么不能直接给 .panel / .page-head 这些玻璃元素加 filter：
+   它们自身有 backdrop-filter，一旦挂上 filter/transform，玻璃的模糊就会失效。
+   所以模糊淡入只作用在它们的**直接子内容**（h2 / p / 按钮行 / 表单行等）上——
+   这些子元素自己没有 backdrop-filter，加 filter 是安全的，
+   视觉上就是「板块先浮现，里面的内容由模糊变清晰」。 */
+@keyframes content-blur-in {
+  from { opacity: 0; filter: blur(6px); }
+  to { opacity: 1; filter: blur(0); }
+}
+
+html.glass-warming .page-head > *,
+html.glass-warming .panel > *,
+html.glass-warming .glass-block > *,
+html.glass-warming .glass-bar > *,
+html.glass-warming .browse-footnote > *,
+html.glass-warming .empty-state > *,
+html.glass-warming .creation-template-card > *,
+html.glass-warming .game-card > * {
+  /* 用 backwards 不用 both：both 会让动画结束后永久保留 filter: blur(0px)，
+     残留在元素上会创建层叠上下文、影响后续合成。backwards 只在延迟期间生效。 */
+  animation: content-blur-in 420ms cubic-bezier(0.2, 0.7, 0.2, 1) 120ms backwards;
+}
+
+/* 内容内部再错开一点，形成「标题 → 正文 → 控件」的顺序 */
+html.glass-warming .panel > *:nth-child(2),
+html.glass-warming .page-head > *:nth-child(2) { animation-delay: 200ms; }
+html.glass-warming .panel > *:nth-child(3),
+html.glass-warming .page-head > *:nth-child(3) { animation-delay: 280ms; }
+html.glass-warming .panel > *:nth-child(n+4),
+html.glass-warming .page-head > *:nth-child(n+4) { animation-delay: 340ms; }
+
+/* 板块自身延迟更晚时，其内容延迟要跟着推后，避免内容先于板块出现。
+   用 :is() 匹配「自身有延迟的板块」下的直接子内容。 */
+html.glass-warming .page > *:nth-child(2) > * { animation-delay: 270ms; }
+html.glass-warming .page > *:nth-child(3) > * { animation-delay: 360ms; }
+html.glass-warming .page > *:nth-child(n+4) > * { animation-delay: 450ms; }
 
 /* ---------- 逐级出现：只改 animation-delay，不新增动画 ----------
    原理：glass-body-in 本来就在切页时给每个玻璃板块播放（底色 + 现在加上的 opacity），
