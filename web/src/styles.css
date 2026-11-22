@@ -1986,14 +1986,14 @@ html { scrollbar-gutter: stable; }
    玻璃的 backdrop-filter 仍在按最终底色渲染，会先看到一块"实心玻璃"再淡入，
    就是用户反馈的「先一瞬间出现玻璃，然后消失再淡入」。 */
 @keyframes glass-body-in {
+  /* 「材质淡入」：只动画底色的 alpha（材质从薄到厚），
+     **元素自身的 opacity 永远保持 1**。
+     之前用元素 opacity 0.35→1 淡入：深色底也一起变透明，在浅色背景上
+     整块玻璃发白、像褪色（用户截图：玻璃不是淡入效果）。
+     现在 backdrop-filter 全程一致，观感是「玻璃材质从薄变厚」。 */
   from {
-    /* 起点 opacity 0.35、底色直接用最终值（不跟着降 alpha）：
-       - 只降 opacity 不降底色：玻璃的「压暗 + 磨砂」整体淡化，
-         透出的是已经过 backdrop-filter 处理的背景，不会像
-         「底色 alpha 也降到 35%」那样裸露出未处理的暗部（那是黑框的来源）；
-       - 0.35 起步 + 320ms，淡入过程肉眼可见（0.7 起步太快看不出来）。 */
-    background-color: rgba(10, 12, 26, var(--glass-body));
-    opacity: 0.35;
+    background-color: rgba(10, 12, 26, 0.3);
+    opacity: 1;
   }
   to {
     background-color: rgba(10, 12, 26, var(--glass-body));
