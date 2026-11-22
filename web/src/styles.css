@@ -1128,14 +1128,15 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
    真机的光线折射（位移扭曲）要靠 SVG feDisplacementMap 或 WebGL，这里用 CSS 叠层近似。 */
 
 :root {
+  /* 与 prefs.ts 的 DEFAULT_GLASS 保持一致（首帧渲染用，之后由 JS 覆写） */
   --glass-blur: 7px;
-  --glass-saturate: 175%;
+  --glass-saturate: 120%;
   --glass-brightness: 1;
-  --glass-body: 0.74;
-  --glass-body-strong: 0.9;
-  --glass-sheen: 0.16;
-  --glass-edge-alpha: 0.34;
-  --glass-edge: rgba(255, 255, 255, 0.34);
+  --glass-body: 0.25;
+  --glass-body-strong: 0.39;
+  --glass-sheen: 0.235;
+  --glass-edge-alpha: 0.5;
+  --glass-edge: rgba(255, 255, 255, 0.5);
   --glass-rim: inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 -1px 0 rgba(255, 255, 255, 0.14),
     inset 1px 0 0 rgba(255, 255, 255, 0.12), inset -1px 0 0 rgba(255, 255, 255, 0.1);
   --glass-shadow: 0 20px 46px rgba(3, 4, 12, 0.5);

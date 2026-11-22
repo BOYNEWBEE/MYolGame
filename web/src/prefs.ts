@@ -51,21 +51,21 @@ export const DEFAULT_BACKDROP = '/backdrops/anime-sisters.jpg';
 
 export const DEFAULT_GLASS: GlassSettings = {
   blur: 7,
-  saturate: 175,
+  saturate: 120,
   brightness: 1,
-  body: 0.74,
-  edge: 0.34,
+  body: 0.25,
+  edge: 0.5,
 };
 
 const STORAGE_KEY = 'myol.prefs.v3';
 const LEGACY_KEYS = ['myol.prefs.v2', 'myol.prefs'];
 
 const HARD_DEFAULTS: Prefs = {
-  navText: 'auto',
+  navText: 'dark',
   navTextColor: '#e8eaff',
   titleColor: '#f2f5ff',
-  bodyColor: '#dfe3f2',
-  mutedColor: '#c3c9dd',
+  bodyColor: '#ffffff',
+  mutedColor: '#ffffff',
   glassEnabled: true,
   backdrop: DEFAULT_BACKDROP,
   backdropOpacity: 1,
