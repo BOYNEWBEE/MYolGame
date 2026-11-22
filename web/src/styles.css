@@ -1377,7 +1377,9 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
   border: 2px solid rgba(139, 92, 246, 0.9);
 }
 
-.setting-hint { display: block; font-size: 12.5px; color: rgba(232, 234, 255, 0.78); margin: 6px 0 0; }
+/* 说明文字跟「次要信息」颜色设置走（原来写死 rgba(232,234,255,.78)，
+   用户在设置里改次要信息颜色时这里不变，属于遗漏） */
+.setting-hint { display: block; font-size: 12.5px; color: var(--muted); margin: 6px 0 0; }
 
 /* 设置页的卡片少一点顶部反光，说明文字才看得清 */
 .settings-page .panel { --glass-sheen: 0.08; }
