@@ -1,8 +1,21 @@
 // 本地外观偏好：只影响当前浏览器的观感，不进入服务端，也不影响生成出来的游戏产物。
-// 存 localStorage（几行文本）；背景图目前支持内置预设 / 远程 URL / 本地上传（dataURL，≤1.5 MB）。
+// 存储分两处：
+// - 普通偏好（几行文本）存 localStorage；
+// - **本地上传的背景图（大 dataURL，≤10 MB）存 IndexedDB**。
+//   原因：localStorage 总容量通常只有 5MB，而 dataURL 体积约为原图的 1.33 倍，
+//   10MB 的图会变成约 13MB，localStorage 必然写失败。
 
 import { useEffect, useState } from 'react';
 import { computeNavTone } from './nav-tone.ts';
+import { loadBackdropAsset, saveBackdropAsset, clearBackdropAsset } from './backdrop-store.ts';
+
+/** 本地图片上传上限：10 MB（存 IndexedDB，不受 localStorage 5MB 限制） */
+export const MAX_LOCAL_IMAGE = 10 * 1024 * 1024;
+
+/** 判断某个 backdrop 值是不是本地上传的 dataURL（而不是预设路径或远程 URL） */
+export function isLocalBackdrop(value: string | null): boolean {
+  return typeof value === 'string' && value.startsWith('data:');
+}
 
 export interface GlassSettings {
   /** 背景模糊半径 0–40px */
@@ -124,11 +137,41 @@ const listeners = new Set<(prefs: Prefs) => void>();
 export function loadPrefs(): Prefs {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return normalize(JSON.parse(raw));
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      // 占位标记：真实图片在 IndexedDB 里，异步补回（见下方 hydrateLocalBackdrop）
+      if (parsed && parsed.backdrop === '__local_asset__') {
+        return { ...normalize(parsed), backdrop: null };
+      }
+      return normalize(parsed);
+    }
   } catch {
     // 落到下面的迁移逻辑
   }
   return readLegacy() ?? { ...DEFAULTS };
+}
+
+/** 启动后异步从 IndexedDB 取回本地上传的背景图，并通知订阅者。 */
+export async function hydrateLocalBackdrop(): Promise<void> {
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return;
+  }
+  if (!raw) return;
+  let hasPlaceholder = false;
+  try {
+    hasPlaceholder = JSON.parse(raw)?.backdrop === '__local_asset__';
+  } catch {
+    return;
+  }
+  if (!hasPlaceholder) return;
+  const asset = await loadBackdropAsset();
+  if (!asset) return;
+  current = { ...current, backdrop: asset };
+  applyPrefs(current);
+  for (const listener of listeners) listener(current);
 }
 
 export function getPrefs(): Prefs {
@@ -172,12 +215,30 @@ export function applyPrefs(prefs: Prefs): void {
   root.style.setProperty('--glass-sheen-target', String(Math.min(0.5, glass.edge * 0.47)));
 }
 
-export function setPrefs(patch: Partial<Prefs>): Prefs {
-  current = normalize({ ...current, ...patch }, current);
+/** 把偏好写进 localStorage。本地上传的 dataURL 不进 localStorage
+ *（体积太大，5MB 配额存不下），改由 IndexedDB 保存，这里只存一个占位标记。 */
+function persist(prefs: Prefs): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+    const forStorage: Prefs = isLocalBackdrop(prefs.backdrop)
+      ? { ...prefs, backdrop: '__local_asset__' }
+      : prefs;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(forStorage));
   } catch {
     // 隐私模式或配额满：偏好只在本页有效，不阻断使用
+  }
+}
+
+export function setPrefs(patch: Partial<Prefs>): Prefs {
+  current = normalize({ ...current, ...patch }, current);
+  persist(current);
+  // 本地上传的图片同步写入 IndexedDB（异步，不阻塞 UI）
+  if (isLocalBackdrop(current.backdrop)) {
+    void saveBackdropAsset(current.backdrop as string).catch(() => {
+      // 写入失败不影响当前会话的显示
+    });
+  } else if (patch.backdrop !== undefined) {
+    // 切到预设/远程/关闭背景：清掉已保存的本地图片，避免占空间
+    void clearBackdropAsset();
   }
   applyPrefs(current);
   for (const listener of listeners) listener(current);

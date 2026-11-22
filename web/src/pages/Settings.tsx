@@ -1,17 +1,17 @@
-// 设置页：背景图片与液态玻璃参数全部本地生效（localStorage），不进服务端、不影响游戏产物。
+// 设置页：背景图片与液态玻璃参数全部本地生效，不进服务端、不影响游戏产物。
+// 本地上传的大图存 IndexedDB（localStorage 只有 5MB，放不下），其余偏好存 localStorage。
 
 import { useRef, useState, type ReactNode } from 'react';
 import {
   DEFAULT_BACKDROP,
   DEFAULT_GLASS,
+  MAX_LOCAL_IMAGE,
   resetPrefs,
   setGlass,
   setPrefs,
   usePrefs,
   type GlassSettings,
 } from '../prefs.ts';
-
-const MAX_LOCAL_IMAGE = 1.5 * 1024 * 1024;
 
 interface SliderProps {
   label: string;
@@ -57,7 +57,7 @@ export default function Settings(): ReactNode {
       return;
     }
     if (file.size > MAX_LOCAL_IMAGE) {
-      setNotice('图片超过 1.5 MB：浏览器本地存储放不下，请先压缩再上传');
+      setNotice('图片超过 10 MB：请先压缩再上传');
       return;
     }
     const reader = new FileReader();
@@ -126,7 +126,7 @@ export default function Settings(): ReactNode {
             format={(value) => Math.round(value * 100) + '%'}
             onChange={(value) => setPrefs({ backdropOpacity: value })}
           />
-          <p className="setting-hint">上传的图片会转成 dataURL 存进 localStorage，上限约 1.5 MB。</p>
+          <p className="setting-hint">上传的图片只保存在本浏览器（存 IndexedDB），上限 10 MB。</p>
         </section>
 
         <section className="panel">

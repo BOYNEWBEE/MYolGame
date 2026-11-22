@@ -2172,10 +2172,38 @@ html.no-glass :is(.browse-footnote, .glass-block, .glass-bar) {
   border: 1px solid var(--border-strong) !important;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28) !important;
 }
+/* 关闭液态玻璃时：导航不再用滑动胶囊，改为「当前项自己圈选」的朴素样式。
+   胶囊是液态玻璃的核心元素（滑动 + 折射），关掉玻璃后它只剩一圈透明边框，
+   既没有玻璃质感、也没有滑动意义，所以直接隐藏；改由 .nav-links a.active
+   自己画一个描边圈。 */
 html.no-glass .nav-pill {
-  background: transparent !important;
-  border-color: var(--border) !important;
-  box-shadow: none !important;
+  display: none !important;
+}
+
+/* 当前项：圈选样式（描边 + 淡底），不再依赖胶囊 */
+html.no-glass .nav-links a.active {
+  color: #e8eaff;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 999px;
+  font-weight: 600;
+  text-shadow: none;
+  pointer-events: auto;
+}
+
+/* 关闭玻璃后导航文字用更浅的颜色（深底上更清晰） */
+html.no-glass .nav-links a {
+  color: rgba(236, 240, 255, 0.78);
+}
+html.no-glass .nav-links a:hover:not(.active) {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+html.no-glass .nav-user {
+  color: rgba(236, 240, 255, 0.82);
+}
+html.no-glass .nav-user a {
+  color: #e8eaff;
 }
 
 /* 关玻璃后也不要再跑“切换材质化” */
