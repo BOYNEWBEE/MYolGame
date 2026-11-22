@@ -1695,6 +1695,39 @@ h1, h2, h3,
 .nav-user a { color: var(--nav-fg); }
 .nav-backdrop { color: var(--nav-fg); }
 
+/* ---------- 导航文字为深色时，导航内的玻璃控件改成浅色底 ----------
+   深色文字（#14161f）压在深色玻璃（rgba(10,12,26,…)）上看不清，
+   所以此时把用户区、背景切换按钮等小控件换成浅色玻璃：
+   白底 + 深字 + 浅边。标记类由 prefs.ts 的 applyNavTone() 写到 <html> 上。 */
+html.nav-fg-dark .nav-user,
+html.nav-fg-dark .nav-backdrop {
+  background: linear-gradient(158deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.8) 100%);
+  border-color: rgba(20, 22, 31, 0.16);
+  box-shadow: 0 2px 10px rgba(10, 12, 26, 0.16);
+}
+/* 控件里的文字与链接都用深色，保证对比度 */
+html.nav-fg-dark .nav-user,
+html.nav-fg-dark .nav-user a,
+html.nav-fg-dark .nav-backdrop {
+  color: #14161f;
+}
+html.nav-fg-dark .nav-backdrop:hover {
+  background: #fff;
+  border-color: rgba(20, 22, 31, 0.3);
+}
+/* 状态圆点：浅底上用更深的绿色才看得见 */
+html.nav-fg-dark .nav-user .dot {
+  background: #15803d;
+  box-shadow: 0 0 8px rgba(21, 128, 61, 0.6);
+}
+/* 关闭液态玻璃时本来就已经是实色条，这里只需保证字色对比 */
+html.no-glass.nav-fg-dark .nav-user,
+html.no-glass.nav-fg-dark .nav-backdrop {
+  background: rgba(255, 255, 255, 0.94) !important;
+  border: 1px solid rgba(20, 22, 31, 0.18) !important;
+  color: #14161f !important;
+}
+
 /* 设置页的取色器 */
 .setting-row input[type="color"] {
   width: 56px;

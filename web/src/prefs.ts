@@ -186,16 +186,26 @@ export function applyPrefs(prefs: Prefs): void {
   root.classList.toggle('no-glass', !prefs.glassEnabled);
 
   // 顶部导航文字：auto 时按背景亮度算，其余直接写死
+  // 同时给 html 加 nav-fg-dark 标记：深色导航文字时，导航里的玻璃控件
+  // （用户区、背景切换按钮）要切成浅色底，否则深字压在深色玻璃上看不清。
+  const applyNavTone = (dark: boolean): void => {
+    root.style.setProperty('--nav-fg', dark ? '#14161f' : '#e8eaff');
+    root.classList.toggle('nav-fg-dark', dark);
+  };
   if (prefs.navText === 'auto') {
-    void computeNavTone(prefs.backdrop, prefs.glass.body).then((tone) => {
-      root.style.setProperty('--nav-fg', tone === 'dark' ? '#14161f' : '#e8eaff');
-    });
+    void computeNavTone(prefs.backdrop, prefs.glass.body).then((tone) => applyNavTone(tone === 'dark'));
   } else if (prefs.navText === 'light') {
-    root.style.setProperty('--nav-fg', '#e8eaff');
+    applyNavTone(false);
   } else if (prefs.navText === 'dark') {
-    root.style.setProperty('--nav-fg', '#14161f');
+    applyNavTone(true);
   } else {
-    root.style.setProperty('--nav-fg', prefs.navTextColor);
+    // 自定义颜色：按亮度判断深浅（相对亮度 > 0.5 视为浅色）
+    const hex = prefs.navTextColor.replace('#', '');
+    const r = parseInt(hex.slice(0, 2), 16) || 0;
+    const g = parseInt(hex.slice(2, 4), 16) || 0;
+    const b = parseInt(hex.slice(4, 6), 16) || 0;
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    applyNavTone(lum < 0.5);
   }
 
   // 标题 / 正文 / 次要信息：直接用设置里的颜色
