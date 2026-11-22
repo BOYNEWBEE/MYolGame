@@ -2182,14 +2182,31 @@ html.glass-warming .empty-state {
 }
 
 
-/* 顶部导航栏不参与“材质化”：模糊与底色始终保持设定值 */
-html.glass-warming .nav,
-html.glass-warming .nav-user,
-html.glass-warming .nav-backdrop {
+/* 顶部导航栏不参与“材质化”：模糊与底色始终保持设定值。
+   注意 .nav-user / .nav-backdrop 不在这里——它们要保留自己的玻璃配色
+   （深色导航文字时是浅色玻璃），被这条规则的 background-color 覆盖会失效。
+   它们的不参与材质化由下面单独一条处理。 */
+html.glass-warming .nav {
   -webkit-backdrop-filter: blur(var(--glass-blur-target, 7px)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
   backdrop-filter: blur(var(--glass-blur-target, 7px)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
   background-color: rgba(10, 12, 26, var(--glass-body));
   animation: none;
+}
+
+/* 用户区 / 背景切换按钮：同样不参与切页的渐模糊与淡入，
+   但**不能写死 background-color**（会压掉 nav-fg-dark 的浅色玻璃），
+   只固定模糊为最终值 + 关掉动画。 */
+html.glass-warming .nav-user,
+html.glass-warming .nav-backdrop {
+  -webkit-backdrop-filter: blur(var(--glass-blur-target, 7px)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  backdrop-filter: blur(var(--glass-blur-target, 7px)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  animation: none;
+}
+/* 深色导航文字时，模糊参数换成与浅玻璃匹配的一套 */
+html.glass-warming.nav-fg-dark .nav-user,
+html.glass-warming.nav-fg-dark .nav-backdrop {
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.4) brightness(1.35);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.4) brightness(1.35);
 }
 
 
