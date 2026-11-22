@@ -2033,14 +2033,16 @@ html { scrollbar-gutter: stable; }
    玻璃的 backdrop-filter 仍在按最终底色渲染，会先看到一块"实心玻璃"再淡入，
    就是用户反馈的「先一瞬间出现玻璃，然后消失再淡入」。 */
 @keyframes glass-body-in {
-  /* 「材质淡入」：只动画底色的 alpha（材质从薄到厚），
-     **元素自身的 opacity 永远保持 1**。
-     之前用元素 opacity 0.35→1 淡入：深色底也一起变透明，在浅色背景上
-     整块玻璃发白、像褪色（用户截图：玻璃不是淡入效果）。
-     现在 backdrop-filter 全程一致，观感是「玻璃材质从薄变厚」。 */
+  /* 玻璃淡入：底色 alpha 与元素 opacity **同时**从低到高，
+     并与 glass-materialize 的模糊（0 → 设定值）共用同一时间轴。
+     起点为什么取 0.6 而不是 0.3/0.35：
+     - 太低时深色底被一起淡掉，浅背景上整块玻璃发白（用户截图确认过「像褪色」）；
+     - 0.6 时玻璃已压住大半背景，仍能明显看出「从淡到实」，也不会出现黑框。
+     元素 opacity < 1 期间 backdrop-filter 采样的是未充分压暗的背景，
+     所以模糊必须同步从 0 长起来，否则会看到清晰背景一闪。 */
   from {
-    background-color: rgba(10, 12, 26, 0.3);
-    opacity: 1;
+    background-color: rgba(10, 12, 26, calc(var(--glass-body) * 0.75));
+    opacity: 0.6;
   }
   to {
     background-color: rgba(10, 12, 26, var(--glass-body));
@@ -2168,9 +2170,10 @@ html.glass-warming .game-grid > *:nth-child(n+9) { animation-delay: 380ms; }
 
 /* 空状态的底色浓度更低，单独一组关键帧（同样只动底色 + opacity） */
 @keyframes glass-body-in-soft {
+  /* 与 glass-body-in 同一套逻辑（空状态的底色更淡，乘 0.55） */
   from {
-    background-color: rgba(10, 12, 26, calc(var(--glass-body) * 0.55 * 0.35));
-    opacity: 0;
+    background-color: rgba(10, 12, 26, calc(var(--glass-body) * 0.55 * 0.75));
+    opacity: 0.6;
   }
   to {
     background-color: rgba(10, 12, 26, calc(var(--glass-body) * 0.55));
@@ -2179,7 +2182,8 @@ html.glass-warming .game-grid > *:nth-child(n+9) { animation-delay: 380ms; }
 }
 
 html.glass-warming .empty-state {
-  animation: glass-body-in-soft 200ms cubic-bezier(0.4, 0, 0.2, 1) 60ms both;
+  /* 与其它玻璃板块同一时间轴（320ms、0 延迟），否则空状态会晚一拍 */
+  animation: glass-body-in-soft 320ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 
