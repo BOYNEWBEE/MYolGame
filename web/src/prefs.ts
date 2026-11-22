@@ -60,7 +60,8 @@ export const DEFAULT_GLASS: GlassSettings = {
 const STORAGE_KEY = 'myol.prefs.v3';
 const LEGACY_KEYS = ['myol.prefs.v2', 'myol.prefs'];
 
-const HARD_DEFAULTS: Prefs = {
+/** 硬默认值：设置页的「恢复默认外观 / 恢复默认文字颜色」都引用这里，避免写死不同步 */
+export const HARD_DEFAULTS: Prefs = {
   navText: 'dark',
   navTextColor: '#e8eaff',
   titleColor: '#f2f5ff',

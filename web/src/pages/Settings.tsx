@@ -5,6 +5,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import {
   DEFAULT_BACKDROP,
   DEFAULT_GLASS,
+  HARD_DEFAULTS,
   MAX_LOCAL_IMAGE,
   resetPrefs,
   setGlass,
@@ -256,7 +257,15 @@ export default function Settings(): ReactNode {
             <button
               type="button"
               className="btn small"
-              onClick={() => setPrefs({ titleColor: '#f2f5ff', bodyColor: '#dfe3f2', mutedColor: '#a8afcc' })}
+              onClick={() =>
+                // 引用默认值而不是写死颜色：否则改了默认值这里会不同步
+                // （曾出现默认已是 #ffffff，点这个按钮却恢复成旧的 #dfe3f2 / #a8afcc）
+                setPrefs({
+                  titleColor: HARD_DEFAULTS.titleColor,
+                  bodyColor: HARD_DEFAULTS.bodyColor,
+                  mutedColor: HARD_DEFAULTS.mutedColor,
+                })
+              }
             >
               恢复默认文字颜色
             </button>
