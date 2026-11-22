@@ -175,9 +175,9 @@ export default function Settings(): ReactNode {
           />
           <Slider
             label="玻璃厚度"
-            hint="越大越不透光（更实）"
+            hint="越大越不透光（更实）；0 = 完全透明，只留亮边与模糊"
             value={glass.body}
-            min={0.3}
+            min={0}
             max={0.95}
             step={0.01}
             format={(value) => Math.round(value * 100) + '%'}

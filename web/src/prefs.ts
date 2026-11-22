@@ -24,7 +24,7 @@ export interface GlassSettings {
   saturate: number;
   /** 明暗 0.4–1.8（1 = 不压暗；越小越暗，文字越好读） */
   brightness: number;
-  /** 玻璃主体不透明度 0.3–0.95（越大越实，越不透背景） */
+  /** 玻璃主体不透明度 0–0.95（越大越实，越不透背景；0 = 完全透明，只剩亮边与模糊） */
   body: number;
   /** 亮边强度 0.05–0.8 */
   edge: number;
@@ -86,7 +86,7 @@ function normalizeGlass(raw: unknown, fallback: GlassSettings): GlassSettings {
     blur: clamp(Number(input.blur), 0, 40, fallback.blur),
     saturate: clamp(Number(input.saturate), 100, 250, fallback.saturate),
     brightness: clamp(Number(input.brightness), 0.4, 1.8, fallback.brightness),
-    body: clamp(Number(input.body), 0.3, 0.95, fallback.body),
+    body: clamp(Number(input.body), 0, 0.95, fallback.body),
     edge: clamp(Number(input.edge), 0.05, 0.8, fallback.edge),
   };
 }
