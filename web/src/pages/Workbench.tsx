@@ -1,11 +1,13 @@
 // 创作工作台：对话修改、生成状态、试玩预览、版本回退、发布与下载。
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { API_BASE, ApiError, downloadAuthorized, requestJson } from '../api.ts';
+import { appHref } from '../routing.ts';
 import { useMeta } from '../meta.ts';
 import SandboxFrame from '../components/SandboxFrame.tsx';
 import Cover from '../components/Cover.tsx';
+import PublishTemplateForm from '../components/PublishTemplateForm.tsx';
 import { GenerationBadge, SpecBadges } from '../components/Badges.tsx';
 import type {
   GameSummary,
@@ -15,6 +17,37 @@ import type {
   VersionSummary,
 } from '../types.ts';
 
+const activeTask = (task: TaskItem) => ['queued', 'running', 'checking', 'repairing'].includes(task.status);
+const taskLabels: Record<TaskItem['status'], string> = {
+  queued: '等待', running: '生成源码', checking: '检查', repairing: '修复',
+  succeeded: '成功', failed: '失败', cancelled: '取消', timed_out: '超时',
+};
+const errorCodeLabels: Record<string, string> = {
+  model_timeout: '模型请求超时',
+  model_auth_failed: '模型鉴权失败',
+  model_rate_limited: '模型服务限流',
+  model_empty_output: '模型返回空内容',
+  model_truncated: '模型输出被截断',
+  model_invalid_response: '模型响应格式异常',
+  model_too_large: '模型响应过大',
+  model_unreachable: '无法连接模型服务',
+  model_not_configured: '模型未配置完整',
+  browser_unavailable: '浏览器检查不可用',
+  invalid_html: '模型未返回完整 HTML',
+  invalid_edit: '模型修改片段无法应用',
+  check_failed: '浏览器检查未通过',
+  version_conflict: '版本冲突',
+  timeout: '任务超时',
+  worker_failed: 'Worker 异常',
+  interrupted: '服务重启中断',
+  cancelled: '任务取消',
+};
+const modeLabel = (mode: string) =>
+  mode === 'agent' ? 'AI 源码开发' : mode === 'model' ? '模型辅助规格' : '模板生成';
+const errorText = (task: TaskItem) =>
+  (task.errorCode ? '[' + (errorCodeLabels[task.errorCode] ?? task.errorCode) + '] ' : '') + (task.error ?? '');
+const isAgentVersion = (version?: VersionSummary | null) => version?.generationMode === 'agent';
+
 interface ProjectDetail {
   project: ProjectSummary;
   versions: VersionSummary[];
@@ -23,11 +56,12 @@ interface ProjectDetail {
 }
 
 export default function Workbench(): ReactNode {
+  const location = useLocation();
   const { id } = useParams<{ id: string }>();
   const { meta } = useMeta();
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(typeof location.state?.notice === 'string' ? location.state.notice : null);
   const [prompt, setPrompt] = useState('');
   const [generating, setGenerating] = useState(false);
   const [previewVersionId, setPreviewVersionId] = useState<string | null>(null);
@@ -35,6 +69,10 @@ export default function Workbench(): ReactNode {
   const [description, setDescription] = useState('');
   const [allowDownload, setAllowDownload] = useState(true);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const pendingRef = useRef(false);
+  const observedTask = useRef<string | null>(null);
+  const requestInFlight = useRef(false);
+  const [processing, setProcessing] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -43,7 +81,21 @@ export default function Workbench(): ReactNode {
       const data = await requestJson<ProjectDetail>('/projects/' + id);
       setDetail(data);
       setAllowDownload(data.project.allowDownload);
-      setPreviewVersionId((prev) => prev ?? data.project.currentVersionId);
+      const pending = data.tasks.some(activeTask);
+      pendingRef.current = pending;
+      setProcessing(pending);
+      const completed = data.tasks.find((task) => task.id === observedTask.current);
+      if (completed && !activeTask(completed)) {
+        observedTask.current = null;
+        if (completed.status === 'succeeded' && completed.versionId) {
+          setPreviewVersionId(completed.versionId);
+          setNotice('新版本已生成，请试玩确认需求。浏览器烟测只代表基础运行正常。');
+        } else {
+          setError(errorText(completed));
+        }
+      }
+      if (pending && !observedTask.current) observedTask.current = data.tasks.find(activeTask)!.id;
+      setPreviewVersionId((prev) => prev || data.project.currentVersionId || null);
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
         setError(err.message + '（项目仅创建者可访问）');
@@ -54,7 +106,14 @@ export default function Workbench(): ReactNode {
   }, [id]);
 
   useEffect(() => {
-    void load();
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      await load();
+      if (!disposed) timer = setTimeout(() => void poll(), pendingRef.current ? 750 : 3000);
+    };
+    void poll();
+    return () => { disposed = true; clearTimeout(timer); };
   }, [load]);
 
   useEffect(() => {
@@ -67,24 +126,42 @@ export default function Workbench(): ReactNode {
   }
 
   async function generate(basePrompt: string): Promise<void> {
-    if (!id || generating || !basePrompt.trim()) return;
+    if (detail?.project.templateOrigin && !meta?.agent?.configured) { setError('此项目的修改需要启用 Agent 源码开发'); return; }
+    const currentVersion = detail?.versions.find((v) => v.id === detail.project.currentVersionId);
+    if (isAgentVersion(currentVersion) && !meta?.agent?.configured) {
+      setError('当前版本由 AI 源码开发产生，模板模式重新渲染会覆盖已有玩法；请启用源码开发服务后继续修改。');
+      return;
+    }
+    if (!id || requestInFlight.current || processing || !basePrompt.trim()) return;
+    requestInFlight.current = true;
     setGenerating(true);
     setError(null);
     setNotice(null);
     try {
-      const result = await requestJson<{ version: VersionSummary }>(
+      const result = await requestJson<{ version?: VersionSummary; task: TaskItem }>(
         '/projects/' + id + '/tasks',
         { method: 'POST', body: { prompt: basePrompt } },
       );
-      setPreviewVersionId(result.version.id);
+      if (result.version) setPreviewVersionId(result.version.id);
+      else observedTask.current = result.task.id;
       setPrompt((draft) => (draft === basePrompt ? '' : draft));
-      await refreshAfterMutation(result.version.note + ' 已生成，可在试玩区查看。');
+      await refreshAfterMutation(result.version ? result.version.note + ' 已生成，可在试玩区查看。' : '任务已提交，可离开页面，稍后回来查看。');
     } catch (err) {
       setError(err instanceof Error ? err.message : '生成失败');
       await load();
     } finally {
+      requestInFlight.current = false;
       setGenerating(false);
     }
+  }
+
+  async function cancel(): Promise<void> {
+    const task = detail?.tasks.find(activeTask);
+    if (!id || !task) return;
+    try {
+      await requestJson('/projects/' + id + '/tasks/' + task.id + '/cancel', { method: 'POST', body: {} });
+      await load();
+    } catch (err) { setError(err instanceof Error ? err.message : '取消失败'); }
   }
 
   async function restore(versionId: string, note: string): Promise<void> {
@@ -143,7 +220,7 @@ export default function Workbench(): ReactNode {
     setBusyAction('delete');
     try {
       await requestJson('/projects/' + id, { method: 'DELETE' });
-      window.location.href = '/projects';
+      window.location.href = appHref('/projects');
     } catch (err) {
       setError(err instanceof Error ? err.message : '删除失败');
       setBusyAction(null);
@@ -170,11 +247,17 @@ export default function Workbench(): ReactNode {
 
   const { project, versions, messages, tasks } = detail;
   const orderedVersions = [...versions].reverse();
+  const currentVersion = versions.find((v) => v.id === project.currentVersionId);
   const previewVersion =
     versions.find((v) => v.id === previewVersionId) ??
-    versions.find((v) => v.id === project.currentVersionId) ??
+    currentVersion ??
     versions[versions.length - 1];
   const lastTask = tasks[0];
+  const sourceMode = Boolean(meta?.agent?.configured);
+  const agentName = meta?.agent?.name || '源码开发模型';
+  const agentModelHint = meta?.agent?.model
+    ? ' · ' + meta.agent.model
+    : meta?.agent?.accountModelConfig ? ' · 模型由账号管理配置' : '';
 
   return (
     <div className="page workbench-page">
@@ -186,9 +269,12 @@ export default function Workbench(): ReactNode {
               {project.visibility === 'public' ? '已发布到社区' : '私有草稿'}
             </span>
             <GenerationBadge mode={previewVersion?.generationMode ?? 'template'} />
-            {meta?.generationMode !== 'model' && (
-              <span className="muted small">平台处于模板模式（未配置真实模型）</span>
-            )}
+            <span className="muted small">
+              {sourceMode
+                ? 'AI 源码开发模式 · ' + agentName + agentModelHint
+                : '模板模式 · 只能调整受支持参数'}
+              {project.fromScratch && <span className="badge">从零生成</span>}
+            </span>
           </div>
         </div>
         <div className="detail-actions">
@@ -215,6 +301,20 @@ export default function Workbench(): ReactNode {
         </div>
       )}
 
+      {project.templateOrigin && <div className="panel template-origin"><span>来源：<Link to={'/templates/' + project.templateOrigin.templateId}>{project.templateOrigin.title}</Link> · {project.templateOrigin.versionLabel} · MIT · 独立私有副本</span>{!meta?.agent?.configured && <p className="panel-note">当前未启用源码开发，仍可试玩、下载和发布；启用后可在现有源码上继续修改。</p>}</div>}
+      <div className={'mode-banner ' + (sourceMode ? 'agent' : 'template')} role="status">
+        <strong>{sourceMode ? 'AI 源码开发模式' : '模板模式'}</strong>
+        <span>
+          {sourceMode
+            ? project.fromScratch && versions.length === 0
+              ? '本项目从零生成：由 ' + agentName + ' 按需求编写完整源码，不使用内置模板；完成后先做隔离浏览器烟测，通过后才保存为新版本。'
+              : '提交需求后由 ' + agentName + (meta?.agent?.model ? '（' + meta.agent.model + '）' : meta?.agent?.accountModelConfig ? '（模型由账号管理配置）' : '') +
+                ' 修改当前有效版本的完整源码，先做隔离浏览器烟测，通过后才保存为新版本。'
+            : isAgentVersion(currentVersion)
+              ? '当前有效版本来自 AI 源码开发。模板模式不能安全地继续修改它：服务端会拒绝模板重渲染，避免覆盖已有玩法；请启用源码开发服务后再提交需求。'
+              : '当前只能调整速度、难度、主题、玩法选项和配乐等受支持参数；新增关卡或敌人等源码级需求需要启用源码开发服务。'}
+        </span>
+      </div>
       <div className="workbench-layout">
         <section className="panel chat-panel">
           <h2>创作对话</h2>
@@ -226,7 +326,7 @@ export default function Workbench(): ReactNode {
                 <time>{new Date(m.createdAt).toLocaleString('zh-CN')}</time>
               </div>
             ))}
-            {generating && (
+            {(generating || processing) && (
               <div className="msg system" role="status">
                 <span className="msg-role">系统</span>
                 <p>正在生成新版本。完成后可在「最近任务」查看处理记录。</p>
@@ -238,31 +338,44 @@ export default function Workbench(): ReactNode {
               rows={3}
               value={prompt}
               maxLength={meta?.limits.promptMaxLength ?? 2000}
-              placeholder="提出修改需求，例如：换成糖果主题、难度改为困难、开启穿墙、名字叫《小蛇快跑》"
+              placeholder={sourceMode
+                ? '提出源码修改需求，例如：打砖块增加第二关，第一关清空后进入第二关，第二关砖块耐久为两次，重新开始恢复第一关'
+                : '提出参数修改，例如：换成糖果主题、难度改为困难、开启穿墙、名字叫《小蛇快跑》'}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void generate(prompt);
               }}
             />
             <div className="chat-actions">
-              <span className="muted small">Ctrl/Cmd + Enter 快速生成</span>
+              <span className="muted small">Ctrl/Cmd + Enter 快速提交</span>
               <button
                 type="button"
                 className="btn primary"
-                disabled={generating || !prompt.trim()}
+                disabled={generating || processing || !prompt.trim()}
                 onClick={() => void generate(prompt)}
               >
-                {generating ? '生成中…' : '生成新版本'}
+                {generating || processing ? '处理中…' : sourceMode ? '提交源码修改' : '生成新版本'}
               </button>
             </div>
           </div>
           {lastTask && (
-            <details className="task-detail">
+            <details className="task-detail" open={processing || undefined}>
               <summary>
-                最近任务：{lastTask.status === 'succeeded' ? '成功' : '失败'} ·{' '}
-                {lastTask.generationMode === 'model' ? '模型辅助' : '模板生成'} ·{' '}
+                最近任务：{taskLabels[lastTask.status]} ·{' '}
+                {modeLabel(lastTask.generationMode)} ·{' '}
                 {new Date(lastTask.createdAt).toLocaleString('zh-CN')}
               </summary>
+              {processing && (
+                <div className="stage-live" role="status">
+                  <span className="spinner small" />
+                  <span>
+                    {taskLabels[lastTask.status]}
+                    {lastTask.stages.length > 0 && ' · ' + lastTask.stages[lastTask.stages.length - 1]!.name}
+                  </span>
+                </div>
+              )}
+              {processing && <button className="btn small" type="button" onClick={() => void cancel()}>取消任务</button>}
+              {!processing && lastTask.status !== 'succeeded' && lastTask.error && <p role="alert">{errorText(lastTask)}</p>}
               <ol>
                 {lastTask.stages.map((stage, i) => (
                   <li key={i} className={stage.ok ? 'ok' : 'bad'}>
@@ -314,6 +427,7 @@ export default function Workbench(): ReactNode {
             </div>
           )}
           <div className="panel preview-spec">
+            {previewVersion?.generationMode === 'agent' && <span className="muted small">起始配置参考，实际玩法见试玩。</span>}
             <SpecBadges spec={(previewVersion ?? project).spec} />
             <button type="button" className="btn small" onClick={() => setReloadKey((k) => k + 1)}>
               重新加载
@@ -322,6 +436,7 @@ export default function Workbench(): ReactNode {
         </section>
 
         <section className="side-panels">
+          <PublishTemplateForm projectId={project.id} version={previewVersion} />
           <div className="panel versions-panel">
             <h2>版本历史（{versions.length}）</h2>
             <ol className="version-list">
@@ -337,10 +452,15 @@ export default function Workbench(): ReactNode {
                       <span className="muted small" title={v.prompt}>“{v.prompt}”</span>
                       <span className="muted small">
                         {new Date(v.createdAt).toLocaleString('zh-CN')} ·{' '}
-                        {v.generationMode === 'model' ? '模型辅助' : '模板生成'}
+                        {modeLabel(v.generationMode)}
                       </span>
                     </div>
                   </div>
+                  {v.checks && (
+                    <p className="muted small">
+                      浏览器烟测通过：画布、按键、重启（仅代表基础运行正常，不代表所有需求均已实现）
+                    </p>
+                  )}
                   <div className="version-actions">
                     <button type="button" className="btn tiny" onClick={() => setPreviewVersionId(v.id)}>
                       预览
@@ -391,10 +511,11 @@ export default function Workbench(): ReactNode {
                 type="button"
                 className="btn"
                 onClick={() =>
-                  void downloadAuthorized('/projects/' + project.id + '/source', project.title + '-source.zip')
+                  void downloadAuthorized('/projects/' + project.id + '/source?versionId=' + (previewVersion?.id ?? ''), project.title + '-source.zip')
                 }
+                disabled={!previewVersion}
               >
-                下载源码包（ZIP）
+                下载源码包（当前预览版本）
               </button>
             </div>
             <p className="panel-note">

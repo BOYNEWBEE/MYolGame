@@ -20,7 +20,13 @@ export function soundControls(music: boolean, effects: boolean, preview = false)
 }
 
 export const ARCADE_AUDIO_SCRIPT = `
-  function createArcadeAudio() {
+  function createArcadeAudio(rawStyle) {
+    const style = Object.assign({
+      bpm: 120, progression: 'minor', transpose: 0,
+      leadWave: 'triangle', bassWave: 'triangle', kickWave: 'sine',
+      instrument: 'chip', pad: 'none',
+      density: 1, swing: 0, octave: 0, seed: 1
+    }, rawStyle || {});
     const enable = document.getElementById('sound-enable');
     const musicButton = document.getElementById('sound-music');
     const effectsButton = document.getElementById('sound-effects');
@@ -51,35 +57,155 @@ export const ARCADE_AUDIO_SCRIPT = `
       oscillator.stop(at + length);
     }
 
+    // 用多个振荡器叠加出接近真实乐器的音色；spec 只描述谐波与包络，不执行外部代码。
+    function voice(engine, output, at, length, frequency, volume, spec) {
+      const envelope = engine.createGain();
+      const attackEnd = at + Math.min(spec.attack, length * 0.4);
+      const sustain = Math.max(0.0008, volume * spec.sustain);
+      envelope.gain.setValueAtTime(0.0005, at);
+      envelope.gain.exponentialRampToValueAtTime(Math.max(0.001, volume), attackEnd);
+      envelope.gain.exponentialRampToValueAtTime(sustain, attackEnd + (length - (attackEnd - at)) * 0.7);
+      envelope.gain.exponentialRampToValueAtTime(0.0005, at + length);
+      let bus = envelope;
+      if (spec.filter) {
+        const filter = engine.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(spec.filter, at);
+        filter.Q.setValueAtTime(0.7, at);
+        filter.connect(envelope);
+        bus = filter;
+      }
+      for (let i = 0; i < spec.partials.length; i++) {
+        const partial = spec.partials[i];
+        const oscillator = engine.createOscillator();
+        const amp = engine.createGain();
+        oscillator.type = partial[2];
+        oscillator.frequency.setValueAtTime(frequency * partial[0], at);
+        if (partial[3]) oscillator.detune.setValueAtTime(partial[3], at);
+        amp.gain.value = partial[1];
+        oscillator.connect(amp);
+        amp.connect(bus);
+        oscillator.start(at);
+        oscillator.stop(at + length);
+      }
+      envelope.connect(output);
+    }
+
     function renderLoop() {
       const rate = context.sampleRate;
-      const engine = new OfflineAudio(1, 32 * rate, rate);
-      const out = engine.destination;
-      const chords = [
-        [45, 57, 60, 64, 67], [41, 57, 60, 65, 69],
-        [48, 55, 60, 64, 67], [43, 55, 59, 62, 67]
+      const chords = {
+        minor: [[45, 57, 60, 64, 67], [41, 57, 60, 65, 69], [48, 55, 60, 64, 67], [43, 55, 59, 62, 67]],
+        major: [[48, 60, 64, 67, 72], [43, 55, 59, 62, 67], [45, 57, 61, 64, 69], [41, 53, 57, 60, 65]],
+        dorian: [[50, 62, 65, 69, 72], [43, 55, 59, 62, 65], [45, 57, 60, 64, 67], [48, 60, 64, 67, 71]],
+        phrygian: [[40, 52, 55, 59, 64], [41, 53, 57, 60, 65], [48, 60, 64, 67, 72], [47, 59, 62, 65, 71]],
+        lydian: [[41, 53, 57, 60, 64], [43, 55, 59, 62, 67], [45, 57, 60, 64, 67], [40, 52, 55, 59, 64]],
+        mixolydian: [[43, 55, 59, 62, 65], [41, 53, 57, 60, 64], [48, 60, 64, 67, 72], [50, 62, 65, 69, 72]],
+        'harmonic-minor': [[45, 57, 60, 64, 67], [40, 52, 56, 59, 64], [41, 53, 57, 60, 65], [50, 62, 65, 69, 72]],
+        suspended: [[45, 57, 62, 64, 67], [43, 55, 60, 62, 67], [48, 60, 65, 67, 72], [41, 53, 58, 60, 65]]
+      };
+      const progression = chords[style.progression] || chords.minor;
+      const phraseFamilies = [
+        [
+          [null, 1, 2, null, 3, 2, null, 4],
+          [3, null, 2, 1, null, 2, 1, null],
+          [1, 2, null, 4, 3, null, 2, 3],
+          [4, null, 3, 2, 1, null, null, 2]
+        ],
+        [
+          [1, 2, 3, null, 4, null, 3, 2],
+          [null, 1, 3, 2, null, 4, null, 2],
+          [3, 2, 1, null, 2, 3, null, 4],
+          [4, 3, null, 2, null, 1, 2, null]
+        ],
+        [
+          [null, null, 1, 2, null, 4, 3, null],
+          [1, null, 2, null, 3, 2, null, 1],
+          [null, 3, null, 1, 4, null, 2, null],
+          [2, 1, null, null, 3, null, 4, 3]
+        ]
       ];
-      const phrases = [
-        [null, 1, 2, null, 3, 2, null, 4],
-        [3, null, 2, 1, null, 2, 1, null],
-        [1, 2, null, 4, 3, null, 2, 3],
-        [4, null, 3, 2, 1, null, null, 2]
-      ];
+      const phrases = phraseFamilies[(style.seed - 1) % phraseFamilies.length];
+      // seed 同时改变低频节奏型；默认 seed=1 保持原版进行。
+      const kickPatterns = [[0, 2, 4, 6], [0, 2, 3, 4, 6], [0, 2, 4, 5, 6], [0, 1, 4, 6]];
+      const bassPatterns = [[0, 2, 4, 6], [0, 3, 4, 6], [0, 2, 5, 6], [0, 4, 6]];
+      const kickSteps = kickPatterns[(style.seed - 1) % kickPatterns.length];
+      const bassSteps = bassPatterns[(style.seed - 1) % bassPatterns.length];
       const hz = function (note) { return 440 * Math.pow(2, (note - 69) / 12); };
-      for (let bar = 0; bar < 16; bar++) {
-        const chord = chords[bar % chords.length];
+      const stepDur = 30 / style.bpm;
+      const barDur = stepDur * 8;
+      const bars = 16;
+      const engine = new OfflineAudio(1, Math.ceil(bars * barDur * rate), rate);
+      const out = engine.destination;
+      let randomState = (style.seed * 2654435761) >>> 0;
+      function random() {
+        randomState = (randomState * 1664525 + 1013904223) >>> 0;
+        return randomState / 4294967296;
+      }
+      // 非 chip 音色由谐波叠加、低通和包络组成；length 为相对步长的衰减倍数。
+      const leadVoices = {
+        piano: {
+          length: 1.5, attack: 0.006, sustain: 0.18, filter: 3600,
+          partials: [[1, 1, 'sine', 0], [2, 0.35, 'sine', 0], [3, 0.16, 'sine', 3], [4.02, 0.06, 'sine', -3]]
+        },
+        'music-box': {
+          length: 1.6, attack: 0.003, sustain: 0.06, filter: 5600,
+          partials: [[1, 1, 'sine', 0], [3.01, 0.32, 'sine', 0], [5.02, 0.12, 'sine', 0]]
+        },
+        strings: {
+          length: 1.9, attack: 0.07, sustain: 0.6, filter: 2100,
+          partials: [[1, 0.55, 'sawtooth', -7], [1, 0.55, 'sawtooth', 7], [0.5, 0.22, 'sine', 0]]
+        },
+        flute: {
+          length: 1.7, attack: 0.04, sustain: 0.55, filter: 2800,
+          partials: [[1, 0.9, 'sine', 0], [2, 0.18, 'triangle', 0], [3, 0.05, 'sine', 0]]
+        },
+        organ: {
+          length: 1.8, attack: 0.012, sustain: 0.72, filter: 3400,
+          partials: [[1, 0.65, 'sine', 0], [2, 0.32, 'sine', 0], [3, 0.14, 'sine', 0], [4, 0.07, 'sine', 0], [0.5, 0.14, 'sine', 0]]
+        },
+        guitar: {
+          length: 1.3, attack: 0.004, sustain: 0.08, filter: 2600,
+          partials: [[1, 0.8, 'triangle', 0], [2, 0.3, 'sawtooth', 4], [3, 0.12, 'sine', 0]]
+        }
+      };
+      const padVoices = {
+        warm: {
+          attack: 0.22, sustain: 0.68, filter: 1300,
+          partials: [[1, 0.5, 'triangle', -5], [1, 0.5, 'triangle', 5], [2, 0.1, 'sine', 0]]
+        },
+        strings: {
+          attack: 0.32, sustain: 0.62, filter: 1900,
+          partials: [[1, 0.42, 'sawtooth', -6], [1, 0.42, 'sawtooth', 6], [0.5, 0.18, 'sine', 0]]
+        }
+      };
+      const leadVoice = leadVoices[style.instrument];
+      const padVoice = style.pad !== 'none' ? padVoices[style.pad] : null;
+      for (let bar = 0; bar < bars; bar++) {
+        const chord = progression[bar % progression.length];
         const phrase = phrases[(bar + Math.floor(bar / 4)) % phrases.length];
-        for (let step = 0; step < 8; step++) {
-          const at = bar * 2 + step / 4;
-          if (step % 2 === 0) {
-            tone(engine, out, at, 0.18, 'sine', 105, 40, 0.14);
-            const bass = hz(chord[0] + (step === 6 ? 12 : 0));
-            tone(engine, out, at + 0.035, 0.29, 'triangle', bass, bass, 0.15);
+        if (padVoice) {
+          for (let n = 1; n < chord.length && n < 4; n++) {
+            voice(engine, out, bar * barDur, barDur * 0.98, hz(chord[n] + style.transpose), 0.02, padVoice);
           }
-          if (phrase[step] !== null) {
-            const lead = hz(chord[phrase[step]] + (bar >= 8 ? 12 : 0));
-            tone(engine, out, at, 0.19, 'triangle', lead, lead, 0.095);
-            tone(engine, out, at + 0.125, 0.105, 'sine', lead, lead, 0.024);
+        }
+        for (let s = 0; s < 8; s++) {
+          const at = bar * barDur + s * stepDur + (s % 2 === 1 ? style.swing * stepDur : 0);
+          if (kickSteps.includes(s)) {
+            tone(engine, out, at, 0.18, style.kickWave, 105, 40, 0.14);
+          }
+          if (bassSteps.includes(s)) {
+            const bass = hz(chord[0] + style.transpose + (s === 6 ? 12 : 0));
+            tone(engine, out, at + 0.035, 0.29, style.bassWave, bass, bass, 0.15);
+          }
+          if (phrase[s] !== null && (style.density >= 1 || s === 0 || random() < style.density)) {
+            const lead = hz(chord[phrase[s]] + style.transpose + style.octave * 12 + (bar >= 8 ? 12 : 0));
+            if (leadVoice) {
+              const length = Math.min(1.2, Math.max(0.22, stepDur * leadVoice.length));
+              voice(engine, out, at, length, lead, 0.075, leadVoice);
+            } else {
+              tone(engine, out, at, 0.19, style.leadWave, lead, lead, 0.095);
+              tone(engine, out, at + 0.125, 0.105, 'sine', lead, lead, 0.024);
+            }
           }
         }
       }
@@ -199,7 +325,7 @@ export const ARCADE_AUDIO_SCRIPT = `
     }
 
     function readMusicBands() {
-      if (!musicSource || !canPlayMusic()) return null;
+      if (!musicAnalyser || !musicSource || !canPlayMusic()) return null;
       musicAnalyser.getByteFrequencyData(frequencyData);
       const binWidth = context.sampleRate / musicAnalyser.fftSize;
       for (let band = 0; band < bands.length; band++) {
@@ -259,3 +385,13 @@ draw();
 </script>
 </body>
 </html>`;
+
+// 用模型返回的风格参数生成试听页；传 null 时保持默认霓虹听感。
+export function musicPreviewHtml(style?: object | null): string {
+  if (!style) return MUSIC_PREVIEW_HTML;
+  const json = JSON.stringify(style).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+  return MUSIC_PREVIEW_HTML.replace(
+    'const preview = createArcadeAudio();',
+    'const preview = createArcadeAudio(' + json + ');',
+  );
+}

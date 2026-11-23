@@ -11,9 +11,13 @@ export type ThemeId =
   | 'ink'
   | 'sunset';
 export type Difficulty = 'easy' | 'normal' | 'hard';
-export type GenerationMode = 'template' | 'model';
+export type GenerationMode = 'template' | 'model' | 'agent';
 
-export const MUSIC_NAMES = { 'neon-arcade': '霓虹街机', none: '无配乐' } as const;
+export const MUSIC_NAMES = {
+  'neon-arcade': '霓虹街机',
+  'ai-arranged': 'AI 编曲（实时合成）',
+  none: '无配乐',
+} as const;
 export type MusicPreset = keyof typeof MUSIC_NAMES;
 
 // 每种模板支持的可选玩法开关（由提示词或结构化选择控制）
@@ -30,8 +34,235 @@ export interface GameOptions {
   fiveGrid?: boolean; // 2048：5×5 棋盘
 }
 
+export type SynthWave = 'sine' | 'square' | 'sawtooth' | 'triangle';
+export type ChordProgression =
+  | 'minor'
+  | 'major'
+  | 'dorian'
+  | 'phrygian'
+  | 'lydian'
+  | 'mixolydian'
+  | 'harmonic-minor'
+  | 'suspended';
+
+export type MusicInstrument = 'chip' | 'piano' | 'music-box' | 'strings' | 'flute' | 'organ' | 'guitar';
+export type MusicPad = 'none' | 'warm' | 'strings';
+
+// 浏览器内置合成配乐的可调参数；只允许这组受限字段，模型不能注入代码。
+export interface MusicStyle {
+  bpm: number; // 70 ~ 160
+  progression: ChordProgression;
+  transpose: number; // -7 ~ 7 半音，用于改变调性
+  leadWave: SynthWave;
+  bassWave: SynthWave;
+  kickWave: SynthWave;
+  instrument: MusicInstrument; // 主旋律音色，chip 为原版振荡器音色
+  pad: MusicPad; // 和弦铺底，none 表示不铺底
+  density: number; // 0.3 ~ 1，旋律音符出现概率
+  swing: number; // 0 ~ 0.3，奇数步延迟比例
+  octave: number; // -1 ~ 1，旋律八度
+  seed: number; // 1 ~ 9999，决定旋律型与低频节奏并保证可复现
+}
+
+export const DEFAULT_MUSIC_STYLE: MusicStyle = {
+  bpm: 120,
+  progression: 'minor',
+  transpose: 0,
+  leadWave: 'triangle',
+  bassWave: 'triangle',
+  kickWave: 'sine',
+  instrument: 'chip',
+  pad: 'none',
+  density: 1,
+  swing: 0,
+  octave: 0,
+  seed: 1,
+};
+
+const SYNTH_WAVES: SynthWave[] = ['sine', 'square', 'sawtooth', 'triangle'];
+const INSTRUMENTS: MusicInstrument[] = ['chip', 'piano', 'music-box', 'strings', 'flute', 'organ', 'guitar'];
+const PADS: MusicPad[] = ['none', 'warm', 'strings'];
+
+export const MUSIC_INSTRUMENT_NAMES: Record<MusicInstrument, string> = {
+  chip: '芯片音色',
+  piano: '钢琴',
+  'music-box': '八音盒',
+  strings: '弦乐',
+  flute: '长笛',
+  organ: '管风琴',
+  guitar: '吉他',
+};
+export const MUSIC_PAD_NAMES: Record<MusicPad, string> = {
+  none: '无铺底',
+  warm: '暖色铺底',
+  strings: '弦乐铺底',
+};
+const PROGRESSIONS: ChordProgression[] = [
+  'minor',
+  'major',
+  'dorian',
+  'phrygian',
+  'lydian',
+  'mixolydian',
+  'harmonic-minor',
+  'suspended',
+];
+
+function clampInt(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function clampFloat(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(value * 100) / 100));
+}
+
+// 模型输出与外部输入一律先钳制；缺省字段回退到当前风格或默认霓虹参数。
+export function sanitizeMusicStyle(raw: unknown, fallback: MusicStyle = DEFAULT_MUSIC_STYLE): MusicStyle {
+  const base = fallback ?? DEFAULT_MUSIC_STYLE;
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { ...base };
+  const value = raw as Record<string, unknown>;
+  return {
+    bpm: clampInt(value.bpm, 70, 160, base.bpm),
+    progression: PROGRESSIONS.includes(value.progression as ChordProgression)
+      ? (value.progression as ChordProgression)
+      : base.progression,
+    transpose: clampInt(value.transpose, -7, 7, base.transpose),
+    leadWave: SYNTH_WAVES.includes(value.leadWave as SynthWave) ? (value.leadWave as SynthWave) : base.leadWave,
+    bassWave: SYNTH_WAVES.includes(value.bassWave as SynthWave) ? (value.bassWave as SynthWave) : base.bassWave,
+    kickWave: SYNTH_WAVES.includes(value.kickWave as SynthWave) ? (value.kickWave as SynthWave) : base.kickWave,
+    instrument: INSTRUMENTS.includes(value.instrument as MusicInstrument)
+      ? (value.instrument as MusicInstrument)
+      : base.instrument,
+    pad: PADS.includes(value.pad as MusicPad) ? (value.pad as MusicPad) : base.pad,
+    density: clampFloat(value.density, 0.3, 1, base.density),
+    swing: clampFloat(value.swing, 0, 0.3, base.swing),
+    octave: clampInt(value.octave, -1, 1, base.octave),
+    seed: clampInt(value.seed, 1, 9999, base.seed),
+  };
+}
+
+// 提示词里的乐器/铺底关键词作为模型输出的兜底：模型未指定音色时按关键词切换，
+// 客户端试听、试听接口与生成管线共用同一套规则。
+const INSTRUMENT_KEYWORDS: [MusicInstrument, RegExp][] = [
+  ['piano', /钢琴|piano/i],
+  ['music-box', /八音盒|音乐盒|music\s*box/i],
+  ['strings', /弦乐|小提琴|大提琴|violin|cello|strings?/i],
+  ['flute', /长笛|笛子|flute/i],
+  ['organ', /管风琴|风琴|organ/i],
+  ['guitar', /吉他|guitar/i],
+];
+const PAD_KEYWORDS: [MusicPad, RegExp][] = [
+  ['strings', /弦乐铺底|铺底弦乐|string\s*pad/i],
+  ['warm', /铺底|垫音|氛围|pad|ambient/i],
+];
+
+export function applyPromptStyle(style: MusicStyle, prompt: string, musicPrompt?: string): MusicStyle {
+  const text = (prompt + ' ' + (musicPrompt ?? '')).trim();
+  if (!text) return style;
+  let instrument = style.instrument;
+  if (instrument === 'chip') {
+    const hit = INSTRUMENT_KEYWORDS.find(([, pattern]) => pattern.test(text));
+    if (hit) instrument = hit[0];
+  }
+  let pad = style.pad;
+  if (pad === 'none') {
+    if (instrument === 'strings') {
+      pad = 'strings';
+    } else {
+      const hit = PAD_KEYWORDS.find(([, pattern]) => pattern.test(text));
+      if (hit) pad = hit[0];
+    }
+  }
+  return instrument === style.instrument && pad === style.pad ? style : { ...style, instrument, pad };
+}
+
+export interface PromptMood {
+  label: string;
+  progression: ChordProgression;
+  transpose: number;
+}
+
+// 情绪关键词映射到不同的调式与调性，避免所有提示词都落在默认 A 小调。
+const PROMPT_MOODS: (PromptMood & { pattern: RegExp })[] = [
+  {
+    label: '悬疑',
+    progression: 'phrygian',
+    transpose: -2,
+    pattern: /悬疑|紧张|恐怖|惊悚|神秘|阴暗|黑暗|dark|mysterious|suspense|thriller/i,
+  },
+  {
+    label: '悲伤',
+    progression: 'harmonic-minor',
+    transpose: -3,
+    pattern: /悲伤|悲哀|忧郁|忧伤|伤感|凄凉|sad|melancholy|sorrow|tragic/i,
+  },
+  {
+    label: '明亮',
+    progression: 'major',
+    transpose: 2,
+    pattern: /明亮|欢快|轻快|开心|快乐|阳光|愉悦|活泼|happy|bright|cheerful|upbeat|joyful/i,
+  },
+  {
+    label: '梦幻',
+    progression: 'suspended',
+    transpose: 1,
+    pattern: /梦幻|空灵|治愈|宁静|舒缓|平静|放松|温柔|dreamy|ambient|calm|relax|gentle|soft/i,
+  },
+  {
+    label: '复古',
+    progression: 'mixolydian',
+    transpose: -1,
+    pattern: /复古|怀旧|年代感|retro|nostalgic|vintage/i,
+  },
+  {
+    label: '科幻',
+    progression: 'dorian',
+    transpose: 3,
+    pattern: /科幻|赛博|未来|太空|星际|electronic|cyber|sci-?fi|space/i,
+  },
+];
+
+export function promptMood(prompt: string, musicPrompt?: string): PromptMood | null {
+  const text = (prompt + ' ' + (musicPrompt ?? '')).trim();
+  if (!text) return null;
+  const hit = PROMPT_MOODS.find((mood) => mood.pattern.test(text));
+  return hit ? { label: hit.label, progression: hit.progression, transpose: hit.transpose } : null;
+}
+
+// 同一提示词得到同一旋律种子，不同提示词得到不同旋律型；与客户端试听保持一致。
+export function promptSeed(prompt: string, musicPrompt?: string): number {
+  const text = (prompt + ' ' + (musicPrompt ?? '')).replace(/\s+/g, ' ').trim();
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return ((hash || 1) % 9999) + 1;
+}
+
+// 未配置模型时的完整提示词调优：情绪决定调性与和弦进行，乐器决定音色，
+// 任一关键词生效都换一个由提示词决定的旋律种子。
+export function applyPromptTuning(style: MusicStyle, prompt: string, musicPrompt?: string): MusicStyle {
+  const styled = applyPromptStyle(style, prompt, musicPrompt);
+  const mood = promptMood(prompt, musicPrompt);
+  let tuned = styled;
+  if (mood && (tuned.progression !== mood.progression || tuned.transpose !== mood.transpose)) {
+    tuned = { ...tuned, progression: mood.progression, transpose: mood.transpose };
+  }
+  if ((mood || styled !== style) && tuned.seed === 1) {
+    tuned = { ...tuned, seed: promptSeed(prompt, musicPrompt) };
+  }
+  return tuned;
+}
+
 export interface GameSpec {
   music?: MusicPreset;
+  // 用户附加的配乐风格描述，仅用于 AI 配乐提示词。
+  musicPrompt?: string;
+  // 内置合成配乐的风格参数；未设置时使用默认霓虹参数。
+  musicStyle?: MusicStyle;
   template: TemplateId;
   title: string;
   theme: ThemeId;
@@ -39,6 +270,8 @@ export interface GameSpec {
   difficulty: Difficulty;
   options: GameOptions;
 }
+
+export const MAX_MUSIC_PROMPT = 200;
 
 export function getMusicPreset(spec: GameSpec): MusicPreset {
   return spec.music ?? (spec.template === 'breakout' && spec.theme === 'neon' ? 'neon-arcade' : 'none');
@@ -269,6 +502,17 @@ export function sanitizeTitle(raw: unknown, fallback: string): string {
   return cleaned.length > 0 ? cleaned : fallback;
 }
 
+// 配乐提示词只作为文本传给音乐接口：去控制字符、压缩空白并截断。
+export function sanitizeMusicPrompt(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const cleaned = raw
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_MUSIC_PROMPT);
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
 export function defaultTitle(template: TemplateId, theme: ThemeId): string {
   return getTheme(theme).name + getTemplate(template).name;
 }
@@ -284,12 +528,23 @@ export function defaultSpec(template: TemplateId = 'breakout', theme: ThemeId = 
   };
 }
 
+// 外部 AI 配乐已移除：旧版本规格里的 ai-generated 统一迁移为浏览器内置的霓虹街机配乐。
+function normalizeMusicPreset(value: unknown): MusicPreset | undefined {
+  if (value === 'ai-generated') return 'neon-arcade';
+  return value === 'neon-arcade' || value === 'ai-arranged' || value === 'none' ? value : undefined;
+}
+
 // 对任意输入（结构化选择、模型返回等）做白名单校验与钳制，绝不信任外部数据
 export function sanitizeSpec(input: unknown, fallback?: GameSpec): GameSpec {
   const base = fallback ?? defaultSpec();
   if (typeof input !== 'object' || input === null) return base;
   const raw = input as Record<string, unknown>;
-  const music = raw.music === 'neon-arcade' || raw.music === 'none' ? raw.music : base.music;
+  const music = normalizeMusicPreset(raw.music) ?? normalizeMusicPreset(base.music);
+  const musicPrompt = 'musicPrompt' in raw ? sanitizeMusicPrompt(raw.musicPrompt) : base.musicPrompt;
+  const styleInput = 'musicStyle' in raw ? raw.musicStyle : base.musicStyle;
+  const musicStyle = styleInput === undefined || styleInput === null
+    ? base.musicStyle
+    : sanitizeMusicStyle(styleInput, base.musicStyle ?? DEFAULT_MUSIC_STYLE);
 
   const template = TEMPLATE_IDS.includes(raw.template as TemplateId)
     ? (raw.template as TemplateId)
@@ -316,6 +571,8 @@ export function sanitizeSpec(input: unknown, fallback?: GameSpec): GameSpec {
   return {
     template,
     ...(music ? { music } : {}),
+    ...(musicPrompt ? { musicPrompt } : {}),
+    ...(musicStyle ? { musicStyle } : {}),
     title: sanitizeTitle(raw.title, defaultTitle(template, theme)),
     theme,
     speed,

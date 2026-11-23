@@ -3,10 +3,13 @@
 // 本文件不读取、不记录、不向前端暴露任何数据库连接信息。
 // 表位于平台的 app schema，列名为 snake_case，这里统一映射到领域模型的 camelCase。
 
+import type { CreationTemplate } from './shared/creation-template.ts';
+
 import type {
   Game,
   GameFilter,
   Message,
+  MusicStyleSettings,
   Project,
   Session,
   Store,
@@ -67,8 +70,48 @@ export function createSupabaseStore(client: DatabaseClient): Store {
       return rows[0] ? fromRow<Session>(rows[0]) : null;
     },
 
+    async getMusicStyleSettings(ownerToken) {
+      const rows = check(
+        await client.from('myol_music_style_settings').select('*').eq('owner_token', ownerToken).limit(1),
+      ) as Row[];
+      return rows[0] ? fromRow<MusicStyleSettings>(rows[0]) : null;
+    },
+    async saveMusicStyleSettings(settings) {
+      check(
+        await client
+          .from('myol_music_style_settings')
+          .upsert(toRow(settings), { onConflict: 'owner_token' })
+          .select('owner_token')
+          .single(),
+      );
+    },
+    async deleteMusicStyleSettings(ownerToken) {
+      check(await client.from('myol_music_style_settings').delete().eq('owner_token', ownerToken).select('owner_token'));
+    },
+
+    // 云端暂未建账号级游戏模型表；本地路由也不会在云端开放写入。
+    async getGameModelSettings() {
+      return null;
+    },
+    async saveGameModelSettings() {
+      throw new Error('cloud_game_model_settings_disabled');
+    },
+    async deleteGameModelSettings() {
+      throw new Error('cloud_game_model_settings_disabled');
+    },
+
     async createProject(project) {
       check(await client.from('myol_projects').insert(toRow(project)).select('id').single());
+    },
+    async createProjectFromTemplate(project, version, message) {
+      await store.createProject(project);
+      try {
+        await store.createVersion(version);
+        await store.addMessage(message);
+      } catch (error) {
+        await store.deleteProject(project.id);
+        throw error;
+      }
     },
     async getProject(id) {
       const rows = check(
@@ -169,6 +212,36 @@ export function createSupabaseStore(client: DatabaseClient): Store {
           .limit(200),
       ) as Row[];
       return fromRows<TaskRecord>(rows);
+    },
+
+    async listPendingTasks() {
+      const rows = check(await client.from('myol_tasks').select('*')
+        .eq('generation_mode', 'agent').is('finished_at', null)) as Row[];
+      return fromRows<TaskRecord>(rows);
+    },
+
+    async createCreationTemplate(template) {
+      check(await client.from('myol_creation_templates').insert(toRow(template)).select('id').single());
+    },
+    async getCreationTemplate(id) {
+      const rows = check(await client.from('myol_creation_templates').select('*').eq('id', id).limit(1)) as Row[];
+      return rows[0] ? fromRow<CreationTemplate>(rows[0]) : null;
+    },
+    async listCreationTemplates(filter) {
+      let query = client.from('myol_creation_templates').select('*', { count: 'exact' });
+      query = filter.ownerToken ? query.eq('owner_token', filter.ownerToken) : query.eq('published', true);
+      if (filter.kind) query = query.eq('official', filter.kind === 'official');
+      if (filter.q) {
+        const safe = filter.q.replace(/[^\p{L}\p{N} -]/gu, ' ').slice(0, 60);
+        query = query.or('title.ilike.%' + safe + '%,description.ilike.%' + safe + '%,author_name.ilike.%' + safe + '%');
+      }
+      const result = await query.order('created_at', { ascending: false }).order('id', { ascending: true })
+        .range(filter.offset, filter.offset + filter.limit - 1);
+      if (result.error) throw new Error('database_error:' + (result.error.code ?? 'unknown'));
+      return { items: fromRows<CreationTemplate>((result.data ?? []) as Row[]), total: result.count ?? 0 };
+    },
+    async setCreationTemplatePublished(id, published) {
+      check(await client.from('myol_creation_templates').update({ published }).eq('id', id).select('id').single());
     },
 
     async upsertGame(game) {

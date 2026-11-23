@@ -1,6 +1,7 @@
 // 领域模型与存储接口：本地文件存储与云端 Supabase 存储实现同一接口，
 // 业务路由（handler.ts）只依赖该接口，保证部署到 Qoder Sites 时行为一致。
 
+import type { CreationTemplate, CreationTemplateFilter, TemplateOrigin } from './shared/creation-template.ts';
 import type { Difficulty, GameSpec, GenerationMode, TemplateId, ThemeId } from './shared/spec.ts';
 
 export interface Session {
@@ -8,6 +9,24 @@ export interface Session {
   nickname: string;
   official: boolean;
   createdAt: string;
+}
+
+// 账号级 OpenAI 兼容编曲模型配置；同样只在服务端保存密钥。
+export interface MusicStyleSettings {
+  ownerToken: string;
+  apiUrl: string;
+  apiKey: string;
+  model: string;
+  updatedAt: string;
+}
+
+// 账号级游戏源码开发模型配置；密钥只保存在服务端，接口只回传 hasKey。
+export interface GameModelSettings {
+  ownerToken: string;
+  apiUrl: string;
+  apiKey: string;
+  model: string;
+  updatedAt: string;
 }
 
 export interface Project {
@@ -21,6 +40,9 @@ export interface Project {
   allowDownload: boolean;
   createdAt: string;
   updatedAt: string;
+  templateOrigin?: TemplateOrigin;
+  // 用户选择不基于模板，由模型从空白骨架生成完整源码。
+  fromScratch?: boolean;
 }
 
 export interface Version {
@@ -33,6 +55,19 @@ export interface Version {
   note: string;
   generationMode: GenerationMode;
   createdAt: string;
+  artifactHash?: string;
+  checks?: ArtifactChecks;
+  agentName?: string;
+  templateOrigin?: TemplateOrigin;
+}
+
+export interface ArtifactChecks {
+  browser: 'passed';
+  canvas: boolean;
+  input: boolean;
+  restart: boolean;
+  screenshotHash: string;
+  checkedAt: string;
 }
 
 export interface Message {
@@ -55,13 +90,18 @@ export interface TaskRecord {
   id: string;
   projectId: string;
   prompt: string;
-  status: 'succeeded' | 'failed';
+  status: 'queued' | 'running' | 'checking' | 'repairing' | 'succeeded' | 'failed' | 'cancelled' | 'timed_out';
   stages: TaskStage[];
   versionId: string | null;
   error: string | null;
+  // 可分类的失败原因，例如 model_auth_failed、model_rate_limited、check_failed。
+  errorCode?: string;
   generationMode: GenerationMode;
   createdAt: string;
   finishedAt: string | null;
+  baseVersionId?: string;
+  baseUpdatedAt?: string;
+  baseSpec?: GameSpec;
 }
 
 export interface Game {
@@ -101,7 +141,16 @@ export interface Store {
   createSession(session: Session): Promise<void>;
   getSession(token: string): Promise<Session | null>;
 
+  getMusicStyleSettings(ownerToken: string): Promise<MusicStyleSettings | null>;
+  saveMusicStyleSettings(settings: MusicStyleSettings): Promise<void>;
+  deleteMusicStyleSettings(ownerToken: string): Promise<void>;
+
+  getGameModelSettings(ownerToken: string): Promise<GameModelSettings | null>;
+  saveGameModelSettings(settings: GameModelSettings): Promise<void>;
+  deleteGameModelSettings(ownerToken: string): Promise<void>;
+
   createProject(project: Project): Promise<void>;
+  createProjectFromTemplate(project: Project, version: Version, message: Message): Promise<void>;
   getProject(id: string): Promise<Project | null>;
   updateProject(project: Project): Promise<void>;
   listProjects(ownerToken: string): Promise<Project[]>;
@@ -118,6 +167,7 @@ export interface Store {
   updateTask(task: TaskRecord): Promise<void>;
   getTask(id: string): Promise<TaskRecord | null>;
   listTasks(projectId: string): Promise<TaskRecord[]>;
+  listPendingTasks(): Promise<TaskRecord[]>;
 
   upsertGame(game: Game): Promise<void>;
   getGame(id: string): Promise<Game | null>;
@@ -130,4 +180,9 @@ export interface Store {
   isFavorite(token: string, gameId: string): Promise<boolean>;
   listFavoriteGameIds(token: string): Promise<string[]>;
   countFavorites(gameId: string): Promise<number>;
+
+  createCreationTemplate(template: CreationTemplate): Promise<void>;
+  getCreationTemplate(id: string): Promise<CreationTemplate | null>;
+  listCreationTemplates(filter: CreationTemplateFilter): Promise<{ items: CreationTemplate[]; total: number }>;
+  setCreationTemplatePublished(id: string, published: boolean): Promise<void>;
 }

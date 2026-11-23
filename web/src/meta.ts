@@ -6,7 +6,15 @@ import type { TemplateMeta, ThemeId, Palette, Difficulty } from '@shared/spec.ts
 
 export interface MetaInfo {
   siteName: string;
-  generationMode: 'template' | 'model';
+  generationMode: 'template' | 'model' | 'agent';
+  agent: {
+    configured: boolean;
+    name: string | null;
+    provider: string | null;
+    model: string | null;
+    sourceDevelopment: boolean;
+    accountModelConfig: boolean;
+  };
   model: { configured: boolean; name: string | null };
   identityNotice: string;
   templates: TemplateMeta[];

@@ -1,8 +1,12 @@
 // 业务路由：与运行时无关（Web Request/Response），本地 Node 与云端 Deno Edge Function 共用。
 // 身份模型：匿名会话 + 创作者令牌（原型级，非完整账号系统，界面与文档均已注明）。
-// 安全约束：所有输入白名单校验；游戏 HTML 只由内置模板生成；绝不执行或转发用户脚本。
+// 生成游戏通过独立沙箱页面预览；业务进程不执行生成的脚本。
 
+import { buildCommunityRoutes } from './community.ts';
+import { retainAttributions } from './shared/creation-template.ts';
 import { generateGame } from './generate.ts';
+import type { AgentService } from './agent.ts';
+import { GAME_CSP, embedGamePolicy } from './shared/artifact.ts';
 import { buildSourcePackage } from './shared/source.ts';
 import {
   DIFFICULTIES,
@@ -18,6 +22,14 @@ import {
   type ThemeId,
 } from './shared/spec.ts';
 import { modelConfigured, type ModelEnv } from './shared/model.ts';
+import { generateMusicStyle, musicStyleConfigured, parseMusicStyleSettingsInput, probeMusicStyle, type MusicStyleEnv } from './shared/music-style.ts';
+import {
+  GAME_MODEL_TIMEOUT_MS,
+  gameModelConfigured,
+  parseGameModelSettingsInput,
+  probeGameModel,
+  type GameModelEnv,
+} from './shared/game-model.ts';
 import type {
   Game,
   GameFilter,
@@ -31,19 +43,25 @@ import type {
 
 export interface HandlerEnv {
   model: ModelEnv;
+  musicStyle?: MusicStyleEnv;
+  // 账号级游戏模型配置仅在本地 OpenAI 兼容源码开发模式下开放。
+  agentModel?: {
+    provider: string | null;
+    allowLocal: boolean;
+    server: GameModelEnv | null;
+  };
 }
 
 export interface HandlerDeps {
   store: Store;
   env: HandlerEnv;
+  agent?: AgentService;
 }
 
 const ID_RE = /^[0-9a-fA-F-]{8,64}$/;
 const MAX_BODY = 64 * 1024;
 const MAX_PROMPT = 2000;
 const MAX_DESCRIPTION = 500;
-const GAME_CSP =
-  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'";
 
 interface HttpError {
   status: number;
@@ -149,6 +167,51 @@ async function authenticate(deps: HandlerDeps, req: Request, required: boolean):
   return session;
 }
 
+// 账号保存的编曲模型优先于服务端环境变量；显式配置失败时回退默认合成配乐。
+async function musicStyleForSession(deps: HandlerDeps, session: Session): Promise<MusicStyleEnv | undefined> {
+  const settings = await deps.store.getMusicStyleSettings(session.token);
+  if (settings) return { apiUrl: settings.apiUrl, apiKey: settings.apiKey, model: settings.model };
+  return deps.env.musicStyle;
+}
+
+async function musicStyleSettingsView(deps: HandlerDeps, session: Session): Promise<Record<string, unknown>> {
+  const settings = await deps.store.getMusicStyleSettings(session.token);
+  const account = settings && settings.apiKey
+    ? { apiUrl: settings.apiUrl, model: settings.model, hasKey: true }
+    : null;
+  const server = musicStyleConfigured(deps.env.musicStyle);
+  return {
+    account,
+    server: server ? { model: deps.env.musicStyle?.model ?? null } : null,
+    effective: account ? 'account' : server ? 'server' : 'none',
+  };
+}
+
+function requireAccountGameModel(deps: HandlerDeps): NonNullable<HandlerEnv['agentModel']> {
+  const policy = deps.env.agentModel;
+  if (!policy || policy.provider !== 'openai') {
+    throw httpError(409, 'agent_model_unavailable', '服务端未启用 OpenAI 兼容源码开发，账号级游戏模型配置暂不可用');
+  }
+  return policy;
+}
+
+async function gameModelSettingsView(deps: HandlerDeps, session: Session): Promise<Record<string, unknown>> {
+  const policy = deps.env.agentModel;
+  const available = policy?.provider === 'openai';
+  const settings = await deps.store.getGameModelSettings(session.token);
+  const server = gameModelConfigured(policy?.server) ? policy!.server! : null;
+  return {
+    available,
+    provider: policy?.provider ?? null,
+    allowLocal: Boolean(policy?.allowLocal),
+    account: settings
+      ? { apiUrl: settings.apiUrl, model: settings.model, hasKey: Boolean(settings.apiKey) }
+      : null,
+    server: server ? { model: server.model } : null,
+    effective: settings ? 'account' : server ? 'server' : 'none',
+  };
+}
+
 function publicGame(game: Game, favorited: boolean): Record<string, unknown> {
   return {
     id: game.id,
@@ -175,6 +238,10 @@ function versionSummary(version: Version): Record<string, unknown> {
     spec: version.spec,
     note: version.note,
     generationMode: version.generationMode,
+    artifactHash: version.artifactHash,
+    checks: version.checks,
+    agentName: version.agentName,
+    templateOrigin: version.templateOrigin,
     createdAt: version.createdAt,
   };
 }
@@ -188,6 +255,8 @@ function projectSummary(project: Project): Record<string, unknown> {
     visibility: project.visibility,
     gameId: project.gameId,
     allowDownload: project.allowDownload,
+    templateOrigin: project.templateOrigin,
+    fromScratch: project.fromScratch === true,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,
   };
@@ -209,7 +278,17 @@ async function runGenerationTask(
   project: Project,
   prompt: string,
   specOverride: unknown,
+  styleModel?: MusicStyleEnv,
+  usePreviewedStyle = false,
 ): Promise<{ task: TaskRecord; version: Version; notes: string[] }> {
+  if (project.templateOrigin) throw httpError(409, 'agent_required', '此项目基于社区源码模板，修改需要启用 Agent 源码开发');
+  // 从零项目没有可重渲染的模板，回退到模板模式会丢失用户选择的创作方式。
+  if (project.fromScratch) throw httpError(409, 'agent_required', '此项目从零生成，继续修改需要启用 Agent 源码开发');
+  // AI 版本的真实玩法以源码为准；模板重渲染会覆盖已有修改，必须由源码开发链路继续。
+  const current = project.currentVersionId ? await deps.store.getVersion(project.currentVersionId) : null;
+  if (current?.generationMode === 'agent') {
+    throw httpError(409, 'agent_required', '当前版本由 AI 源码开发产生，模板模式重新渲染会覆盖玩法；请启用源码开发服务后继续修改');
+  }
   const baseSpec = specOverride
     ? sanitizeSpec(specOverride, project.spec)
     : project.spec;
@@ -237,7 +316,7 @@ async function runGenerationTask(
     createdAt: now,
   });
 
-  const result = await generateGame({ prompt, baseSpec, env: deps.env.model });
+  const result = await generateGame({ prompt, baseSpec, env: deps.env.model, styleModel, usePreviewedStyle });
   task.stages = result.stages;
   task.generationMode = result.mode;
   task.finishedAt = new Date().toISOString();
@@ -309,7 +388,7 @@ type RouteContext = {
   query: URLSearchParams;
 };
 
-type Route = {
+export type Route = {
   method: string;
   pattern: RegExp;
   handle: (ctx: RouteContext) => Promise<Response>;
@@ -317,13 +396,23 @@ type Route = {
 
 function buildRoutes(): Route[] {
   return [
+    ...buildCommunityRoutes({ authenticate, getOwnedProject, readBody, json, gameHtmlResponse, projectSummary, versionSummary }),
     {
       method: 'GET',
       pattern: /^\/api\/meta$/,
       handle: async ({ deps }) =>
         json({
           siteName: 'MYolGame',
-          generationMode: modelConfigured(deps.env.model) ? 'model' : 'template',
+          generationMode: deps.agent ? 'agent' : modelConfigured(deps.env.model) ? 'model' : 'template',
+          agent: {
+            configured: Boolean(deps.agent),
+            name: deps.agent?.name ?? null,
+            provider: deps.agent?.provider ?? null,
+            model: deps.agent?.model ?? null,
+            sourceDevelopment: Boolean(deps.agent),
+            // 账号级模型配置仅在 openai provider 下可用。
+            accountModelConfig: deps.env.agentModel?.provider === 'openai',
+          },
           model: {
             configured: modelConfigured(deps.env.model),
             name: deps.env.model.name ?? null,
@@ -337,6 +426,174 @@ function buildRoutes(): Route[] {
           themeIds: THEME_IDS,
           limits: { promptMaxLength: MAX_PROMPT, descriptionMaxLength: MAX_DESCRIPTION },
         }),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/music\/style-model$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        return json(await musicStyleSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
+      },
+    },
+    {
+      method: 'PUT',
+      pattern: /^\/api\/music\/style-model$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        const body = await readBody(req);
+        const previous = await deps.store.getMusicStyleSettings(session!.token);
+        const parsed = parseMusicStyleSettingsInput(body, previous?.apiKey);
+        if (!parsed.ok) return fail(400, 'invalid_music_style_settings', parsed.error);
+        await deps.store.saveMusicStyleSettings({
+          ownerToken: session!.token,
+          apiUrl: parsed.apiUrl,
+          apiKey: parsed.apiKey,
+          model: parsed.model,
+          updatedAt: new Date().toISOString(),
+        });
+        return json(await musicStyleSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/music\/style-model\/test$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        const body = await readBody(req);
+        const previous = await deps.store.getMusicStyleSettings(session!.token);
+        const parsed = parseMusicStyleSettingsInput({
+          apiUrl: body.apiUrl ?? previous?.apiUrl,
+          apiKey: body.apiKey,
+          model: body.model ?? previous?.model,
+        }, previous?.apiKey);
+        if (!parsed.ok) return fail(400, 'invalid_music_style_settings', parsed.error);
+
+        const started = Date.now();
+        const result = await probeMusicStyle(parsed);
+        const elapsedMs = Date.now() - started;
+        const headers = { 'cache-control': 'no-store' };
+        if (!result.ok) return json({ ok: false, error: result.error, url: result.url, elapsedMs }, 200, headers);
+        return json({
+          ok: true,
+          model: result.model,
+          bpm: result.style.bpm,
+          progression: result.style.progression,
+          transpose: result.style.transpose,
+          url: result.url,
+          elapsedMs,
+        }, 200, headers);
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/music\/style\/preview$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        const body = await readBody(req);
+        const prompt = typeof body.prompt === 'string' ? body.prompt.slice(0, MAX_PROMPT) : '';
+        const spec = sanitizeSpec(body.spec);
+        const env = await musicStyleForSession(deps, session!);
+        if (!musicStyleConfigured(env)) {
+          return json({ ok: false, error: 'style_not_configured' }, 200, { 'cache-control': 'no-store' });
+        }
+        const styled = await generateMusicStyle(prompt, spec, env!);
+        if (!styled) {
+          return json({ ok: false, error: 'style_model_failed' }, 200, { 'cache-control': 'no-store' });
+        }
+        return json({
+          ok: true,
+          model: styled.model,
+          style: styled.style,
+        }, 200, { 'cache-control': 'no-store' });
+      },
+    },
+    {
+      method: 'DELETE',
+      pattern: /^\/api\/music\/style-model$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        await deps.store.deleteMusicStyleSettings(session!.token);
+        return json(await musicStyleSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
+      },
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/agent\/model$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        return json(await gameModelSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
+      },
+    },
+    {
+      method: 'PUT',
+      pattern: /^\/api\/agent\/model$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        const policy = requireAccountGameModel(deps);
+        const body = await readBody(req);
+        const previous = await deps.store.getGameModelSettings(session!.token);
+        const parsed = parseGameModelSettingsInput(body, previous?.apiKey, policy.allowLocal);
+        if (!parsed.ok) return fail(400, 'invalid_game_model_settings', parsed.error);
+        await deps.store.saveGameModelSettings({
+          ownerToken: session!.token,
+          apiUrl: parsed.apiUrl,
+          apiKey: parsed.apiKey,
+          model: parsed.model,
+          updatedAt: new Date().toISOString(),
+        });
+        return json(await gameModelSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/agent\/model\/test$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        const policy = requireAccountGameModel(deps);
+        const body = await readBody(req);
+        const previous = await deps.store.getGameModelSettings(session!.token);
+        const server = gameModelConfigured(policy.server) ? policy.server! : null;
+        const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value : undefined);
+        const hasForm = Boolean(text(body.apiUrl) || text(body.apiKey) || text(body.model));
+        // 未填写的字段依次沿用账号已保存配置与服务端环境配置，便于先测试后再保存。
+        const parsed = parseGameModelSettingsInput(
+          {
+            apiUrl: text(body.apiUrl) ?? previous?.apiUrl ?? server?.apiUrl,
+            apiKey: text(body.apiKey),
+            model: text(body.model) ?? previous?.model ?? server?.model,
+          },
+          previous?.apiKey ?? server?.apiKey,
+          policy.allowLocal,
+        );
+        if (!parsed.ok) return fail(400, 'invalid_game_model_settings', parsed.error);
+
+        const started = Date.now();
+        const result = await probeGameModel(parsed, GAME_MODEL_TIMEOUT_MS);
+        const elapsedMs = Date.now() - started;
+        const source = hasForm ? 'form' : previous ? 'account' : 'server';
+        const headers = { 'cache-control': 'no-store' };
+        if (!result.ok) {
+          return json({ ok: false, error: result.error, url: result.url, elapsedMs, source }, 200, headers);
+        }
+        return json({
+          ok: true,
+          model: result.model,
+          reply: result.reply,
+          url: result.url,
+          elapsedMs,
+          source,
+        }, 200, headers);
+      },
+    },
+    {
+      method: 'DELETE',
+      pattern: /^\/api\/agent\/model$/,
+      handle: async ({ deps, req }) => {
+        const session = await authenticate(deps, req, true);
+        requireAccountGameModel(deps);
+        await deps.store.deleteGameModelSettings(session!.token);
+        return json(await gameModelSettingsView(deps, session!), 200, { 'cache-control': 'no-store' });
+      },
     },
     {
       method: 'POST',
@@ -418,7 +675,7 @@ function buildRoutes(): Route[] {
         const version = await deps.store.getVersion(game.versionId);
         if (!version) throw httpError(404, 'version_not_found', '游戏版本数据缺失');
         await deps.store.incrementPlays(game.id);
-        return gameHtmlResponse(version.html);
+        return gameHtmlResponse(retainAttributions(version.html, version.templateOrigin));
       },
     },
     {
@@ -430,7 +687,7 @@ function buildRoutes(): Route[] {
         if (!game.allowDownload) throw httpError(403, 'download_disabled', '创作者未开放该游戏下载');
         const version = await deps.store.getVersion(game.versionId);
         if (!version) throw httpError(404, 'version_not_found', '游戏版本数据缺失');
-        return gameHtmlResponse(version.html, game.title);
+        return gameHtmlResponse(retainAttributions(version.html, version.templateOrigin), game.title);
       },
     },
     {
@@ -487,6 +744,11 @@ function buildRoutes(): Route[] {
         const session = await authenticate(deps, req, true);
         const body = await readBody(req);
         const prompt = requireString(body.prompt, '提示词', MAX_PROMPT);
+        const fromScratch = body.fromScratch === true;
+        // 从零生成完全依赖模型编写源码，模板模式无法替代。
+        if (fromScratch && !deps.agent) {
+          return fail(409, 'agent_required', '从零生成需要启用 AI 源码开发服务');
+        }
 
         const now = new Date().toISOString();
         const initialSpec = body.spec ? sanitizeSpec(body.spec) : defaultSpec();
@@ -501,19 +763,33 @@ function buildRoutes(): Route[] {
           allowDownload: true,
           createdAt: now,
           updatedAt: now,
+          fromScratch: fromScratch || undefined,
         };
         await deps.store.createProject(project);
         await deps.store.addMessage({
           id: crypto.randomUUID(),
           projectId: project.id,
           role: 'system',
-          content: '项目已创建（私有草稿）。' + (modelConfigured(deps.env.model) ? '' : '当前平台未配置真实模型，处于模板模式。'),
+          content: fromScratch
+            ? '项目已创建（私有草稿，从零生成）。Agent 将按需求编写完整源码并检查游戏。'
+            : '项目已创建（私有草稿）。' + (deps.agent ? 'Agent 将在后台开发并检查游戏。' : modelConfigured(deps.env.model) ? '' : '当前平台未配置真实模型，处于模板模式。'),
           taskId: null,
           createdAt: now,
         });
 
         try {
-          const { task, version } = await runGenerationTask(deps, project, prompt, body.spec);
+          if (deps.agent) {
+            const task = await deps.agent.submit(project, prompt, initialSpec);
+            return json({ project: projectSummary(project), task }, 202);
+          }
+          const { task, version } = await runGenerationTask(
+            deps,
+            project,
+            prompt,
+            body.spec,
+            await musicStyleForSession(deps, session!),
+            body.musicStylePreviewed === true,
+          );
           return json(
             { project: projectSummary(project), version: versionSummary(version), task },
             201,
@@ -548,6 +824,11 @@ function buildRoutes(): Route[] {
       handle: async ({ deps, req, params }) => {
         const session = await authenticate(deps, req, true);
         const project = await getOwnedProject(deps, params[0]!, session!);
+        if (deps.agent) {
+          for (const task of await deps.store.listTasks(project.id)) {
+            if (!task.finishedAt) await deps.agent.cancel(task);
+          }
+        }
         if (project.gameId) await deps.store.deleteGame(project.gameId);
         await deps.store.deleteProject(project.id);
         return json({ ok: true });
@@ -561,7 +842,11 @@ function buildRoutes(): Route[] {
         const project = await getOwnedProject(deps, params[0]!, session!);
         const body = await readBody(req);
         const prompt = requireString(body.prompt, '提示词', MAX_PROMPT);
-        const { task, version } = await runGenerationTask(deps, project, prompt, body.spec);
+        if (deps.agent) {
+          const task = await deps.agent.submit(project, prompt, sanitizeSpec(body.spec, project.spec));
+          return json({ project: projectSummary(project), task }, 202);
+        }
+        const { task, version } = await runGenerationTask(deps, project, prompt, body.spec, await musicStyleForSession(deps, session!));
         return json(
           { project: projectSummary(project), version: versionSummary(version), task },
           201,
@@ -598,6 +883,29 @@ function buildRoutes(): Route[] {
       },
     },
     {
+      method: 'GET',
+      pattern: /^\/api\/projects\/([^/]+)\/tasks\/([^/]+)$/,
+      handle: async ({ deps, req, params }) => {
+        const session = await authenticate(deps, req, true);
+        const project = await getOwnedProject(deps, params[0]!, session!);
+        const task = await deps.store.getTask(params[1]!);
+        if (!task || task.projectId !== project.id) throw httpError(404, 'task_not_found', '任务不存在');
+        return json({ task });
+      },
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/projects\/([^/]+)\/tasks\/([^/]+)\/cancel$/,
+      handle: async ({ deps, req, params }) => {
+        const session = await authenticate(deps, req, true);
+        const project = await getOwnedProject(deps, params[0]!, session!);
+        const task = await deps.store.getTask(params[1]!);
+        if (!task || task.projectId !== project.id) throw httpError(404, 'task_not_found', '任务不存在');
+        if (deps.agent) await deps.agent.cancel(task);
+        return json({ task });
+      },
+    },
+    {
       method: 'POST',
       pattern: /^\/api\/projects\/([^/]+)\/publish$/,
       handle: async ({ deps, req, params }) => {
@@ -605,7 +913,7 @@ function buildRoutes(): Route[] {
         const project = await getOwnedProject(deps, params[0]!, session!);
         const body = await readBody(req).catch(() => ({}) as Record<string, unknown>);
         const description = optionalString(body.description, '介绍', MAX_DESCRIPTION) ??
-          project.spec.title + '：由 MYolGame 模板引擎生成的网页小游戏（玩法：' +
+          project.spec.title + '：由 MYolGame 创作的网页小游戏（基础玩法：' +
           (TEMPLATES.find((t) => t.id === project.spec.template)?.name ?? project.spec.template) +
           '），欢迎试玩。';
         const allowDownload = body.allowDownload === undefined ? project.allowDownload : body.allowDownload === true;
@@ -683,10 +991,8 @@ function buildRoutes(): Route[] {
         if (!version || version.projectId !== project.id) {
           throw httpError(404, 'version_not_found', '版本不存在');
         }
-        // 工作台鉴权获取 HTML 后用 srcdoc 运行，文档内也需要同样的网络限制。
-        const html = version.html.replace('<head>', '<head>\n<meta http-equiv="Content-Security-Policy" content="' + GAME_CSP + '">');
-        if (html === version.html) throw httpError(500, 'invalid_artifact', '游戏预览格式不正确');
-        return gameHtmlResponse(html);
+        // srcDoc 不继承响应头；为自由生成的完整 HTML 加上前置资源限制。
+        return gameHtmlResponse(embedGamePolicy(retainAttributions(version.html, version.templateOrigin)));
       },
     },
     {
@@ -699,7 +1005,7 @@ function buildRoutes(): Route[] {
         if (!version || version.projectId !== project.id) {
           throw httpError(404, 'version_not_found', '版本不存在');
         }
-        return gameHtmlResponse(version.html, version.spec.title + '-' + version.note);
+        return gameHtmlResponse(retainAttributions(version.html, version.templateOrigin), version.spec.title + '-' + version.note);
       },
     },
     {
@@ -719,6 +1025,7 @@ function buildRoutes(): Route[] {
           mode: version.generationMode,
           versionNote: version.note,
           createdAt: version.createdAt,
+          templateOrigin: version.templateOrigin,
         });
         return zipResponse(bytes, project.title + '-source');
       },
@@ -750,12 +1057,17 @@ export function createHandler(deps: HandlerDeps): (req: Request) => Promise<Resp
         const match = route.pattern.exec(path);
         if (!match) continue;
         if (route.method !== req.method) continue;
-        return await route.handle({
+        const context = {
           deps,
           req,
           params: match.slice(1),
           query: url.searchParams,
-        });
+        };
+        // 项目变更与 Worker 的最终提交共用锁，避免回退、删除和提交交错覆盖。
+        if (deps.agent && req.method !== 'GET' && path.startsWith('/api/projects/')) {
+          return await deps.agent.exclusive(match[1]!, () => route.handle(context));
+        }
+        return await route.handle(context);
       }
       // 路径匹配但方法不允许
       for (const route of ROUTES) {

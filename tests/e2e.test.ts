@@ -6,8 +6,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startLocalServer } from '../dev/local-server.ts';
+import { resolveChromePath } from '../dev/chrome.ts';
 
-const CHROME_PATH = '/usr/bin/google-chrome';
+const CHROME_PATH = resolveChromePath();
 const rootDir = fileURLToPath(new URL('..', import.meta.url));
 const distDir = join(rootDir, 'web', 'dist');
 
@@ -112,13 +113,17 @@ describe('浏览器端到端测试', () => {
       throw new Error('web/dist/index.html 不存在，请先运行 npm run build');
     }
     dataDir = mkdtempSync(join(tmpdir(), 'myol-e2e-'));
-    server = await startLocalServer({
+    server = await startLocalServer({ agent: false,
       port: 0,
       dataFile: join(dataDir, 'db.json'),
       distDir,
       seed: true,
     });
-    browser = await chromium.launch({ executablePath: CHROME_PATH, headless: true });
+    browser = await chromium.launch({ executablePath: CHROME_PATH, headless: true }).catch(async (error) => {
+      await server.close();
+      rmSync(dataDir, { recursive: true, force: true });
+      throw error;
+    });
   });
 
   after(async () => {
@@ -272,7 +277,7 @@ describe('浏览器端到端测试', () => {
       assert.ok(v1Spec?.includes('1.4x'), 'v1 速度应因“快速”提示词提升为 1.4x');
 
       // 2. 在工作台生成新版本（修改参数）
-      await page.getByPlaceholder('提出修改需求').fill('把速度改成极速，加一条命');
+      await page.locator('.chat-input textarea').fill('把速度改成极速，加一条命');
       await page.getByRole('button', { name: '生成新版本' }).click();
       await page.getByRole('status').filter({ hasText: /已生成/ }).waitFor({ timeout: 15000 });
 
@@ -302,7 +307,7 @@ describe('浏览器端到端测试', () => {
       // 4. 下载当前版本的源码包 ZIP
       const [zipDownload] = await Promise.all([
         page.waitForEvent('download'),
-        page.getByRole('button', { name: '下载源码包（ZIP）' }).click(),
+        page.getByRole('button', { name: '下载源码包（当前预览版本）' }).click(),
       ]);
       const zipPath = await zipDownload.path();
       assert.ok(zipPath);

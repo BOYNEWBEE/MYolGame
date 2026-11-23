@@ -3,10 +3,13 @@
 
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import type { CreationTemplate, CreationTemplateFilter } from '../functions/shared/creation-template.ts';
 import type {
   Game,
   GameFilter,
+  GameModelSettings,
   Message,
+  MusicStyleSettings,
   Project,
   Session,
   Store,
@@ -14,7 +17,17 @@ import type {
   Version,
 } from '../functions/store.ts';
 
+export interface LocalAccount {
+  id: string; username: string; nickname: string; passwordHash: string; salt: string; ownerToken: string;
+}
+export interface AccountSession { hash: string; accountId: string; expiresAt: number }
+
 interface DbShape {
+  accounts: LocalAccount[];
+  accountSessions: AccountSession[];
+  creationTemplates: CreationTemplate[];
+  musicStyleSettings: MusicStyleSettings[];
+  gameModelSettings: GameModelSettings[];
   sessions: Session[];
   projects: Project[];
   versions: Version[];
@@ -26,6 +39,11 @@ interface DbShape {
 
 function emptyDb(): DbShape {
   return {
+    accounts: [],
+    accountSessions: [],
+    creationTemplates: [],
+    musicStyleSettings: [],
+    gameModelSettings: [],
     sessions: [],
     projects: [],
     versions: [],
@@ -48,18 +66,40 @@ export class FileStore implements Store {
 
   async init(): Promise<void> {
     if (this.loaded) return;
+    let raw: string | null = null;
     try {
-      const raw = await readFile(this.filePath, 'utf8');
-      const parsed = JSON.parse(raw) as Partial<DbShape>;
-      this.db = { ...emptyDb(), ...parsed };
+      raw = await readFile(this.filePath, 'utf8');
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        console.error('读取本地数据失败，使用空数据启动：', (error as Error).message);
+        // 读取失败可能意味着权限或磁盘问题；停止启动并保留原文件。
+        throw new Error('读取本地数据失败：' + ((error as Error).message || '未知错误'));
       }
+    }
+
+    if (raw === null) {
+      // 只有文件不存在时才创建空数据库，避免损坏文件被空数据覆盖。
       this.db = emptyDb();
+      await this.persist();
+    } else {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new Error('本地数据文件不是合法 JSON，已停止启动并保留原文件：' + this.filePath);
+      }
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        throw new Error('本地数据文件结构无效，已停止启动并保留原文件：' + this.filePath);
+      }
+      const record = parsed as Record<string, unknown>;
+      const merged = { ...emptyDb(), ...record } as DbShape;
+      for (const key of Object.keys(emptyDb()) as (keyof DbShape)[]) {
+        if (!Array.isArray(merged[key])) {
+          throw new Error('本地数据文件字段 ' + key + ' 不是数组，已停止启动并保留原文件：' + this.filePath);
+        }
+      }
+      this.db = merged;
     }
     this.loaded = true;
-    await this.persist();
   }
 
   private persist(): Promise<void> {
@@ -67,10 +107,69 @@ export class FileStore implements Store {
     this.writeQueue = this.writeQueue.then(async () => {
       await mkdir(dirname(this.filePath), { recursive: true });
       const tmp = this.filePath + '.tmp';
-      await writeFile(tmp, JSON.stringify(this.db), 'utf8');
+      await writeFile(tmp, JSON.stringify(this.db), { encoding: 'utf8', mode: 0o600 });
       await rename(tmp, this.filePath);
     });
     return this.writeQueue;
+  }
+
+  findAccount(username: string): LocalAccount | undefined {
+    return this.db.accounts.find(a => a.username === username);
+  }
+
+  accountForSession(hash: string): LocalAccount | undefined {
+    const session = this.db.accountSessions.find(s => s.hash === hash && s.expiresAt > Date.now());
+    return session && this.db.accounts.find(a => a.id === session.accountId);
+  }
+
+  async saveAccount(account: LocalAccount, session: AccountSession, guestToken?: string): Promise<void> {
+    if (!this.db.accounts.some(a => a.id === account.id)) this.db.accounts.push(account);
+    this.db.accountSessions = this.db.accountSessions.filter(s => s.expiresAt > Date.now());
+    this.db.accountSessions.push(session);
+    if (!this.db.sessions.some(s => s.token === account.ownerToken)) {
+      this.db.sessions.push({ token: account.ownerToken, nickname: account.nickname, official: false, createdAt: new Date().toISOString() });
+    }
+    // 仅迁移真实游客的归属，并撤销旧令牌；账号归属标识永远不交给浏览器。
+    const guest = this.db.sessions.find(s => s.token === guestToken && !s.official && !s.token.startsWith('account:'));
+    if (guest) {
+      for (const p of this.db.projects) if (p.ownerToken === guest.token) p.ownerToken = account.ownerToken;
+      for (const t of this.db.creationTemplates) if (t.ownerToken === guest.token) t.ownerToken = account.ownerToken;
+      for (const f of [...this.db.favorites]) {
+        if (f.token === guest.token && !this.db.favorites.some(x => x.token === account.ownerToken && x.gameId === f.gameId)) {
+          this.db.favorites.push({ ...f, token: account.ownerToken });
+        }
+      }
+      this.db.favorites = this.db.favorites.filter(f => f.token !== guest.token);
+      const guestStyle = this.db.musicStyleSettings.find(s => s.ownerToken === guest.token);
+      if (guestStyle) {
+        this.db.musicStyleSettings = this.db.musicStyleSettings.filter(s => s.ownerToken !== guest.token);
+        if (!this.db.musicStyleSettings.some(s => s.ownerToken === account.ownerToken)) {
+          this.db.musicStyleSettings.push({ ...guestStyle, ownerToken: account.ownerToken });
+        }
+      }
+      // 游客在登录前保存的游戏模型配置同样迁移给账号，避免重复填写密钥。
+      const guestGameModel = this.db.gameModelSettings.find(s => s.ownerToken === guest.token);
+      if (guestGameModel) {
+        this.db.gameModelSettings = this.db.gameModelSettings.filter(s => s.ownerToken !== guest.token);
+        if (!this.db.gameModelSettings.some(s => s.ownerToken === account.ownerToken)) {
+          this.db.gameModelSettings.push({ ...guestGameModel, ownerToken: account.ownerToken });
+        }
+      }
+      this.db.sessions = this.db.sessions.filter(s => s.token !== guest.token);
+    }
+    await this.persist();
+  }
+
+  async revokeAccountSession(hash: string): Promise<void> {
+    this.db.accountSessions = this.db.accountSessions.filter(s => s.hash !== hash);
+    await this.persist();
+  }
+
+  async changeAccountPassword(account: LocalAccount, passwordHash: string, salt: string): Promise<void> {
+    account.passwordHash = passwordHash;
+    account.salt = salt;
+    this.db.accountSessions = this.db.accountSessions.filter(s => s.accountId !== account.id);
+    await this.persist();
   }
 
   async createSession(session: Session): Promise<void> {
@@ -82,8 +181,46 @@ export class FileStore implements Store {
     return this.db.sessions.find((s) => s.token === token) ?? null;
   }
 
+  async getMusicStyleSettings(ownerToken: string): Promise<MusicStyleSettings | null> {
+    return this.db.musicStyleSettings.find((s) => s.ownerToken === ownerToken) ?? null;
+  }
+
+  async saveMusicStyleSettings(settings: MusicStyleSettings): Promise<void> {
+    this.db.musicStyleSettings = this.db.musicStyleSettings.filter((s) => s.ownerToken !== settings.ownerToken);
+    this.db.musicStyleSettings.push(settings);
+    await this.persist();
+  }
+
+  async deleteMusicStyleSettings(ownerToken: string): Promise<void> {
+    this.db.musicStyleSettings = this.db.musicStyleSettings.filter((s) => s.ownerToken !== ownerToken);
+    await this.persist();
+  }
+
+  async getGameModelSettings(ownerToken: string): Promise<GameModelSettings | null> {
+    return this.db.gameModelSettings.find((s) => s.ownerToken === ownerToken) ?? null;
+  }
+
+  async saveGameModelSettings(settings: GameModelSettings): Promise<void> {
+    this.db.gameModelSettings = this.db.gameModelSettings.filter((s) => s.ownerToken !== settings.ownerToken);
+    this.db.gameModelSettings.push(settings);
+    await this.persist();
+  }
+
+  async deleteGameModelSettings(ownerToken: string): Promise<void> {
+    this.db.gameModelSettings = this.db.gameModelSettings.filter((s) => s.ownerToken !== ownerToken);
+    await this.persist();
+  }
+
   async createProject(project: Project): Promise<void> {
     this.db.projects.push(project);
+    await this.persist();
+  }
+
+  async createProjectFromTemplate(project: Project, version: Version, message: Message): Promise<void> {
+    // 套用时一次持久化私有项目、基础版本和来源消息。
+    this.db.projects.push(project);
+    this.db.versions.push(version);
+    this.db.messages.push(message);
     await this.persist();
   }
 
@@ -156,6 +293,19 @@ export class FileStore implements Store {
     return this.db.tasks
       .filter((t) => t.projectId === projectId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async listPendingTasks(): Promise<TaskRecord[]> {
+    return this.db.tasks.filter((t) => !t.finishedAt && t.generationMode === 'agent');
+  }
+
+  async commitAgentResult(project: Project, version: Version, task: TaskRecord, message: Message): Promise<void> {
+    // 同一次原子文件替换保存版本、项目指针与任务终态，避免重启后出现半完成提交。
+    this.db.versions.push(version);
+    this.db.projects = this.db.projects.map((p) => p.id === project.id ? project : p);
+    this.db.tasks = this.db.tasks.map((t) => t.id === task.id ? task : t);
+    this.db.messages.push(message);
+    await this.persist();
   }
 
   async upsertGame(game: Game): Promise<void> {
@@ -235,4 +385,31 @@ export class FileStore implements Store {
   async countFavorites(gameId: string): Promise<number> {
     return this.db.favorites.filter((f) => f.gameId === gameId).length;
   }
+
+  async createCreationTemplate(template: CreationTemplate): Promise<void> {
+    this.db.creationTemplates.push(template);
+    await this.persist();
+  }
+
+  async getCreationTemplate(id: string): Promise<CreationTemplate | null> {
+    return this.db.creationTemplates.find((t) => t.id === id) ?? null;
+  }
+
+  async listCreationTemplates(filter: CreationTemplateFilter): Promise<{ items: CreationTemplate[]; total: number }> {
+    let items = this.db.creationTemplates.filter((t) => filter.ownerToken ? t.ownerToken === filter.ownerToken : t.published);
+    if (filter.kind) items = items.filter((t) => filter.kind === 'official' ? t.official : !t.official);
+    if (filter.q) {
+      const q = filter.q.toLowerCase();
+      items = items.filter((t) => [t.title, t.description, t.authorName].some((text) => text.toLowerCase().includes(q)));
+    }
+    items = [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
+    return { items: items.slice(filter.offset, filter.offset + filter.limit), total: items.length };
+  }
+
+  async setCreationTemplatePublished(id: string, published: boolean): Promise<void> {
+    const template = this.db.creationTemplates.find((t) => t.id === id);
+    if (template) template.published = published;
+    await this.persist();
+  }
+
 }

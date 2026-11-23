@@ -29,7 +29,8 @@ export interface GameShellInput {
 export function gameShell({ spec, gameScript, config, soundEffects = false }: GameShellInput): string {
   const palette = getTheme(spec.theme).palette;
   const title = escapeHtml(spec.title);
-  const hasMusic = getMusicPreset(spec) === 'neon-arcade';
+  const preset = getMusicPreset(spec);
+  const hasMusic = preset === 'neon-arcade' || preset === 'ai-arranged';
   const hasSound = hasMusic || soundEffects;
   return `<!doctype html>
 <html lang="zh-CN">
@@ -91,7 +92,7 @@ export function gameShell({ spec, gameScript, config, soundEffects = false }: Ga
 <script>const CFG = ${safeJson(config)};</script>
 <script>
 ${hasSound ? ARCADE_AUDIO_SCRIPT : ''}
-const GAME_AUDIO = ${hasSound ? 'createArcadeAudio()' : 'null'};
+const GAME_AUDIO = ${hasSound ? `createArcadeAudio(${safeJson(spec.musicStyle ?? null)})` : 'null'};
 ${gameScript}
 </script>
 </body>

@@ -71,12 +71,15 @@ export default function Home(): ReactNode {
           </p>
           <div className="hero-actions">
             <Link to="/create" className="btn primary large">开始创作</Link>
+            <Link to="/templates" className="btn large">使用社区模板</Link>
             <a href="#games" className="btn large">浏览社区作品</a>
           </div>
           <p className="hero-notice">
-            {meta?.generationMode === 'model'
+            {meta?.generationMode === 'agent'
+              ? '当前已启用 Agent 源码开发：根据需求修改游戏，浏览器检查通过后保存版本，请试玩确认玩法。'
+              : meta?.generationMode === 'model'
               ? '当前已配置真实模型（' + (meta.model.name ?? '自定义') + '），模型仅可调整受限规格，仍基于内置模板生成。'
-              : '当前为模板模式：初版由内置模板引擎（打砖块 / 贪吃蛇 / 太空射击）按关键词规则确定性生成，未接入任意 AI。'}
+              : '当前为模板模式：初版由内置模板引擎（打砖块 / 贪吃蛇 / 太空射击 / 俄罗斯方块 / 2048）按关键词规则确定性生成，未接入任意 AI。'}
           </p>
         </div>
         <div className="hero-art" aria-hidden="true">
@@ -181,7 +184,7 @@ export default function Home(): ReactNode {
           </>
         )}
         <p className="browse-footnote">
-          社区公开游戏保存在服务端，任何浏览器均可访问；游玩数据实时统计。所有作品当前均为模板生成。
+          社区公开游戏保存在服务端，任何浏览器均可访问；游玩数据实时统计。作品生成方式见各作品标记。
         </p>
       </section>
     </div>

@@ -73,7 +73,7 @@ export default function GameDetail(): ReactNode {
 
   return (
     <div className="page game-detail">
-      <div className="detail-head">
+      <div className="detail-head glass-bar">
         <div>
           <div className="detail-title-row">
             <h1>{game.title}</h1>
@@ -110,13 +110,17 @@ export default function GameDetail(): ReactNode {
             title={game.title}
             reloadKey={reloadKey}
           />
-          <p className="play-tip">
-            操作：{template?.controls ?? '见游戏内说明'}。游戏在沙箱 iframe 中运行（独立源、禁止网络），
-            如需重开一局可点「重新开始」。
-            <button type="button" className="linklike" onClick={() => setReloadKey((k) => k + 1)}>
-              重新加载画面
-            </button>
-          </p>
+          <div className="play-tip glass-block">
+            <p className="play-tip-text">
+              操作：{template?.controls ?? '见游戏内说明'}。游戏在沙箱 iframe 中运行（独立源、禁止网络），
+              如需重开一局可点「重新开始」。
+            </p>
+            <div className="play-tip-actions">
+              <button type="button" className="btn small" onClick={() => setReloadKey((k) => k + 1)}>
+                重新加载画面
+              </button>
+            </div>
+          </div>
         </div>
 
         <aside className="detail-side">
@@ -129,16 +133,16 @@ export default function GameDetail(): ReactNode {
             </div>
           </section>
           <section className="panel">
-            <h2>生成规格</h2>
+            <h2>{game.generationMode === 'agent' ? '起始配置参考' : '生成规格'}</h2>
             <SpecBadges spec={game.spec} />
             <dl className="spec-list">
               <dt>玩法模板</dt><dd>{templateName(game.spec.template)}</dd>
               <dt>速度倍率</dt><dd>{game.spec.speed}x</dd>
               <dt>生成方式</dt>
-              <dd>{game.generationMode === 'model' ? '模型辅助（受限规格）' : '模板引擎（关键词规则）'}</dd>
+              <dd>{game.generationMode === 'agent' ? 'Agent 源码开发' : game.generationMode === 'model' ? '模型辅助（受限规格）' : '模板引擎（关键词规则）'}</dd>
             </dl>
             <p className="panel-note">
-              该游戏由 MYolGame 模板引擎生成，为单文件 HTML5 游戏，下载后可独立托管游玩。
+              该游戏由 MYolGame 创作，为单文件 HTML5 游戏，下载后可独立托管游玩。
             </p>
           </section>
         </aside>

@@ -33,8 +33,9 @@ export function SpecBadges({ spec }: { spec: GameSpec }): ReactNode {
   );
 }
 
-// 诚实标记生成方式：模板生成（默认）或模型辅助（仍限模板白名单）
+// 区分模板、规格调整与真实源码开发。
 export function GenerationBadge({ mode }: { mode: GenerationMode }): ReactNode {
+  if (mode === 'agent') return <span className="badge model" title="Agent 修改游戏源码并执行浏览器烟测">Agent 源码开发</span>;
   return mode === 'model' ? (
     <span
       className="badge model"

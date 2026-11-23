@@ -1,5 +1,6 @@
 // 与后端 API 响应形状对应的前端类型。
 
+import type { TemplateOrigin } from '@shared/creation-template.ts';
 import type { GameSpec, GenerationMode } from '@shared/spec.ts';
 
 export interface GameSummary {
@@ -27,6 +28,9 @@ export interface ProjectSummary {
   allowDownload: boolean;
   createdAt: string;
   updatedAt: string;
+  templateOrigin?: TemplateOrigin;
+  // 从零生成的项目没有模板基底，首次由模型编写完整源码。
+  fromScratch?: boolean;
 }
 
 export interface VersionSummary {
@@ -38,6 +42,10 @@ export interface VersionSummary {
   note: string;
   generationMode: GenerationMode;
   createdAt: string;
+  artifactHash?: string;
+  checks?: { browser: 'passed'; canvas: boolean; input: boolean; restart: boolean };
+  agentName?: string;
+  templateOrigin?: TemplateOrigin;
 }
 
 export interface MessageItem {
@@ -60,10 +68,11 @@ export interface TaskItem {
   id: string;
   projectId: string;
   prompt: string;
-  status: 'succeeded' | 'failed';
+  status: 'queued' | 'running' | 'checking' | 'repairing' | 'succeeded' | 'failed' | 'cancelled' | 'timed_out';
   stages: TaskStage[];
   versionId: string | null;
   error: string | null;
+  errorCode?: string;
   generationMode: GenerationMode;
   createdAt: string;
   finishedAt: string | null;

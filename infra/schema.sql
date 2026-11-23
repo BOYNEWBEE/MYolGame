@@ -10,12 +10,22 @@ CREATE TABLE app.myol_sessions (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- 账号级 OpenAI 兼容编曲模型；密钥仅服务端读取，接口不回传浏览器。
+CREATE TABLE app.myol_music_style_settings (
+  owner_token text PRIMARY KEY,
+  api_url text NOT NULL,
+  api_key text NOT NULL,
+  model text NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE app.myol_projects (
   id text PRIMARY KEY,
   owner_token text NOT NULL,
   title text NOT NULL,
   spec jsonb NOT NULL,
   current_version_id text NOT NULL,
+  template_origin jsonb,
   visibility text NOT NULL,
   game_id text,
   allow_download boolean NOT NULL,
@@ -32,6 +42,10 @@ CREATE TABLE app.myol_versions (
   html text NOT NULL,
   note text NOT NULL,
   generation_mode text NOT NULL,
+  artifact_hash text,
+  checks jsonb,
+  agent_name text,
+  template_origin jsonb,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -54,7 +68,10 @@ CREATE TABLE app.myol_tasks (
   error text,
   generation_mode text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
-  finished_at timestamptz
+  finished_at timestamptz,
+  base_version_id text,
+  base_updated_at timestamptz,
+  base_spec jsonb
 );
 
 CREATE TABLE app.myol_games (
@@ -83,3 +100,61 @@ CREATE TABLE app.myol_favorites (
   game_id text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+
+-- 社区创作模板保存独立源码快照，不引用可变的项目当前版本。
+CREATE TABLE app.myol_creation_templates (
+  id text PRIMARY KEY,
+  owner_token text NOT NULL,
+  title text NOT NULL,
+  description text NOT NULL,
+  prompt text NOT NULL,
+  parameters jsonb NOT NULL,
+  license text NOT NULL,
+  version_label text NOT NULL,
+  author_name text NOT NULL,
+  official boolean NOT NULL,
+  published boolean NOT NULL,
+  source_version_note text NOT NULL,
+  spec jsonb NOT NULL,
+  html text NOT NULL,
+  generation_mode text NOT NULL,
+  verification text NOT NULL,
+  attributions jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- 新建云端 M0 表；通过 Qoder function_backend 迁移，禁止浏览器直接访问。
+CREATE TABLE app.myol_m0_users (
+  id text PRIMARY KEY,
+  email text NOT NULL UNIQUE,
+  nickname text NOT NULL,
+  password_hash text NOT NULL,
+  salt text NOT NULL,
+  credential_version integer NOT NULL
+);
+CREATE TABLE app.myol_m0_sessions (
+  id text PRIMARY KEY,
+  user_id text NOT NULL,
+  credential_version integer NOT NULL,
+  expires_at bigint NOT NULL,
+  revoked boolean NOT NULL
+);
+CREATE TABLE app.myol_m0_limits (
+  id text PRIMARY KEY,
+  count integer NOT NULL,
+  started_at bigint NOT NULL
+);
+CREATE TABLE app.myol_m0_tasks (
+  id text PRIMARY KEY,
+  owner_id text NOT NULL,
+  prompt text NOT NULL,
+  status text NOT NULL,
+  revision integer NOT NULL,
+  created_at timestamptz NOT NULL,
+  next_at bigint NOT NULL,
+  events jsonb NOT NULL,
+  simulated boolean NOT NULL
+);
+CREATE INDEX myol_m0_tasks_owner_created_idx ON app.myol_m0_tasks (owner_id, created_at);
+CREATE INDEX myol_m0_tasks_status_next_idx ON app.myol_m0_tasks (status, next_at);
