@@ -1387,6 +1387,9 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
 
 .setting-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0 4px; }
 
+/* 账号页（登录 / 注册）表单下方的按钮行：与 .setting-actions 同一套布局语言 */
+.account-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 4px; }
+
 .setting-inline { display: flex; gap: 10px; align-items: center; margin: 12px 0 16px; flex-wrap: wrap; }
 .setting-inline input[type="url"] { flex: 1 1 220px; min-width: 0; }
 
