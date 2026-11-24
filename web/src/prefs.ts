@@ -51,7 +51,7 @@ export const DEFAULT_BACKDROP = '/backdrops/anime-sisters.jpg';
 
 export const DEFAULT_GLASS: GlassSettings = {
   blur: 7,
-  saturate: 120,
+  saturate: 130,
   brightness: 1,
   body: 0.25,
   edge: 0.5,

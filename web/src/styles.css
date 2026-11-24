@@ -1130,7 +1130,7 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 :root {
   /* 与 prefs.ts 的 DEFAULT_GLASS 保持一致（首帧渲染用，之后由 JS 覆写） */
   --glass-blur: 7px;
-  --glass-saturate: 120%;
+  --glass-saturate: 130%;
   --glass-brightness: 1;
   --glass-body: 0.25;
   --glass-body-strong: 0.39;
