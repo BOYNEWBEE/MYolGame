@@ -1,4 +1,4 @@
-// 先展示原始示例；参数只用于新项目中的 Agent 修改，不改变社区示例。
+﻿// 先展示原始示例；参数只用于新项目中的 Agent 修改，不改变社区示例。
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { API_BASE, requestJson } from '../api.ts';
@@ -53,7 +53,7 @@ export default function TemplateDetail(): ReactNode {
     <div className="page-head"><Link to="/templates">← 社区创作模板</Link><h1>{template.title}</h1><p>{template.description}</p><div className="badges"><span className="badge">{template.official ? '官方示例' : '用户模板'}</span><span className="badge">v{template.versionLabel}</span><span className="badge">{verificationLabel(template.verification)}</span>{!template.published && <span className="badge">已下架，仅作者可见</span>}</div></div>
     {error && <p className="error-banner" role="alert">{error}</p>}
     <div className="template-detail-layout">
-      <section className="template-example"><h2>示例试玩</h2><p className="panel-note">这是发布时的固定示例；右侧选择将在新项目开发完成后生效。</p><SandboxFrame src={API_BASE + '/templates/' + template.id + '/play'} title={template.title + ' 示例试玩'} authenticated={!template.published} />
+      <section className="template-example"><div className="glass-block"><h2>示例试玩</h2><p className="panel-note">这是发布时的固定示例；右侧选择将在新项目开发完成后生效。</p></div><SandboxFrame src={API_BASE + '/templates/' + template.id + '/play'} title={template.title + ' 示例试玩'} authenticated={!template.published} />
         <div className="panel template-source"><p>作者：{template.authorName} · 模板版本：{template.versionLabel} · 示例版本：{template.sourceVersionNote}</p><p>源码许可：<a href="https://opensource.org/license/mit" target="_blank" rel="noreferrer">MIT</a>。套用会保留来源署名与许可。</p><p className="muted small">{new Date(template.createdAt).toLocaleString('zh-CN')} 发布。验证标记描述示例的已有检查，不代表所有参数组合都已验证。</p>{template.attributions.length > 0 && <details><summary>上游模板来源</summary><ul>{template.attributions.map((a, i) => <li key={i}><Link to={'/templates/' + a.templateId}>{a.title}</Link> · {a.authorName} · {a.versionLabel}</li>)}</ul></details>}{template.owned && <button className="btn" disabled={busy} type="button" onClick={() => void toggleVisibility()}>{template.published ? '下架此模板' : '重新上架模板'}</button>}<p className="panel-note">下架后停止公开浏览和新用户套用，已经创建的项目保持独立。</p></div>
       </section>
       <section className="panel template-customize"><h2>搭配你的版本</h2>

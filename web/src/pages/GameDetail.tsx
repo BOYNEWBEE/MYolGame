@@ -73,7 +73,7 @@ export default function GameDetail(): ReactNode {
 
   return (
     <div className="page game-detail">
-      <div className="detail-head">
+      <div className="detail-head glass-bar">
         <div>
           <div className="detail-title-row">
             <h1>{game.title}</h1>
@@ -110,13 +110,17 @@ export default function GameDetail(): ReactNode {
             title={game.title}
             reloadKey={reloadKey}
           />
-          <p className="play-tip">
-            操作：{template?.controls ?? '见游戏内说明'}。游戏在沙箱 iframe 中运行（独立源、禁止网络），
-            如需重开一局可点「重新开始」。
-            <button type="button" className="linklike" onClick={() => setReloadKey((k) => k + 1)}>
-              重新加载画面
-            </button>
-          </p>
+          <div className="play-tip glass-block">
+            <p className="play-tip-text">
+              操作：{template?.controls ?? '见游戏内说明'}。游戏在沙箱 iframe 中运行（独立源、禁止网络），
+              如需重开一局可点「重新开始」。
+            </p>
+            <div className="play-tip-actions">
+              <button type="button" className="btn small" onClick={() => setReloadKey((k) => k + 1)}>
+                重新加载画面
+              </button>
+            </div>
+          </div>
         </div>
 
         <aside className="detail-side">

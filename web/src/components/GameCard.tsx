@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import Cover from './Cover.tsx';
 import { GenerationBadge, SpecBadges } from './Badges.tsx';
+import CountUp from './CountUp.tsx';
 import type { GameSummary } from '../types.ts';
 
 export default function GameCard({ game }: { game: GameSummary }): ReactNode {
@@ -26,8 +27,8 @@ export default function GameCard({ game }: { game: GameSummary }): ReactNode {
         </p>
         <SpecBadges spec={game.spec} />
         <div className="card-footer">
-          <span className="stat" title="游玩次数">▶ {game.plays}</span>
-          <span className="stat" title="收藏数">♥ {game.favorites}</span>
+          <span className="stat" title="游玩次数">▶ <CountUp value={game.plays} /></span>
+          <span className="stat" title="收藏数">♥ <CountUp value={game.favorites} /></span>
           <GenerationBadge mode={game.generationMode} />
         </div>
       </div>

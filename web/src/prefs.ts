@@ -1,0 +1,291 @@
+// 本地外观偏好：只影响当前浏览器的观感，不进入服务端，也不影响生成出来的游戏产物。
+// 存储分两处：
+// - 普通偏好（几行文本）存 localStorage；
+// - **本地上传的背景图（大 dataURL，≤10 MB）存 IndexedDB**。
+//   原因：localStorage 总容量通常只有 5MB，而 dataURL 体积约为原图的 1.33 倍，
+//   10MB 的图会变成约 13MB，localStorage 必然写失败。
+
+import { useEffect, useState } from 'react';
+import { computeNavTone } from './nav-tone.ts';
+import { loadBackdropAsset, saveBackdropAsset, clearBackdropAsset } from './backdrop-store.ts';
+
+/** 本地图片上传上限：10 MB（存 IndexedDB，不受 localStorage 5MB 限制） */
+export const MAX_LOCAL_IMAGE = 10 * 1024 * 1024;
+
+/** 判断某个 backdrop 值是不是本地上传的 dataURL（而不是预设路径或远程 URL） */
+export function isLocalBackdrop(value: string | null): boolean {
+  return typeof value === 'string' && value.startsWith('data:');
+}
+
+export interface GlassSettings {
+  /** 背景模糊半径 0–40px */
+  blur: number;
+  /** 饱和度 100–250% */
+  saturate: number;
+  /** 明暗 0.4–1.8（1 = 不压暗；越小越暗，文字越好读） */
+  brightness: number;
+  /** 玻璃主体不透明度 0–0.95（越大越实，越不透背景；0 = 完全透明，只剩亮边与模糊） */
+  body: number;
+  /** 亮边强度 0.05–0.8 */
+  edge: number;
+}
+
+export interface Prefs {
+  /** 顶部导航文字配色：auto=按背景亮度自动；light/dark=固定；custom=用 navTextColor */
+  navText: 'auto' | 'light' | 'dark' | 'custom';
+  navTextColor: string;
+  /** 标题 / 正文 / 次要信息的文字颜色 */
+  titleColor: string;
+  bodyColor: string;
+  mutedColor: string;
+  /** 液态玻璃开关；关闭后回到项目初版的纯色界面 */
+  glassEnabled: boolean;
+  /** 背景图地址；null 表示关闭背景层 */
+  backdrop: string | null;
+  /** 背景图不透明度 0.05–1 */
+  backdropOpacity: number;
+  glass: GlassSettings;
+}
+
+export const DEFAULT_BACKDROP = '/backdrops/anime-sisters.jpg';
+
+export const DEFAULT_GLASS: GlassSettings = {
+  blur: 7,
+  saturate: 120,
+  brightness: 1,
+  body: 0.25,
+  edge: 0.5,
+};
+
+const STORAGE_KEY = 'myol.prefs.v3';
+const LEGACY_KEYS = ['myol.prefs.v2', 'myol.prefs'];
+
+/** 硬默认值：设置页的「恢复默认外观 / 恢复默认文字颜色」都引用这里，避免写死不同步 */
+export const HARD_DEFAULTS: Prefs = {
+  navText: 'dark',
+  navTextColor: '#e8eaff',
+  titleColor: '#f2f5ff',
+  bodyColor: '#ffffff',
+  mutedColor: '#ffffff',
+  glassEnabled: true,
+  backdrop: DEFAULT_BACKDROP,
+  backdropOpacity: 1,
+  glass: DEFAULT_GLASS,
+};
+
+const DEFAULTS: Prefs = HARD_DEFAULTS;
+
+
+function clamp(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeGlass(raw: unknown, fallback: GlassSettings): GlassSettings {
+  const input = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+  return {
+    blur: clamp(Number(input.blur), 0, 40, fallback.blur),
+    saturate: clamp(Number(input.saturate), 100, 250, fallback.saturate),
+    brightness: clamp(Number(input.brightness), 0.4, 1.8, fallback.brightness),
+    body: clamp(Number(input.body), 0, 0.95, fallback.body),
+    edge: clamp(Number(input.edge), 0.05, 0.8, fallback.edge),
+  };
+}
+
+function normalize(raw: unknown, fallback: Prefs = DEFAULTS): Prefs {
+  const input = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+  const backdrop =
+    typeof input.backdrop === 'string' && input.backdrop.trim()
+      ? input.backdrop
+      : input.backdrop === null
+        ? null
+        : fallback.backdrop;
+  const navTextInput = input.navText;
+  const navText = navTextInput === 'light' || navTextInput === 'dark' || navTextInput === 'custom' ? navTextInput : 'auto';
+  const navTextColor = typeof input.navTextColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(input.navTextColor)
+    ? input.navTextColor
+    : DEFAULTS.navTextColor;
+  const hex = (value: unknown, fallback: string): string =>
+    typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
+  return {
+    navText,
+    navTextColor,
+    titleColor: hex(input.titleColor, DEFAULTS.titleColor),
+    bodyColor: hex(input.bodyColor, DEFAULTS.bodyColor),
+    mutedColor: hex(input.mutedColor, DEFAULTS.mutedColor),
+    glassEnabled: input.glassEnabled === false ? false : true,
+    backdrop,
+    backdropOpacity: clamp(Number(input.backdropOpacity), 0.05, 1, fallback.backdropOpacity),
+    glass: normalizeGlass(input.glass, fallback.glass ?? DEFAULT_GLASS),
+  };
+}
+
+function readLegacy(): Prefs | null {
+  for (const key of LEGACY_KEYS) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) return normalize(JSON.parse(raw));
+    } catch {
+      // 忽略损坏数据，继续尝试下一个
+    }
+  }
+  return null;
+}
+
+let current: Prefs = loadPrefs();
+const listeners = new Set<(prefs: Prefs) => void>();
+
+export function loadPrefs(): Prefs {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      // 占位标记：真实图片在 IndexedDB 里，异步补回（见下方 hydrateLocalBackdrop）
+      if (parsed && parsed.backdrop === '__local_asset__') {
+        return { ...normalize(parsed), backdrop: null };
+      }
+      return normalize(parsed);
+    }
+  } catch {
+    // 落到下面的迁移逻辑
+  }
+  return readLegacy() ?? { ...DEFAULTS };
+}
+
+/** 启动后异步从 IndexedDB 取回本地上传的背景图，并通知订阅者。 */
+export async function hydrateLocalBackdrop(): Promise<void> {
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return;
+  }
+  if (!raw) return;
+  let hasPlaceholder = false;
+  try {
+    hasPlaceholder = JSON.parse(raw)?.backdrop === '__local_asset__';
+  } catch {
+    return;
+  }
+  if (!hasPlaceholder) return;
+  const asset = await loadBackdropAsset();
+  if (!asset) return;
+  current = { ...current, backdrop: asset };
+  applyPrefs(current);
+  for (const listener of listeners) listener(current);
+}
+
+export function getPrefs(): Prefs {
+  return current;
+}
+
+/** 把偏好写进 CSS 变量；styles.css 的玻璃与动效都读这些变量。 */
+export function applyPrefs(prefs: Prefs): void {
+  const root = document.documentElement;
+  const glass = prefs.glass;
+  root.style.setProperty('--backdrop-opacity', String(prefs.backdropOpacity));
+  root.classList.toggle('no-glass', !prefs.glassEnabled);
+
+  // 顶部导航文字：auto 时按背景亮度算，其余直接写死
+  // 同时给 html 加 nav-fg-dark 标记：深色导航文字时，导航里的玻璃控件
+  // （用户区、背景切换按钮）要切成浅色底，否则深字压在深色玻璃上看不清。
+  const applyNavTone = (dark: boolean): void => {
+    root.style.setProperty('--nav-fg', dark ? '#14161f' : '#e8eaff');
+    root.classList.toggle('nav-fg-dark', dark);
+  };
+  if (prefs.navText === 'auto') {
+    void computeNavTone(prefs.backdrop, prefs.glass.body).then((tone) => applyNavTone(tone === 'dark'));
+  } else if (prefs.navText === 'light') {
+    applyNavTone(false);
+  } else if (prefs.navText === 'dark') {
+    applyNavTone(true);
+  } else {
+    // 自定义颜色：按亮度判断深浅（相对亮度 > 0.5 视为浅色）
+    const hex = prefs.navTextColor.replace('#', '');
+    const r = parseInt(hex.slice(0, 2), 16) || 0;
+    const g = parseInt(hex.slice(2, 4), 16) || 0;
+    const b = parseInt(hex.slice(4, 6), 16) || 0;
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    applyNavTone(lum < 0.5);
+  }
+
+  // 标题 / 正文 / 次要信息：直接用设置里的颜色
+  root.style.setProperty('--title-fg', prefs.titleColor);
+  root.style.setProperty('--body-fg', prefs.bodyColor);
+  root.style.setProperty('--muted', prefs.mutedColor);
+  root.style.setProperty('--glass-blur', glass.blur + 'px');
+  root.style.setProperty('--glass-saturate', glass.saturate + '%');
+  root.style.setProperty('--glass-brightness', String(glass.brightness));
+  root.style.setProperty('--glass-body', String(glass.body));
+  root.style.setProperty('--glass-body-strong', String(Math.min(0.97, glass.body + 0.14)));
+  root.style.setProperty('--glass-sheen', String(Math.min(0.5, glass.edge * 0.47)));
+  root.style.setProperty('--glass-edge-alpha', String(glass.edge));
+  // 目标值：路由切换时用动画从 0/透明 过渡到这些值
+  root.style.setProperty('--glass-blur-target', glass.blur + 'px');
+  root.style.setProperty('--glass-body-target', String(glass.body));
+  root.style.setProperty('--glass-sheen-target', String(Math.min(0.5, glass.edge * 0.47)));
+}
+
+/** 把偏好写进 localStorage。本地上传的 dataURL 不进 localStorage
+ *（体积太大，5MB 配额存不下），改由 IndexedDB 保存，这里只存一个占位标记。 */
+function persist(prefs: Prefs): void {
+  try {
+    const forStorage: Prefs = isLocalBackdrop(prefs.backdrop)
+      ? { ...prefs, backdrop: '__local_asset__' }
+      : prefs;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(forStorage));
+  } catch {
+    // 隐私模式或配额满：偏好只在本页有效，不阻断使用
+  }
+}
+
+export function setPrefs(patch: Partial<Prefs>): Prefs {
+  current = normalize({ ...current, ...patch }, current);
+  persist(current);
+  // 本地上传的图片同步写入 IndexedDB（异步，不阻塞 UI）
+  if (isLocalBackdrop(current.backdrop)) {
+    void saveBackdropAsset(current.backdrop as string).catch(() => {
+      // 写入失败不影响当前会话的显示
+    });
+  } else if (patch.backdrop !== undefined) {
+    // 切到预设/远程/关闭背景：清掉已保存的本地图片，避免占空间
+    void clearBackdropAsset();
+  }
+  applyPrefs(current);
+  for (const listener of listeners) listener(current);
+  return current;
+}
+
+/** 只改玻璃参数，避免调用方每次拼整个 glass 对象。 */
+export function setGlass(patch: Partial<GlassSettings>): Prefs {
+  return setPrefs({ glass: { ...current.glass, ...patch } });
+}
+
+export function resetPrefs(): Prefs {
+  current = { ...DEFAULTS, glass: { ...DEFAULT_GLASS } };
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+  } catch {
+    // 同上
+  }
+  applyPrefs(current);
+  for (const listener of listeners) listener(current);
+  return current;
+}
+
+export function subscribePrefs(listener: (prefs: Prefs) => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+/** 组件里读偏好并跟随变更（跨组件同步走同一个订阅）。 */
+export function usePrefs(): Prefs {
+  const [prefs, setLocal] = useState<Prefs>(current);
+  useEffect(() => {
+    setLocal(current);
+    return subscribePrefs(setLocal);
+  }, []);
+  return prefs;
+}
