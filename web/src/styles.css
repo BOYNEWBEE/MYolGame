@@ -1130,7 +1130,7 @@ textarea:focus, input[type="text"]:focus, input[type="password"]:focus, input[ty
 :root {
   /* 与 prefs.ts 的 DEFAULT_GLASS 保持一致（首帧渲染用，之后由 JS 覆写） */
   --glass-blur: 7px;
-  --glass-saturate: 120%;
+  --glass-saturate: 130%;
   --glass-brightness: 1;
   --glass-body: 0.25;
   --glass-body-strong: 0.39;
@@ -1386,6 +1386,9 @@ textarea::placeholder { color: rgba(232, 234, 255, 0.6); }
 .settings-page .panel { --glass-sheen: 0.08; }
 
 .setting-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0 4px; }
+
+/* 账号页（登录 / 注册）表单下方的按钮行：与 .setting-actions 同一套布局语言 */
+.account-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 4px; }
 
 .setting-inline { display: flex; gap: 10px; align-items: center; margin: 12px 0 16px; flex-wrap: wrap; }
 .setting-inline input[type="url"] { flex: 1 1 220px; min-width: 0; }
